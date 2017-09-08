@@ -1,4 +1,4 @@
-# Epicurious
+# Epitome
 
 Full pipeline for learning TFBS from epigenetic datasets.
 

@@ -20,11 +20,11 @@ from setuptools import find_packages, setup
 from version import version as this_version
 
 setup(
-    name='epicurious',
+    name='epitome',
     version=this_version,
     description='epigenetic learning',
     author='Alyssa Morrow',
     author_email='akmorrow@berkeley.edu',
-    url="https://github.com/akmorrow13/epicurious",
+    url="https://github.com/akmorrow13/epitome",
     install_requires=[],
     packages=find_packages(exclude=['*.test.*']))

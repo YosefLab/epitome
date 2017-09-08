@@ -10,11 +10,11 @@
   </parent>
 
   <modelVersion>4.0.0</modelVersion>
-  <groupId>akmorrow13.epicurious</groupId>
-  <artifactId>epicurious-parent</artifactId>
+  <groupId>akmorrow13.epitome</groupId>
+  <artifactId>epitome-parent</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   <packaging>pom</packaging>
-  <name>epicurious</name>
+  <name>epitome</name>
 
   <properties>
   </properties>
@@ -31,9 +31,9 @@
   </licenses>
 
   <!-- <scm>
-    <connection>scm:git:git@???epicurious.git</connection>
-    <developerConnection>scm:git:git@github.com:???/epicurious.git</developerConnection>
-    <url>scm:git:git@github.com:??/epicurious.git</url>
+    <connection>scm:git:git@???epitome.git</connection>
+    <developerConnection>scm:git:git@github.com:???/epitome.git</developerConnection>
+    <url>scm:git:git@github.com:??/epitome.git</url>
     <tag>HEAD</tag>
   </scm> -->
 
@@ -49,7 +49,7 @@
 
   <issueManagement>
     <system>github</system>
-    <url>https://github.com/akmorrow13/epicurious/issues</url>
+    <url>https://github.com/akmorrow13/epitome/issues</url>
   </issueManagement>
 
   <build>
