@@ -46,7 +46,7 @@ help:
 SHELL=bash
 python=python2.7
 pip=pip
-tests=preprocess
+tests=epitome
 extras=
 adam_version:=$(shell $(python) version.py)
 sdist_name:=mango-$(adam_version).tar.gz
@@ -105,7 +105,7 @@ check_build_reqs:
 
 prepare:
 	$(pip) install pytest==2.8.3
-	$(pip) install bdgenomics.adam
+	easy_install dist/bdgenomics.adam-0.23.0_SNAPSHOT-py2.7.egg
 
 
 check_clean_working_copy:

@@ -17,10 +17,16 @@
   <name>epitome</name>
 
   <properties>
+    <adam.version>0.23.0-SNAPSHOT</adam.version>
+    <spark.version>1.6.3</spark.version>
+    <scala.version>2.10.6</scala.version>
+    <scala.version.prefix>2.10</scala.version.prefix>
   </properties>
+
 
   <modules>
     <module>python</module>
+    <module>assembly</module>
   </modules>
 
   <licenses>
@@ -29,13 +35,12 @@
       <distribution>repo</distribution>
     </license>
   </licenses>
-
-  <!-- <scm>
-    <connection>scm:git:git@???epitome.git</connection>
-    <developerConnection>scm:git:git@github.com:???/epitome.git</developerConnection>
-    <url>scm:git:git@github.com:??/epitome.git</url>
+  <scm>
+    <connection>scm:git:git@akmorrow13/epitome.git</connection>
+    <developerConnection>scm:git:git@github.com:akmrorow13/epitome.git</developerConnection>
+    <url>scm:git:git@github.com:akmorrow13/epitome.git</url>
     <tag>HEAD</tag>
-  </scm> -->
+  </scm>
 
   <developers>
     <developer>
@@ -53,11 +58,59 @@
   </issueManagement>
 
   <build>
-
     <plugins>
     </plugins>
   </build>
 
   <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.bdgenomics.adam</groupId>
+        <artifactId>adam-assembly_2.10</artifactId>
+        <version>0.23.0-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-sql_${scala.version.prefix}</artifactId>
+        <version>${spark.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-core_${scala.version.prefix}</artifactId>
+        <version>${spark.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-server</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-servlet</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.eclipse.jetty.orbit</groupId>
+            <artifactId>javax.servlet</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-mapreduce</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+    </dependencies>
   </dependencyManagement>
+  <dependencies>
+
+
+
+  </dependencies>
 </project>
