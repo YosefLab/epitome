@@ -1,0 +1,10 @@
+# dev
+.idea*
+*.iml
+venv
+
+
+python/target/
+workfiles
+*.pyc
+assembly/target
