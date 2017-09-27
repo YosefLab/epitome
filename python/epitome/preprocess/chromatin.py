@@ -23,7 +23,10 @@ class Dataset(object):
         reads = self.loadChromatin(chromatinFilename)
         peaks = self.loadPeaks(peakFilename)
 
-        # TODO Join
+        # left shuffle join reads with peaks
+        #grouped = peaks._jvmRdd.shuffleRegionJoinAndGroupByLeft(reads._jvmRdd)
+
+        #return grouped
 
 
     # loads chromatin from ATAC/DNase-seq
