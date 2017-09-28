@@ -9,6 +9,26 @@ import breeze.linalg.DenseVector
 
 
 object Vectorizer {
+  
+  // edit this as needed
+  val windowSize = 1000
+
+  def expandFeaturesAndJoinReads(readsFile: String, featuresFile: String): RDD[(Feature, Iterable[AlignmentRecord])] = {
+    
+    val reads = sc.loadAlignments(readsFile)
+    // expand the features to length windowSize
+    val features = sc.loadFeatures(featuresFile)
+      .transform(_.map(f => {
+        val length = f.getEnd - f.getStart + 1
+        val startAdd = (windowSize - length)/2
+        val endAdd = startAdd + 1
+        f.setStart(f.getStart - startAdd)
+        f.setEnd(f.getEnd + endAdd)
+        f}))
+
+    features.shuffleRegionJoinAndGroupByLeft(reads)
+  } 
+
 
   def Vectorize(featurizedCuts: RDD[(Feature, Iterable[AlignmentRecord])]): RDD[(Feature, DenseVector[Int])] = {
 
