@@ -6,9 +6,40 @@ import org.bdgenomics.formats.avro.AlignmentRecord
 import org.apache.spark.rdd.RDD
 import org.bdgenomics.adam.models.ReferenceRegion
 import breeze.linalg.DenseVector
-
+import org.bdgenomics.adam.rdd.read.AlignmentRecordRDD
+import org.bdgenomics.adam.rdd.feature.FeatureRDD
+import org.bdgenomics.adam.rdd.ADAMContext._
+import org.bdgenomics.adam.rdd.GenomicRDD
+import org.bdgenomics.adam.rdd.InnerShuffleRegionJoinAndGroupByLeft
 
 object Vectorizer {
+  
+  // edit this as needed
+  val windowSize = 1000
+
+  def expandFeaturesAndJoinReads(readsFile: String, featuresFile: String): RDD[(Feature, Iterable[AlignmentRecord])] = {
+
+    val reads = sc.loadAlignments(readsFile)
+    // expand the features to length windowSize
+    val features = sc.loadFeatures(featuresFile)
+      .transform(_.map(f => {
+        val length = f.getEnd - f.getStart + 1
+        val startAdd = (windowSize - length)/2
+        val endAdd = startAdd + 1
+        f.setStart(f.getStart - startAdd)
+        f.setEnd(f.getEnd + endAdd)
+        f}))
+
+    val keyedReads = reads.rdd.keyBy(read => ReferenceRegion.unstranded(read))
+    val keyedFeatures = features.rdd.keyBy(read => ReferenceRegion.unstranded(read))
+
+    // InnerShuffleRegionJoinAndGroupByLeft(keyedFeatures, keyedReads).compute()
+
+    // use this line instead of the above when getting an error for unequal number of partitions
+    InnerShuffleRegionJoinAndGroupByLeft(keyedFeatures.repartition(1), keyedReads.repartition(1)).compute()
+
+  }
+
 
   def Vectorize(featurizedCuts: RDD[(Feature, Iterable[AlignmentRecord])]): RDD[(Feature, DenseVector[Int])] = {
 
@@ -29,7 +60,10 @@ object Vectorizer {
           .groupBy(_._1)
           .map(r => (r._1, r._2.map(_._2).toArray.sum))
 
-        reads.foreach(cut => {
+        reads.filter(cut => {
+          val index = (cut._1.start - region.start).toInt
+          index >= 0 && index < windowSize
+        }).foreach(cut => {
           positions((cut._1.start - region.start).toInt) += cut._2
         })
 
