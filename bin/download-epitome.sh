@@ -13,7 +13,7 @@ gunzip ENCFF036GCO_k562_rb1.bed.gz
 
 wget https://www.encodeproject.org/files/ENCFF294HYU/@@download/ENCFF294HYU.bed.gz
 mv ENCFF294HYU.bed.gz ENCFF294HYU_k562_rbfox2.bed.gz
-gunzip ENCFF036GCO_k562_rbfox2.bed.gz
+gunzip ENCFF294HYU_k562_rbfox2.bed.gz
 
 wget https://www.encodeproject.org/files/ENCFF560EPF/@@download/ENCFF560EPF.bed.gz
 mv ENCFF560EPF.bed.gz ENCFF560EPF_k562_znf592.bed.gz
