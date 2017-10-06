@@ -18,9 +18,7 @@ package net.akmorrow13.epitome
 import net.akmorrow13.epitome.util.Vectorizer
 import org.apache.log4j.{Level, Logger}
 import org.apache.parquet.filter2.dsl.Dsl.{BinaryColumn, _}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
-import org.bdgenomics.adam.models.ReferenceRegion
 import org.yaml.snakeyaml.Yaml
 import org.yaml.snakeyaml.constructor.Constructor
 
@@ -34,7 +32,6 @@ object Epitome extends Serializable  {
    * @param args
    */
   def main(args: Array[String]) = {
-
     if (args.size < 1) {
       println("Incorrect number of arguments...Exiting now.")
     } else {
