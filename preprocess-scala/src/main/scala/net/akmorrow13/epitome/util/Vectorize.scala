@@ -48,6 +48,9 @@ case class Vectorizer(@transient sc: SparkContext, conf: EpitomeConf) {
 
     }
 
+    reads.rdd.cache()
+    features.rdd.cache()
+
     // Step 1: Get candidate regions (ATAC called peaks)
 
     // TODO: START replace with MACS2 caller
@@ -63,33 +66,34 @@ case class Vectorizer(@transient sc: SparkContext, conf: EpitomeConf) {
         .reduceByKey((a,b) => a)
         .map(r => r._2)
     })
-    // END replace with MACS2 caller
+    // TODO END replace with MACS2 caller
 
     // Step 2: Join ATAC peaks and ChIP-seq peaks Join(atac, chipseq)
     // use this line instead of the above when getting an error for unequal number of partitions
-    val joinedPeaks = filteredCoverage.rightOuterShuffleRegionJoinAndGroupByLeft(features).rdd.filter(_._1.isDefined)
+    val joinedPeaks = filteredCoverage.rightOuterShuffleRegionJoinAndGroupByLeft(features)
+      .rdd.filter(_._1.isDefined)
       .map(r => {
         val labels = r._2.map(_.getFeatureType).toArray.distinct
-        val vector = DenseVector.fill(conf.getFeaturePathLabels.length){0}
+        val vector = DenseVector.fill(conf.getFeaturePathLabelsArray.length){0}
 
         // Create vector of TF binding sites
-        conf.getFeaturePathLabels.zipWithIndex.foreach(label => {
+        conf.getFeaturePathLabelsArray.zipWithIndex.foreach(label => {
           if (labels.contains(label._1))
             vector(label._2) = 1
         })
         (r._1.get, vector)
       })
 
-    def regionFn(r: (Coverage, DenseVector[Int])): Seq[ReferenceRegion] = Seq(ReferenceRegion(r._1))
+  def regionFn(r: (Coverage, DenseVector[Int])): Seq[ReferenceRegion] = Seq(ReferenceRegion(r._1))
 
-    // Step 3: join dense vector of features and reads
-    val labelsAndAlignments: RDD[(ReferenceRegion, DenseVector[Int], Iterable[AlignmentRecord])] =
-      GenericGenomicRDD(joinedPeaks, filteredCoverage.sequences, regionFn).rightOuterShuffleRegionJoinAndGroupByLeft(reads).rdd
-      .filter(r => r._1.isDefined)
-      .map(r => (ReferenceRegion(r._1.get._1), r._1.get._2, r._2))
+  // Step 3: join dense vector of features and reads
+  val labelsAndAlignments: RDD[(ReferenceRegion, DenseVector[Int], Iterable[AlignmentRecord])] =
+    GenericGenomicRDD(joinedPeaks, filteredCoverage.sequences, regionFn).rightOuterShuffleRegionJoinAndGroupByLeft(reads).rdd
+    .filter(r => r._1.isDefined)
+    .map(r => (ReferenceRegion(r._1.get._1), r._1.get._2, r._2))
 
-    // Step 4: Featurize Reads into DenseVector of cutsite counts
-    vectorizeCutSites(labelsAndAlignments)
+  // Step 4: Featurize Reads into DenseVector of cutsite counts
+  vectorizeCutSites(labelsAndAlignments)
 
   }
 
@@ -140,7 +144,7 @@ case class Vectorizer(@transient sc: SparkContext, conf: EpitomeConf) {
     val labelFile = new PrintWriter(new File(s"${filepath}.labels"))
     val featureFile = new PrintWriter(new File(s"${filepath}.features"))
 
-    val header = s"#${conf.getFeaturePathLabels.mkString(",")}\n"
+    val header = s"#${conf.getFeaturePathLabels}\n"
 
     labelFile.write(header)
     featureFile.write(header)
@@ -152,7 +156,6 @@ case class Vectorizer(@transient sc: SparkContext, conf: EpitomeConf) {
 
     labelFile.close()
     featureFile.close()
-
 
   }
 

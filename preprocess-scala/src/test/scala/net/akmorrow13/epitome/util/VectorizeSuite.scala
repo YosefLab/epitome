@@ -22,7 +22,7 @@ class VectorizerSuite extends EpitomeFunSuite {
     // setup configuration
     val conf = new EpitomeConf()
     conf.setReadsPath(readsPath)
-    conf.setFeaturePaths("${featurePath1},${featurePath2}")
+    conf.setFeaturePaths(s"${featurePath1},${featurePath2}")
     conf.setFeaturePathLabels("TF1,TF2")
     conf.setPartitions(Some(1))
 
@@ -61,17 +61,19 @@ class VectorizerSuite extends EpitomeFunSuite {
 
     vectorizer.saveValuesLocally(featuresAndLabels, filepath.toString)
 
+    val header="#TF1"
+
     // read data back in
     val labelLines = Source.fromFile(filepath + ".labels").getLines.toArray
 
     assert(labelLines.length == 3)
-    assert(labelLines(0).startsWith("#"))
+    assert(labelLines(0) == header)
     assert(labelLines(1) == "1,2")
 
     val featureLines = Source.fromFile(filepath + ".features").getLines.toArray
 
     assert(featureLines.length == 3)
-    assert(featureLines(0).startsWith("#"))
+    assert(featureLines(0) == header)
     assert(featureLines(1) == "1,2,0,0,2")
   }
 
