@@ -22,6 +22,11 @@
     <scala.version>2.10.6</scala.version>
     <scala.version.prefix>2.10</scala.version.prefix>
     <bdg-utils.version>0.2.9</bdg-utils.version>
+    <avro.version>1.8.1</avro.version>
+    <bdg-formats.version>0.11.3</bdg-formats.version>
+    <hadoop.version>2.7.3</hadoop.version>
+    <hadoop-bam.version>7.8.0</hadoop-bam.version>
+    <parquet.version>1.8.2</parquet.version>
   </properties>
 
 
@@ -264,11 +269,90 @@
         <type>test-jar</type>
         <scope>test</scope>
       </dependency>
+    <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>provided</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.sonatype.sisu.inject</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.bdgenomics.bdg-formats</groupId>
+        <artifactId>bdg-formats</artifactId>
+        <version>${bdg-formats.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro</artifactId>
+        <version>${avro.version}</version>
+      </dependency>
+      <dependency>
+	<groupId>org.seqdoop</groupId>
+        <artifactId>hadoop-bam</artifactId>
+        <version>${hadoop-bam.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.seqdoop</groupId>
+            <artifactId>htsjdk</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.parquet</groupId>
+        <artifactId>parquet-avro</artifactId>
+        <!--
+                         IMPORTANT NOTE
+            ==============
+            Spark 2.2.0 bumps to Parquet 1.8.2, but keeps Avro at 1.7.3. This
+            causes an issue when using parquet-avro 1.8.2, which relies on a
+            method that is new in Avro 1.8.x. The recommended workaround is to
+            pin parquet-avro to 1.8.1, instead of 1.8.2, as described in the
+            Spark 2.2.0 release notes.
+        -->
+        <version>1.8.1</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.parquet</groupId>
+        <artifactId>parquet-scala_2.10</artifactId>
+        <version>${parquet.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
     </dependencies>
   </dependencyManagement>
-  <dependencies>
-
-
-
-  </dependencies>
 </project>

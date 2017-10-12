@@ -53,10 +53,11 @@ echo "RUNNING ON THE CLUSTER"
 echo CORES $SPARK_EXECUTOR_CORES
 echo NUM EXECUTORS $SPARK_NUM_EXECUTORS
 
-# Set some commonly used config flags on the cluster
+
 "$SPARK_SUBMIT" \
   --master $MASTER \
   --class $CLASS \
+  --driver-class-path $EPITOME_JARS:$EPITOME_PREPROCESS_JAR:$HOME/hadoop/conf \
   --conf spark.serializer=org.apache.spark.serializer.JavaSerializer \
   --jars $EPITOME_JARS \
   $EPITOME_PREPROCESS_JAR \
