@@ -1,22 +1,21 @@
 package net.akmorrow13.epitome.util
 
-import java.io.File
+import java.io._
 
-import net.akmorrow13.epitome.EpitomeConf
+import net.akmorrow13.epitome.EpitomeArgs
 import org.apache.spark.SparkContext
-import org.bdgenomics.adam.rdd.{GenericGenomicRDD, RightOuterShuffleRegionJoinAndGroupByLeft}
+import org.bdgenomics.adam.rdd.GenericGenomicRDD
 import org.bdgenomics.adam.rdd.read.AlignmentRecordRDD
 import org.bdgenomics.adam.rdd.feature.{FeatureRDD, CoverageRDD}
-import org.bdgenomics.formats.avro.Feature
-import org.bdgenomics.formats.avro.AlignmentRecord
+import org.bdgenomics.formats.avro.{AlignmentRecord, Feature}
 import org.apache.spark.rdd.RDD
 import org.bdgenomics.adam.models.{Coverage, ReferenceRegion}
-import breeze.linalg.{Matrix, DenseMatrix, DenseVector}
+import breeze.linalg.DenseVector
 import org.bdgenomics.adam.rdd.ADAMContext._
 
-case class Vectorizer(@transient sc: SparkContext, conf: EpitomeConf) {
+case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs) {
 
-  EpitomeConf.validate(conf)
+  conf.validate()
 
   /**
    * Takes reads and features, and returns an RDD of label and feature pairs
@@ -25,42 +24,43 @@ case class Vectorizer(@transient sc: SparkContext, conf: EpitomeConf) {
    */
   def partitionAndFeaturize(): RDD[(DenseVector[Int], DenseVector[Int])] = {
 
+    val featurePathLabelArray = conf.getFeaturePathLabelsArray()
+
+
     val (reads: AlignmentRecordRDD, features: FeatureRDD)  = {
-      val reads = sc.loadAlignments(conf.getReadsPath)
+      val reads = sc.loadAlignments(conf.readsPath)
+
+      // copy over because conf is transient
 
       // load all feature files and set feature type to TF name
-      var features: FeatureRDD = conf.getFeaturePathsArray.zipWithIndex
+      var features: FeatureRDD = conf.getFeaturePathsArray().zipWithIndex
         .map(r => {
-        sc.loadFeatures(r._1).transform(rdd => rdd.map(x => {
-          x.setFeatureType(conf.getFeaturePathLabelsArray()(r._2))
-          x
+          sc.loadFeatures(r._1).transform(rdd => rdd.map(x => {
+          Feature.newBuilder(x)
+            .setFeatureType(featurePathLabelArray(r._2))
+            .build()
       }))
       }
       ).reduce(_ union _)
 
       features = features.replaceSequences(reads.sequences)
 
-      if (conf.partitions.isDefined) {
-        (reads.transform(r => r.repartition(conf.getPartitions.get)), features.transform(r => r.repartition(conf.getPartitions.get)))
+      if (conf.partitions > 0) {
+        (reads.transform(r => r.repartition(conf.partitions)), features.transform(r => r.repartition(conf.partitions)))
       } else {
         (reads, features)
       }
 
     }
 
-    reads.rdd.cache()
-    features.rdd.cache()
 
     // Step 1: Get candidate regions (ATAC called peaks)
 
     // TODO: START replace with MACS2 caller
     val coverage = reads.toCoverage()
 
-    // only select regions with high coverage
-    val max = coverage.rdd.map(r => r.count).max
-
     val filteredCoverage: CoverageRDD = coverage.transform(rdd => {
-      rdd.filter(r => r.count > max/2)
+      rdd.filter(r => r.count > 2) // todo remove hardcode
         .map(r => new Coverage(r.contigName, r.start - (r.start % 1000), r.end + 1000 - (r.end % 1000), r.count)) // TODO combine if overlapping/next to eachother
         .keyBy(r => ReferenceRegion(r))
         .reduceByKey((a,b) => a)
@@ -68,27 +68,40 @@ case class Vectorizer(@transient sc: SparkContext, conf: EpitomeConf) {
     })
     // TODO END replace with MACS2 caller
 
+    require(filteredCoverage.rdd.count>0, "filteredCoverageRDD empty")
+
     // Step 2: Join ATAC peaks and ChIP-seq peaks Join(atac, chipseq)
     // use this line instead of the above when getting an error for unequal number of partitions
     val joinedPeaks = filteredCoverage.rightOuterShuffleRegionJoinAndGroupByLeft(features)
       .rdd.filter(_._1.isDefined)
       .map(r => {
         val labels = r._2.map(_.getFeatureType).toArray.distinct
-        val vector = DenseVector.fill(conf.getFeaturePathLabelsArray.length){0}
+        val vector = DenseVector.fill(featurePathLabelArray.length){0}
 
         // Create vector of TF binding sites
-        conf.getFeaturePathLabelsArray.zipWithIndex.foreach(label => {
+        featurePathLabelArray.zipWithIndex.foreach(label => {
           if (labels.contains(label._1))
             vector(label._2) = 1
         })
         (r._1.get, vector)
       })
 
+  // cache reads for join
+  reads.rdd.cache()
+  reads.rdd.count()
+
+  // region function for (coverage, feature) tuples, used for GenomicRDD
   def regionFn(r: (Coverage, DenseVector[Int])): Seq[ReferenceRegion] = Seq(ReferenceRegion(r._1))
+
+  val peakGenomicRDD = GenericGenomicRDD(joinedPeaks, filteredCoverage.sequences, regionFn)
+
+  // cache peaks for join
+  peakGenomicRDD.rdd.cache()
+  println("peakGenomicRDD count",peakGenomicRDD.rdd.count())
 
   // Step 3: join dense vector of features and reads
   val labelsAndAlignments: RDD[(ReferenceRegion, DenseVector[Int], Iterable[AlignmentRecord])] =
-    GenericGenomicRDD(joinedPeaks, filteredCoverage.sequences, regionFn).rightOuterShuffleRegionJoinAndGroupByLeft(reads).rdd
+    peakGenomicRDD.rightOuterShuffleRegionJoinAndGroupByLeft(reads).rdd
     .filter(r => r._1.isDefined)
     .map(r => (ReferenceRegion(r._1.get._1), r._1.get._2, r._2))
 
@@ -106,13 +119,12 @@ case class Vectorizer(@transient sc: SparkContext, conf: EpitomeConf) {
   private def vectorizeCutSites(featurizedCuts: RDD[(ReferenceRegion, DenseVector[Int], Iterable[AlignmentRecord])]): RDD[(DenseVector[Int], DenseVector[Int])] = {
 
     // get window size
-    val windowSize = conf.getWindowSize
+    val windowSize = conf.windowSize
 
     val featurized: RDD[(DenseVector[Int], DenseVector[Int])] =
       featurizedCuts.map(window => {
         val region = window._1
 
-        // TODO: positive and negative strands
         val positions = DenseVector.zeros[Int](windowSize)
 
         val reads: Map[ReferenceRegion, Int] = window._3
@@ -136,26 +148,27 @@ case class Vectorizer(@transient sc: SparkContext, conf: EpitomeConf) {
     featurized
   }
 
+  /**
+   * Saves features to local file
+   *
+   * @param RDD of labels, features
+   * @param filepath to save data to
+   */
   def saveValuesLocally(rdd: RDD[(DenseVector[Int], DenseVector[Int])], filepath: String) = {
 
     val collected= rdd.collect
 
-    import java.io._
-    val labelFile = new PrintWriter(new File(s"${filepath}.labels"))
-    val featureFile = new PrintWriter(new File(s"${filepath}.features"))
+    val file = new PrintWriter(new File(s"${filepath}/featuresAndLabels.txt"))
 
-    val header = s"#${conf.getFeaturePathLabels}\n"
+    val header = s"#${conf.featurePathLabels}\n"
 
-    labelFile.write(header)
-    featureFile.write(header)
+    file.write(header)
 
     collected.toList.foreach(r => {
-      labelFile.write(r._1.toArray.mkString(",") + "\n")
-      featureFile.write(r._2.toArray.mkString(",") + "\n")
+      file.write(r._1.toArray.mkString(",") + ";" + r._2.toArray.mkString(",") + "\n")
     })
 
-    labelFile.close()
-    featureFile.close()
+    file.close()
 
   }
 

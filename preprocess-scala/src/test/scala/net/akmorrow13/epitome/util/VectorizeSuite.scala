@@ -3,11 +3,8 @@ package net.akmorrow13.epitome.util
 import com.google.common.io.Files
 
 import breeze.linalg.DenseVector
-import net.akmorrow13.epitome.{EpitomeConf, EpitomeFunSuite}
+import net.akmorrow13.epitome.{EpitomeArgs, EpitomeFunSuite}
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.adam.models.{SequenceRecord, SequenceDictionary, ReferenceRegion, Coverage}
-import org.bdgenomics.adam.rdd.RightOuterShuffleRegionJoinAndGroupByLeft
-import org.bdgenomics.formats.avro.Feature
 
 import scala.io.Source
 
@@ -20,11 +17,11 @@ class VectorizerSuite extends EpitomeFunSuite {
   sparkTest("joins reads and features") {
 
     // setup configuration
-    val conf = new EpitomeConf()
-    conf.setReadsPath(readsPath)
-    conf.setFeaturePaths(s"${featurePath1},${featurePath2}")
-    conf.setFeaturePathLabels("TF1,TF2")
-    conf.setPartitions(Some(1))
+    val conf = new EpitomeArgs()
+    conf.readsPath = readsPath
+    conf.featurePaths = s"${featurePath1},${featurePath2}"
+    conf.featurePathLabels = "TF1,TF2"
+    conf.partitions = 1
 
     val vectorizer = Vectorizer(sc, conf)
 
@@ -37,7 +34,7 @@ class VectorizerSuite extends EpitomeFunSuite {
     assert(featurized.count > 2)
     assert(positives.count == 1)
 
-    assert(positives.first._2.length == conf.getWindowSize)
+    assert(positives.first._2.length == conf.windowSize)
     assert(positives.first._2.findAll(x => x > 0).length == 2)
 
   }
@@ -51,11 +48,11 @@ class VectorizerSuite extends EpitomeFunSuite {
     val featuresAndLabels = features.zip(labels)
 
     // setup configuration
-    val conf = new EpitomeConf()
-    conf.setReadsPath(readsPath)
-    conf.setFeaturePaths(featurePath1)
-    conf.setPartitions(Some(1))
-    conf.setFeaturePathLabels("TF1")
+    val conf = new EpitomeArgs()
+    conf.readsPath = readsPath
+    conf.featurePaths = featurePath1
+    conf.partitions = 1
+    conf.featurePathLabels = "TF1"
 
     val vectorizer = new Vectorizer(sc, conf)
 

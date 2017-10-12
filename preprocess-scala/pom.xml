@@ -85,7 +85,8 @@
     </dependency>
     <dependency>
       <groupId>org.scalanlp</groupId>
-      <artifactId>breeze-math_${scala.version.prefix}</artifactId>
+      <artifactId>breeze_${scala.version.prefix}</artifactId>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.bdgenomics.utils</groupId>
@@ -101,10 +102,6 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_${scala.version.prefix}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.yaml</groupId>
-      <artifactId>snakeyaml</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -134,6 +131,15 @@
     <dependency>
       <groupId>org.seqdoop</groupId>
       <artifactId>hadoop-bam</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bdgenomics.utils</groupId>
+      <artifactId>utils-cli_${scala.version.prefix}</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.bdgenomics.adam</groupId>
+      <artifactId>adam-core_${scala.version.prefix}</artifactId>
       <scope>compile</scope>
     </dependency>
   </dependencies>
