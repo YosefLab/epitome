@@ -60,7 +60,7 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
     val coverage = reads.toCoverage()
 
     val filteredCoverage: CoverageRDD = coverage.transform(rdd => {
-      rdd.filter(r => r.count > 2) // todo remove hardcode
+      rdd
         .map(r => new Coverage(r.contigName, r.start - (r.start % 1000), r.end + 1000 - (r.end % 1000), r.count)) // TODO combine if overlapping/next to eachother
         .keyBy(r => ReferenceRegion(r))
         .reduceByKey((a,b) => a)
@@ -158,7 +158,7 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
 
     val collected= rdd.collect
 
-    val file = new PrintWriter(new File(s"${filepath}/featuresAndLabels.txt"))
+    val file = new PrintWriter(new File(filepath))
 
     val header = s"#${conf.featurePathLabels}\n"
 

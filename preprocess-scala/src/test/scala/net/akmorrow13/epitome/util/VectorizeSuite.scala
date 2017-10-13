@@ -61,17 +61,11 @@ class VectorizerSuite extends EpitomeFunSuite {
     val header="#TF1"
 
     // read data back in
-    val labelLines = Source.fromFile(filepath + ".labels").getLines.toArray
+    val labelLines = Source.fromFile(filepath).getLines.toArray
 
     assert(labelLines.length == 3)
     assert(labelLines(0) == header)
-    assert(labelLines(1) == "1,2")
-
-    val featureLines = Source.fromFile(filepath + ".features").getLines.toArray
-
-    assert(featureLines.length == 3)
-    assert(featureLines(0) == header)
-    assert(featureLines(1) == "1,2,0,0,2")
+    assert(labelLines(1) == "1,2;1,2,0,0,2")
   }
 
 }
