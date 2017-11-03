@@ -12,3 +12,6 @@ assembly/target
 **/.ipynb_checkpoints
 .DS_Store
 __pycache__
+
+bionetz/bdgenomics_data
+bionetz/deepsea_train
