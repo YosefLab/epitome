@@ -105,6 +105,9 @@ check_build_reqs:
 
 prepare:
 	$(pip) install pytest==2.8.3
+	$(pip) install py2bit==0.2.0
+	$(pip) install pybedtools
+	$(pip) install pysam
 	easy_install dist/bdgenomics.adam-0.23.0_SNAPSHOT-py2.7.egg
 
 
