@@ -13,7 +13,7 @@ from math import pi
 
 ################################# Define configuration ################################
 
-LEARNING_RATE = ??
+# LEARNING_RATE = 
 # number of glimpses per image
 NUM_GLIMPSES = 6
 # height, width to which glimpses get resized
@@ -21,10 +21,10 @@ GLIMPSE_SIZE = 12
 # number of resolutions per glimpse
 NUM_RESOLUTIONS = 3
 # number of training epochs
-NUM_EPOCHS = ??
+# NUM_EPOCHS = ??
 # batch size for each training iterations
 # total training iterations = num_epochs * number of images / batch_size
-BATCH_SIZE =
+# BATCH_SIZE = ??
 # for normalization purposes
 EPSILON = 1e-10
 # dimensionality of hidden state vector
@@ -40,7 +40,7 @@ IMG_SIZE = 28
 NUM_CLASSES = 10
 NUM_CHANNELS = 1
 # standard deviation for Gaussian distribution of locations
-STD_DEV = ??
+# STD_DEV = ??
 
 
 ################################# Define Networks ################################
@@ -134,7 +134,7 @@ def build_action_network(
         scope,
         output_size=10,
         output_activation=None):
-
+  
     # output is not passed through softmax
     # tf.nn.softmax_cross_entropy_with_logits will do softmax
     with tf.variable_scope(scope):
@@ -183,7 +183,7 @@ def get_location(location_output):
     # TODO restrcit mean to be between (-1, 1)
     # sample from gaussian with above mean and predefined STD_DEV
     # TODO verify that this samples from multiple distributions
-    return tf.distributions.Normal(loc=mean., scale=STD_DEV).sample(sample_shape=[LOC_SIZE, 1])
+    return tf.distributions.Normal(loc=mean, scale=STD_DEV).sample(sample_shape=[LOC_SIZE, 1])
 
 
 def get_action(action_output):
@@ -193,58 +193,55 @@ def get_action(action_output):
     return tf.argmax(softmax_output)
 
 
+########################################## Full Model ##########################################
+
+
+def build_model():
+    
+    x = tf.placeholder(shape=[None, IMG_SIZE * IMG_SIZE], 
+        name="data", 
+        dtype=tf.float32)
+    y = tf.placeholder(shape=[None, NUM_CLASSES], 
+        name="labels", 
+        dtype=tf.int32)
+    h_t = tf.placeholder(shape=[None, STATE_SIZE], 
+        name="hidden_state", 
+        dtype=tf.float32)
+    l_t = tf.placeholder(shape=[None, LOC_SIZE], 
+        name="loc")
+
+    # save raw output of location network at each time step, which is the mean 
+    mean_locs = []
+    # save location sampled at each time step from Gaussian(mean, STD_DEV)
+    sampled_locs = []
+
+    for i in range(NUM_GLIMPSES):
+        g_t = sess.run(glimpse_output, feed_dict={data_placeholder=x,
+            location_placeholder=l_t})
+        h_t = sess.run(hidden_output, feed_dict={hidden_state_placeholder=h_t
+            glimpse=g_t})
+        mean,l_t = sess.run([raw_location_output, location_output], feed_dict={state=h_t})
+        mean_locs.append(mean)
+        sampled_locs.append(l_t)
+
+    a_t = sess.run(action_output, feed_dict={state=h_t})
+
+
 ############################################ Train ############################################
 
 def train():
 
-    #========================================================================================#
-    # Download Data
-    #========================================================================================#
-    from tensorflow.examples.tutorials.mnist import input_data
-    mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-
-    #========================================================================================#
-    # Placeholders
-    #========================================================================================#
-
-    data_placeholder = tf.placeholder(shape=[None, IMG_SIZE * IMG_SIZE], name="data", dtype=tf.float32)
-    labels_placeholder = tf.placeholder(shape=[None, NUM_CLASSES], name="labels", dtype=tf.int32)
-    hidden_state_placeholder = tf.placeholder(shape=[None, STATE_SIZE], name="hidden_state", dtype=tf.float32)
-    location_placeholder = tf.placeholder(shape=[None, LOC_SIZE], name="loc")
-
-    #========================================================================================#
-    # Tensorflow Engineering: Config, Session, Variable initialization
-    #========================================================================================#
-
-    tf_config = tf.ConfigProto(inter_op_parallelism_threads=1, intra_op_parallelism_threads=1)
-
-    sess = tf.Session(config=tf_config)
-    sess.__enter__() # equivalent to `with sess:`
-    tf.global_variables_initializer().run() #pylint: disable=E1101
-
-    #========================================================================================#
-    # Network Outputs
-    #========================================================================================#
-
-    g_t = build_glimpse_network(
-        data=data_placeholder,
-        location=location_placeholder,
-        scope="glimpse")
-
-    h_t = build_core_network(
-        state=hidden_state_placeholder,
-        glimpse=g_t,
-        scope="core")
-
-    action_output = build_action_network(
-        state=h_t,
-        scope="action")
-    a_t = get_action(action_output)
-
-    location_output = build_location_network(
-        state=h_t,
-        scope="location")
-    l_t = sample(location_output)
+    data_placeholder = tf.placeholder(shape=[None, IMG_SIZE * IMG_SIZE], 
+        name="data", 
+        dtype=tf.float32)
+    labels_placeholder = tf.placeholder(shape=[None, NUM_CLASSES], 
+        name="labels", 
+        dtype=tf.int32)
+    hidden_state_placeholder = tf.placeholder(shape=[None, STATE_SIZE], 
+        name="hidden_state", 
+        dtype=tf.float32)
+    location_placeholder = tf.placeholder(shape=[None, LOC_SIZE], 
+        name="loc")
 
     #========================================================================================#
     # Define Ops
@@ -260,17 +257,83 @@ def train():
     # Training Loop
     #========================================================================================#
 
+    l_t = tf.random.uniform(shape=[BATCH_SIZE, LOC_SIZE], minval=-1.0, maxval=1.0)
+    h_t = tf.zeros(shape=[BATCH_SIZE, STATE_SIZE]))
+    
     for i in range(NUM_EPOCHS):
         # TODO check if mnist.train.next_batch() has same functionality
         x_train, y_train = shuffle(mnist.train.images, mnist.train.labels, n_samples=BATCH_SIZE)
         for i in range(0,len(x_train), BATCH_SIZE):
             x_train_batch, y_train_batch = x_train[i:i+BATCH_SIZE]
 
-            # initial state and location
-            hidden_state = ??
-            loc = ??
-            # for each image in batch, take multiple glimpses
-            for i in range(NUM_GLIMPSES):
+            sess.run()
 
-                glimpses = get_glimpses(x_train_batch, loc)
-                glimpse_vector = get_glimpse_vector(glimpses, loc)
+
+
+if __name__ == '__main__':
+
+    #========================================================================================#
+    # Tensorflow Engineering: Config, Session, Variable initialization
+    #========================================================================================#
+    
+    tf_config = tf.ConfigProto(inter_op_parallelism_threads=1, intra_op_parallelism_threads=1)
+
+    sess = tf.Session(config=tf_config)
+    sess.__enter__() # equivalent to `with sess:`
+    tf.global_variables_initializer().run() #pylint: disable=E1101
+
+    #========================================================================================#
+    # Download Data
+    #========================================================================================#
+    
+    from tensorflow.examples.tutorials.mnist import input_data
+    mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+
+    #========================================================================================#
+    # Placeholders
+    #========================================================================================#
+
+    data_placeholder = tf.placeholder(shape=[None, IMG_SIZE * IMG_SIZE], 
+        name="data", 
+        dtype=tf.float32)
+    labels_placeholder = tf.placeholder(shape=[None, NUM_CLASSES], 
+        name="labels", 
+        dtype=tf.int32)
+    hidden_state_placeholder = tf.placeholder(shape=[None, STATE_SIZE], 
+        name="hidden_state", 
+        dtype=tf.float32)
+    location_placeholder = tf.placeholder(shape=[None, LOC_SIZE], 
+        name="loc")
+
+    glimpse_output = build_glimpse_network(
+        data=data_placeholder,
+        location=location_placeholder,
+        scope="glimpse")
+
+    hidden_output = build_core_network(
+        state=hidden_state_placeholder,
+        glimpse=g_t,
+        scope="core")
+
+    raw_action_output = build_action_network(
+        state=h_t,
+        scope="action")
+    action_output = get_action(raw_action_output)
+
+    raw_location_output = build_location_network(
+        state=h_t,
+        scope="location")
+    location_output = sample(raw_location_output)
+
+
+    #========================================================================================#
+    # Train
+    #========================================================================================#
+    train()
+    
+
+    #========================================================================================#
+    # Test
+    #========================================================================================#
+    
+
