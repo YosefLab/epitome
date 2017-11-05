@@ -13,7 +13,7 @@ from math import pi
 
 ################################# Define configuration ################################
 
-LEARNING_RATE = 1e-2
+LEARNING_RATE = 1e-1
 # number of glimpses per image
 NUM_GLIMPSES = 7
 # height, width to which glimpses get resized
@@ -21,7 +21,7 @@ GLIMPSE_SIZE = 8
 # number of resolutions per glimpse
 NUM_RESOLUTIONS = 4
 # number of training epochs
-NUM_EPOCHS = 1000
+NUM_EPOCHS = 1000000
 # batch size for each training iterations
 # total training iterations = num_epochs * number of images / batch_size
 BATCH_SIZE = 10
@@ -189,14 +189,14 @@ def get_location(location_output):
     # TODO verify that this samples from multiple distributions
     dist = tf.distributions.Normal(loc=location_output, scale=STD_DEV)
     samples = dist.sample(sample_shape=[1])
-    return tf.squeeze(samples), dist.log_prob(samples)
+    return tf.squeeze(samples), tf.squeeze(dist.log_prob(samples))
 
 
 def get_action(action_output):
     # pass output through softmax
     softmax_output = tf.nn.softmax(action_output)
     # get action with highest probability
-    return tf.argmax(softmax_output)
+    return tf.argmax(softmax_output, output_type=tf.int32)
 
 
 
@@ -265,17 +265,9 @@ if __name__ == '__main__':
     # learn weights for glimpse, core, and action network
     update_op = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cross_entropy_loss)
 
-    # policy gradient for 
-    sy_log_probs = tf.placeholder(shape=[None, 1], 
-        name="log_probabiliy", 
-        dtype=tf.float32)
-
-    sy_adv = tf.placeholder(shape=[None, 1], 
-        name="advantage", 
-        dtype=tf.float32)
-
-    policy_gradient_loss = -1 * tf.reduce_mean(sy_log_probs * sy_adv)
-    update_op = tf.train.AdamOptimizer(LEARNING_RATE).minimize(policy_gradient_loss)
+    rewards = 1 - (1 * (action_output == tf.argmax(sy_y, output_type=tf.int32)))
+    policy_gradient_loss = tf.scalar_mul(-1, tf.reduce_mean(log_probs * tf.to_float(rewards)))
+    update_op_2 = tf.train.AdamOptimizer(LEARNING_RATE).minimize(policy_gradient_loss)
 
     #========================================================================================#
     # Tensorflow Engineering: Config, Session, Variable initialization
@@ -301,44 +293,18 @@ if __name__ == '__main__':
         for i in range(0,len(x_train), BATCH_SIZE):
             x_train_batch, y_train_batch = x_train[i:i+BATCH_SIZE], y_train[i:i+BATCH_SIZE]
 
-            # save raw output of location network at each time step, which is the mean 
-            mean_locs = []
-            # save location sampled at each time step from Gaussian(mean, STD_DEV)
-            sampled_locs = []
-            log_probs = []
-            rewards = []
-
             for i in range(NUM_GLIMPSES):
+                # not actually training 
                 fetches = [action_output, raw_location_output, location_output, log_probs,
-                    cross_entropy_loss, hidden_output, update_op]
+                        action_output, hidden_output, action_output, raw_action_output]
                 outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch, 
                     sy_y: y_train_batch, 
                     sy_l: location, 
                     sy_h: state})
                 location = outputs[2]
                 state = outputs[5]
-                print(outputs[4])
 
-                mean_locs.append(outputs[1])
-                sampled_locs.append(outputs[2])
-                log_probs.append(outputs[3])
-                
-                last = i < (NUM_GLIMPSES - 1)
-                correct = 1 - np.abs(action_output - y_train_batch)
-                rewards.append(correct * last)
-
-            mean_locs = np.array(mean_locs)
-            sampled_locs = np.array(sampled_locs)
-            log_probs = np.array(log_probs)
-            rewards = np.rewards(rewards)
-            print(log_probs.shape)
-            print(rewards.shape)
-
-            sess.run(update_op, feed_dict={sy_log_probs: log_probs, sy_adv: rewards})
-
-
-            # now fetch the losses
-    # import pdb; pdb.set_trace()
+                # print(outputs[-1])
 
     #========================================================================================#
     # Test
