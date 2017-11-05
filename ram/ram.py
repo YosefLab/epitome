@@ -13,18 +13,18 @@ from math import pi
 
 ################################# Define configuration ################################
 
-# LEARNING_RATE = 
+LEARNING_RATE = 1e-2
 # number of glimpses per image
-NUM_GLIMPSES = 6
+NUM_GLIMPSES = 7
 # height, width to which glimpses get resized
-GLIMPSE_SIZE = 12
+GLIMPSE_SIZE = 8
 # number of resolutions per glimpse
-NUM_RESOLUTIONS = 3
+NUM_RESOLUTIONS = 4
 # number of training epochs
-# NUM_EPOCHS = ??
+NUM_EPOCHS = 1000
 # batch size for each training iterations
 # total training iterations = num_epochs * number of images / batch_size
-# BATCH_SIZE = ??
+BATCH_SIZE = 10
 # for normalization purposes
 EPSILON = 1e-10
 # dimensionality of hidden state vector
@@ -40,7 +40,7 @@ IMG_SIZE = 28
 NUM_CLASSES = 10
 NUM_CHANNELS = 1
 # standard deviation for Gaussian distribution of locations
-# STD_DEV = ??
+STD_DEV = 0.01
 
 
 ################################# Define Networks ################################
@@ -91,7 +91,7 @@ def build_core_network(
         state,
         glimpse,
         scope,
-        output_size=128,
+        output_size=STATE_SIZE,
         output_activation=tf.nn.relu):
 
     with tf.variable_scope(scope):
@@ -114,7 +114,7 @@ def build_core_network(
 def build_location_network(
         state,
         scope,
-        output_size=2):
+        output_size=LOC_SIZE):
 
     # do not want RL gradient to flow through core, glimpse networks
     state = tf.stop_gradient(state)
@@ -147,23 +147,27 @@ def build_action_network(
     return ac_probs
 
 
+def get_boxes(loc):
+    offset = GLIMPSE_SIZE / (LOC_SIZE * IMG_SIZE)
+    scale = np.expand_dims(np.arange(1, NUM_RESOLUTIONS + 1), -1)
+    first_corners = np.repeat(np.array([[-offset, -offset, offset, offset]]), NUM_RESOLUTIONS, 
+        axis=0)
+    all_corners = np.tile(first_corners * scale, reps=[BATCH_SIZE, 1])
+    # repeated_locs = np.tolist(loc) * NUM_RESOLUTIONS
+    repeated_loc = tf.reshape(tf.tile(loc, multiples=[1, NUM_RESOLUTIONS]), [NUM_RESOLUTIONS * BATCH_SIZE, LOC_SIZE])
+    repeated_loc = tf.tile(repeated_loc, multiples=[1, 2])
+    return all_corners + repeated_loc
+    
 
 def get_glimpses(data, loc):
-    box_bounds = [
-        [0.5, 0.5, 1, 1],
-        [0.3, 0.3, 1, 1],
-        [0.15, 0.15, 1, 1],
-        [-.10, -.10, 1, 1]
-    ]
 
-    num_data_points = len(data)
-    boxes = box_bounds * num_data_points
-    box_ind = np.arange(num_data_points).repeat(NUM_RESOLUTIONS)
+    boxes = get_boxes(loc)
+    box_ind = np.arange(BATCH_SIZE).repeat(NUM_RESOLUTIONS)
     crop_size = [GLIMPSE_SIZE, GLIMPSE_SIZE]
     method = "bilinear"
     extrapolation_value = 0.0
 
-    data = np.expand_dims(data.reshape([num_data_points, IMG_SIZE, IMG_SIZE]), 3)
+    data = tf.expand_dims(tf.reshape(data, [BATCH_SIZE, IMG_SIZE, IMG_SIZE]), 3)
 
     glimpses = tf.image.crop_and_resize(
         data,
@@ -175,7 +179,7 @@ def get_glimpses(data, loc):
 
     # flatten each image into a vector
     # TODO concatenate all resolutions per image?
-    return tf.reshape(tf.squeeze(glimpses), [num_data_points * NUM_RESOLUTIONS, GLIMPSE_SIZE * GLIMPSE_SIZE])
+    return tf.reshape(tf.squeeze(glimpses), [BATCH_SIZE, NUM_RESOLUTIONS * GLIMPSE_SIZE * GLIMPSE_SIZE])
 
 
 def get_location(location_output):
@@ -183,7 +187,9 @@ def get_location(location_output):
     # TODO restrcit mean to be between (-1, 1)
     # sample from gaussian with above mean and predefined STD_DEV
     # TODO verify that this samples from multiple distributions
-    return tf.distributions.Normal(loc=mean, scale=STD_DEV).sample(sample_shape=[LOC_SIZE, 1])
+    dist = tf.distributions.Normal(loc=location_output, scale=STD_DEV)
+    samples = dist.sample(sample_shape=[1])
+    return tf.squeeze(samples), dist.log_prob(samples)
 
 
 def get_action(action_output):
@@ -193,94 +199,8 @@ def get_action(action_output):
     return tf.argmax(softmax_output)
 
 
-########################################## Full Model ##########################################
-
-
-def build_model():
-    
-    x = tf.placeholder(shape=[None, IMG_SIZE * IMG_SIZE], 
-        name="data", 
-        dtype=tf.float32)
-    y = tf.placeholder(shape=[None, NUM_CLASSES], 
-        name="labels", 
-        dtype=tf.int32)
-    h_t = tf.placeholder(shape=[None, STATE_SIZE], 
-        name="hidden_state", 
-        dtype=tf.float32)
-    l_t = tf.placeholder(shape=[None, LOC_SIZE], 
-        name="loc")
-
-    # save raw output of location network at each time step, which is the mean 
-    mean_locs = []
-    # save location sampled at each time step from Gaussian(mean, STD_DEV)
-    sampled_locs = []
-
-    for i in range(NUM_GLIMPSES):
-        g_t = sess.run(glimpse_output, feed_dict={data_placeholder=x,
-            location_placeholder=l_t})
-        h_t = sess.run(hidden_output, feed_dict={hidden_state_placeholder=h_t
-            glimpse=g_t})
-        mean,l_t = sess.run([raw_location_output, location_output], feed_dict={state=h_t})
-        mean_locs.append(mean)
-        sampled_locs.append(l_t)
-
-    a_t = sess.run(action_output, feed_dict={state=h_t})
-
-
-############################################ Train ############################################
-
-def train():
-
-    data_placeholder = tf.placeholder(shape=[None, IMG_SIZE * IMG_SIZE], 
-        name="data", 
-        dtype=tf.float32)
-    labels_placeholder = tf.placeholder(shape=[None, NUM_CLASSES], 
-        name="labels", 
-        dtype=tf.int32)
-    hidden_state_placeholder = tf.placeholder(shape=[None, STATE_SIZE], 
-        name="hidden_state", 
-        dtype=tf.float32)
-    location_placeholder = tf.placeholder(shape=[None, LOC_SIZE], 
-        name="loc")
-
-    #========================================================================================#
-    # Define Ops
-    #========================================================================================#
-
-    cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(
-        labels=a_t,
-        logits=labels_placeholder)
-
-    update_op = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cross_entropy_loss)
-
-    #========================================================================================#
-    # Training Loop
-    #========================================================================================#
-
-    l_t = tf.random.uniform(shape=[BATCH_SIZE, LOC_SIZE], minval=-1.0, maxval=1.0)
-    h_t = tf.zeros(shape=[BATCH_SIZE, STATE_SIZE]))
-    
-    for i in range(NUM_EPOCHS):
-        # TODO check if mnist.train.next_batch() has same functionality
-        x_train, y_train = shuffle(mnist.train.images, mnist.train.labels, n_samples=BATCH_SIZE)
-        for i in range(0,len(x_train), BATCH_SIZE):
-            x_train_batch, y_train_batch = x_train[i:i+BATCH_SIZE]
-
-            sess.run()
-
-
 
 if __name__ == '__main__':
-
-    #========================================================================================#
-    # Tensorflow Engineering: Config, Session, Variable initialization
-    #========================================================================================#
-    
-    tf_config = tf.ConfigProto(inter_op_parallelism_threads=1, intra_op_parallelism_threads=1)
-
-    sess = tf.Session(config=tf_config)
-    sess.__enter__() # equivalent to `with sess:`
-    tf.global_variables_initializer().run() #pylint: disable=E1101
 
     #========================================================================================#
     # Download Data
@@ -293,47 +213,137 @@ if __name__ == '__main__':
     # Placeholders
     #========================================================================================#
 
-    data_placeholder = tf.placeholder(shape=[None, IMG_SIZE * IMG_SIZE], 
+    sy_x = tf.placeholder(shape=[None, IMG_SIZE * IMG_SIZE], 
         name="data", 
         dtype=tf.float32)
-    labels_placeholder = tf.placeholder(shape=[None, NUM_CLASSES], 
+
+    sy_y = tf.placeholder(shape=[None, NUM_CLASSES], 
         name="labels", 
         dtype=tf.int32)
-    hidden_state_placeholder = tf.placeholder(shape=[None, STATE_SIZE], 
+
+    sy_h = tf.placeholder(shape=[None, STATE_SIZE], 
         name="hidden_state", 
         dtype=tf.float32)
-    location_placeholder = tf.placeholder(shape=[None, LOC_SIZE], 
-        name="loc")
+
+    sy_l = tf.placeholder(shape=[None, LOC_SIZE], 
+        name="loc",
+        dtype=tf.float32)
+
+    #========================================================================================#
+    # Hidden Cell
+    #========================================================================================#
 
     glimpse_output = build_glimpse_network(
-        data=data_placeholder,
-        location=location_placeholder,
+        data=sy_x,
+        location=sy_l,
         scope="glimpse")
 
     hidden_output = build_core_network(
-        state=hidden_state_placeholder,
-        glimpse=g_t,
+        state=sy_h,
+        glimpse=glimpse_output,
         scope="core")
 
     raw_action_output = build_action_network(
-        state=h_t,
+        state=hidden_output,
         scope="action")
     action_output = get_action(raw_action_output)
 
     raw_location_output = build_location_network(
-        state=h_t,
+        state=hidden_output,
         scope="location")
-    location_output = sample(raw_location_output)
+    location_output, log_probs = get_location(raw_location_output)
 
+    #========================================================================================#
+    # Define Ops
+    #========================================================================================#
+
+    # cross entropy loss for actions that are output at final timestep 
+    cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+        labels=sy_y,
+        logits=raw_action_output))
+
+    # learn weights for glimpse, core, and action network
+    update_op = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cross_entropy_loss)
+
+    # policy gradient for 
+    sy_log_probs = tf.placeholder(shape=[None, 1], 
+        name="log_probabiliy", 
+        dtype=tf.float32)
+
+    sy_adv = tf.placeholder(shape=[None, 1], 
+        name="advantage", 
+        dtype=tf.float32)
+
+    policy_gradient_loss = -1 * tf.reduce_mean(sy_log_probs * sy_adv)
+    update_op = tf.train.AdamOptimizer(LEARNING_RATE).minimize(policy_gradient_loss)
+
+    #========================================================================================#
+    # Tensorflow Engineering: Config, Session, Variable initialization
+    #========================================================================================#
+    
+    tf_config = tf.ConfigProto(inter_op_parallelism_threads=1, intra_op_parallelism_threads=1)
+
+    sess = tf.Session(config=tf_config)
+    sess.__enter__() # equivalent to `with sess:`
+    tf.global_variables_initializer().run() #pylint: disable=E1101
 
     #========================================================================================#
     # Train
     #========================================================================================#
-    train()
+
+    location = np.random.uniform(size=[BATCH_SIZE, LOC_SIZE], low=-1.0, high=1.0)
+    state = np.zeros(shape=[BATCH_SIZE, STATE_SIZE])
     
+    for i in range(NUM_EPOCHS):
+        
+        # TODO check if mnist.train.next_batch() has same functionality
+        x_train, y_train = shuffle(mnist.train.images, mnist.train.labels, n_samples=BATCH_SIZE)
+        for i in range(0,len(x_train), BATCH_SIZE):
+            x_train_batch, y_train_batch = x_train[i:i+BATCH_SIZE], y_train[i:i+BATCH_SIZE]
+
+            # save raw output of location network at each time step, which is the mean 
+            mean_locs = []
+            # save location sampled at each time step from Gaussian(mean, STD_DEV)
+            sampled_locs = []
+            log_probs = []
+            rewards = []
+
+            for i in range(NUM_GLIMPSES):
+                fetches = [action_output, raw_location_output, location_output, log_probs,
+                    cross_entropy_loss, hidden_output, update_op]
+                outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch, 
+                    sy_y: y_train_batch, 
+                    sy_l: location, 
+                    sy_h: state})
+                location = outputs[2]
+                state = outputs[5]
+                print(outputs[4])
+
+                mean_locs.append(outputs[1])
+                sampled_locs.append(outputs[2])
+                log_probs.append(outputs[3])
+                
+                last = i < (NUM_GLIMPSES - 1)
+                correct = 1 - np.abs(action_output - y_train_batch)
+                rewards.append(correct * last)
+
+            mean_locs = np.array(mean_locs)
+            sampled_locs = np.array(sampled_locs)
+            log_probs = np.array(log_probs)
+            rewards = np.rewards(rewards)
+            print(log_probs.shape)
+            print(rewards.shape)
+
+            sess.run(update_op, feed_dict={sy_log_probs: log_probs, sy_adv: rewards})
+
+
+            # now fetch the losses
+    # import pdb; pdb.set_trace()
 
     #========================================================================================#
     # Test
     #========================================================================================#
     
+    # test()
+
 
