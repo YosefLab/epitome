@@ -126,7 +126,7 @@ def build_location_network(
             activation=None,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             bias_initializer=tf.contrib.layers.xavier_initializer())
-    return mean
+    return tf.clip_by_value(mean, -1, 1)
 
 
 def build_action_network(
@@ -293,7 +293,7 @@ if __name__ == '__main__':
         for i in range(0,len(x_train), BATCH_SIZE):
             x_train_batch, y_train_batch = x_train[i:i+BATCH_SIZE], y_train[i:i+BATCH_SIZE]
 
-            for i in range(NUM_GLIMPSES):
+            for i in range(NUM_GLIMPSES - 1):
                 # not actually training 
                 fetches = [action_output, raw_location_output, location_output, log_probs,
                         action_output, hidden_output, action_output, raw_action_output]
@@ -304,7 +304,13 @@ if __name__ == '__main__':
                 location = outputs[2]
                 state = outputs[5]
 
-                # print(outputs[-1])
+            fetches2 = [update_op, update_op_2]
+            outputs2 = sess.run(fetches=fetches2, feed_dict={sy_x: x_train_batch, 
+                    sy_y: y_train_batch, 
+                    sy_l: location, 
+                    sy_h: state})
+            print(outputs2)
+
 
     #========================================================================================#
     # Test
