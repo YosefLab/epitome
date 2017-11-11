@@ -3,11 +3,14 @@ import tensorflow as tf
 
 """
 
-Lightweight library to read and write TFRecords.
+Lightweight library to read and write TF-Records.
 
 """
 
 slim = tf.contrib.slim
+
+
+################################# TF-Record Utilities ################################
 
 def make_bytes_feature(value_list):
   return tf.train.Feature(
@@ -46,3 +49,12 @@ def write_tfrecord(protos, path):
   for proto in protos:
     writer.write(proto.SerializeToString())
   writer.close()
+
+  ################################# Sharded Filespec ################################
+
+def sharded_filename(filename, shard, num_shards):
+  format_ = lambda i: str(i).rjust(5, '0')
+  return '%s-%s-%s' % (filename, format_(shard), format_(num_shards))
+
+def sharded_filenames(filename, num_shards):
+  return [sharded_filename(filename, i, num_shards) for i in xrange(num_shards)]
