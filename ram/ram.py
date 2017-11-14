@@ -123,6 +123,21 @@ def build_location_network(
             bias_initializer=tf.contrib.layers.xavier_initializer())
     return tf.clip_by_value(mean, -1, 1)
 
+def build_baseline_network(
+        input_placeholder, 
+        output_size,
+        scope, 
+        n_layers=2, 
+        size=64, 
+        activation=tf.tanh,
+        output_activation=None
+        ):
+    with tf.variable_scope(scope):
+        # YOUR_CODE_HERE
+        net = input_placeholder
+        for _ in range(n_layers):
+            net = tf.layers.dense(net, size, activation)
+        return tf.layers.dense(net, output_size, output_activation)
 
 def build_action_network(
         state,
@@ -179,12 +194,12 @@ def get_boxes(loc, batch_size, num_resolutions, glimpse_size, img_size, loc_size
     return all_corners + repeated_loc
 
 
-def get_location(location_output, std_dev, clip=False, clip_low=-1, clip_high=1):
+def get_location(location_output, std_dev, loc_size, clip=False, clip_low=-1, clip_high=1):
     # location network outputs the mean
     # TODO restrcit mean to be between (-1, 1)
     # sample from gaussian with above mean and predefined STD_DEV
     # TODO verify that this samples from multiple distributions
-    dist = tf.distributions.Normal(loc=location_output, scale=std_dev)
+    dist = ds.MultivariateNormalDiag(loc=location_output, scale_diag=[std_dev] * loc_size)
     samples = tf.squeeze(dist.sample(sample_shape=[1]))
     if clip:
         samples = tf.clip_by_value(samples, clip_low, clip_high)
@@ -204,6 +219,7 @@ def train(glimpse_size,
         glimpse_vector_size,
         state_size,
         std_dev,
+        nn_baseline,
         num_epochs,
         learning_rate,
         batch_size,
@@ -253,19 +269,29 @@ def train(glimpse_size,
         scope="core",
         output_size=state_size)
 
+    baseline_output = build_baseline_network(
+        input_placeholder = hidden_output, 
+        output_size = 1,
+        scope = "baseline", 
+        n_layers=2, 
+        size=64, 
+        activation=tf.tanh,
+        output_activation=None)
+
     raw_action_output = build_action_network(
         state=hidden_output,
         scope="action")
     d, action_output = get_action(raw_action_output)
 
-    raw_location_output = build_location_network(
+    mean_location_output = build_location_network(
         state=hidden_output,
         scope="location",
         output_size=loc_size)
-    location_output, log_probs = get_location(raw_location_output, std_dev, clip=True)
+    location_output, log_probs = get_location(mean_location_output, std_dev, loc_size, clip=True)
 
     ################################# Define ops ################################
 
+    ################################# Baseline ops ################################
     # cross entropy loss for actions that are output at final timestep 
     # cross_entropy_loss = tf.reduce_mean(tf.reduce_max(tf.log(d), axis=1))
 
@@ -273,13 +299,24 @@ def train(glimpse_size,
         labels=sy_y,
         logits=raw_action_output))
 
-    # learn weights for glimpse, core, and action network
-    # update_op = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cross_entropy_loss)
+    rewards = tf.cast(tf.equal(action_output, tf.argmax(sy_y, output_type=tf.int32, axis = 1)), tf.float32)
 
-    # rewards = 1 * tf.equal(action_output , tf.argmax(sy_y, output_type=tf.int32))
-    # policy_gradient_loss = tf.scalar_mul(-1, tf.reduce_mean(log_probs * tf.to_float(rewards)))
-    # tf.equal(action_output, )
-    update_op = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy_loss)
+    # if use baseline, subtract baseline from rewards
+    if nn_baseline:
+        baseline_prediction = tf.squeeze(baseline_output)
+        adv_n = rewards - tf.stop_gradient(baseline_prediction)
+    else:
+        adv_n = rewards
+
+    policy_gradient_loss = tf.scalar_mul(-1, tf.reduce_mean(log_probs * tf.to_float(adv_n)))
+
+    if nn_baseline:
+        baseline_loss = tf.losses.mean_squared_error(rewards, baseline_prediction)
+        hybrid_loss = cross_entropy_loss + policy_gradient_loss + baseline_loss
+    else:
+        hybrid_loss = cross_entropy_loss + policy_gradient_loss
+
+    update_op = tf.train.AdamOptimizer(learning_rate).minimize(hybrid_loss)
 
     ############################## Tensorflow engineering #######################
     
@@ -295,43 +332,60 @@ def train(glimpse_size,
 
     location = np.random.uniform(size=[batch_size, loc_size], low=-0.5, high=0.5)
     # location = np.zeros([batch_size, loc_size])
-    state = np.zeros(shape=[batch_size, state_size])
+    state = np.random.uniform(size=[batch_size, state_size], low = 0, high = 1)
     
     for epoch in range(num_epochs):
         
         acs = []
         losses = []
-        
+        pol_losses = []
+        baseline_losses = []
+        path_rewards = []
         x_train, y_train = shuffle(mnist.train.images, mnist.train.labels)
         for i in range(0, len(x_train), batch_size):
             x_train_batch, y_train_batch = x_train[i:i+batch_size], y_train[i:i+batch_size]
 
-
             for j in range(num_glimpses - 1):
                 # not actually training 
-                fetches = [location_output, hidden_output, cross_entropy_loss, raw_location_output, raw_action_output]
+                fetches = [location_output, hidden_output]
                 outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch, 
                     sy_y: y_train_batch, 
                     sy_l: location, 
                     sy_h: state})
-                location = np.random.uniform(size=[batch_size, loc_size], low=-0.5, high=0.5)
-                # location = outputs[0]
+                # location = np.random.uniform(size=[batch_size, loc_size], low=-0.5, high=0.5)
+                location = outputs[0]
                 state = outputs[1]
 
-            fetches = [location_output, hidden_output, update_op, cross_entropy_loss, action_output]
+            fetches = [location_output, hidden_output, update_op, cross_entropy_loss, policy_gradient_loss, rewards]
+
+            if nn_baseline:
+                fetches.append(baseline_loss)
+
+            fetches.append(action_output)
+
             outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch, 
                     sy_y: y_train_batch, 
                     sy_l: location, 
                     sy_h: state})
 
-            correct_prediction = np.sum(np.equal(np.argmax(y_train_batch, axis=1), outputs[-1]))/batch_size
+            correct_prediction = np.sum(np.equal(np.argmax(y_train_batch, axis=1), outputs[-1]))/float(batch_size)
             acs.append(correct_prediction)
             losses.append(outputs[3])
+            pol_losses.append(outputs[4])
+            path_rewards.append(outputs[5])
+            if nn_baseline:
+                baseline_losses.append(outputs[6])
+
+            ######################### Train baseline ########################
         
         print("*" * 100)
         print("Epoch: {}".format(epoch))
         print("Accuracy: {}".format(np.mean(np.array(acs))))
         print("Cross Entropy Loss: {}".format(np.mean(np.array(losses))))
+        print("Policy Gradient Loss: {}".format(np.mean(np.array(pol_losses))))
+        if nn_baseline:
+            print("Baseline Loss: {}".format(np.mean(np.array(baseline_losses))))
+        print("Rewards: {}".format(np.mean(np.array(path_rewards))))
 
 
 # constant for normalization purposes
@@ -357,6 +411,8 @@ def main():
     parser.add_argument('--state_size', type=int, default=256)
     # standard deviation for Gaussian distribution over locations
     parser.add_argument('--std_dev', '-std', type=int, default=1e-3)
+    # use neural network baseline
+    parser.add_argument('--nn_baseline', type=bool, default=False)
 
     ############################## Training args ################################
 
@@ -388,6 +444,7 @@ def main():
         glimpse_vector_size=args.glimpse_vector_size,
         state_size=args.state_size,
         std_dev=args.std_dev,
+        nn_baseline = args.nn_baseline,
         num_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
         batch_size=args.batch_size,
@@ -399,4 +456,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
