@@ -123,6 +123,7 @@ def build_location_network(
             bias_initializer=tf.contrib.layers.xavier_initializer())
     return tf.clip_by_value(mean, -1, 1)
 
+
 def build_baseline_network(
         input_placeholder, 
         output_size,
@@ -130,14 +131,14 @@ def build_baseline_network(
         n_layers=2, 
         size=64, 
         activation=tf.tanh,
-        output_activation=None
-        ):
+        output_activation=None):
+
     with tf.variable_scope(scope):
-        # YOUR_CODE_HERE
         net = input_placeholder
         for _ in range(n_layers):
             net = tf.layers.dense(net, size, activation)
         return tf.layers.dense(net, output_size, output_activation)
+
 
 def build_action_network(
         state,
@@ -291,9 +292,7 @@ def train(glimpse_size,
 
     ################################# Define ops ################################
 
-    ################################# Baseline ops ################################
     # cross entropy loss for actions that are output at final timestep 
-    # cross_entropy_loss = tf.reduce_mean(tf.reduce_max(tf.log(d), axis=1))
 
     cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
         labels=sy_y,
@@ -330,29 +329,35 @@ def train(glimpse_size,
 
     ################################### Train ###################################
 
-    location = np.random.uniform(size=[batch_size, loc_size], low=-0.5, high=0.5)
-    # location = np.zeros([batch_size, loc_size])
-    state = np.random.uniform(size=[batch_size, state_size], low = 0, high = 1)
+    # location = np.random.uniform(size=[batch_size, loc_size], low=-0.5, high=0.5)
+    # hidden state initialized to zeros
+    location = np.zeros(shape=[batch_size, loc_size])
+
+    state = np.zeros(shape=[batch_size, state_size])
     
     for epoch in range(num_epochs):
         
+        # accuracies
         acs = []
-        losses = []
-        pol_losses = []
+        # cross entropy and policy gradient losses
+        ce_losses = []
+        pg_losses = []
         baseline_losses = []
+        # total rewards for num_glimpses timesteps
         path_rewards = []
+
         x_train, y_train = shuffle(mnist.train.images, mnist.train.labels)
         for i in range(0, len(x_train), batch_size):
             x_train_batch, y_train_batch = x_train[i:i+batch_size], y_train[i:i+batch_size]
 
             for j in range(num_glimpses - 1):
-                # not actually training 
                 fetches = [location_output, hidden_output]
                 outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch, 
                     sy_y: y_train_batch, 
                     sy_l: location, 
                     sy_h: state})
                 # location = np.random.uniform(size=[batch_size, loc_size], low=-0.5, high=0.5)
+                # location = np.zeros(shape=[batch_size, loc_size])
                 location = outputs[0]
                 state = outputs[1]
 
@@ -361,6 +366,7 @@ def train(glimpse_size,
             if nn_baseline:
                 fetches.append(baseline_loss)
 
+            # make sure action_output is last in outputs
             fetches.append(action_output)
 
             outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch, 
@@ -368,10 +374,10 @@ def train(glimpse_size,
                     sy_l: location, 
                     sy_h: state})
 
-            correct_prediction = np.sum(np.equal(np.argmax(y_train_batch, axis=1), outputs[-1]))/float(batch_size)
+            correct_prediction = np.mean(np.equal(np.argmax(y_train_batch, axis=1), outputs[-1]))
             acs.append(correct_prediction)
-            losses.append(outputs[3])
-            pol_losses.append(outputs[4])
+            ce_losses.append(outputs[3])
+            pg_losses.append(outputs[4])
             path_rewards.append(outputs[5])
             if nn_baseline:
                 baseline_losses.append(outputs[6])
@@ -381,8 +387,8 @@ def train(glimpse_size,
         print("*" * 100)
         print("Epoch: {}".format(epoch))
         print("Accuracy: {}".format(np.mean(np.array(acs))))
-        print("Cross Entropy Loss: {}".format(np.mean(np.array(losses))))
-        print("Policy Gradient Loss: {}".format(np.mean(np.array(pol_losses))))
+        print("Cross Entropy Loss: {}".format(np.mean(np.array(ce_losses))))
+        print("Policy Gradient Loss: {}".format(np.mean(np.array(pg_losses))))
         if nn_baseline:
             print("Baseline Loss: {}".format(np.mean(np.array(baseline_losses))))
         print("Rewards: {}".format(np.mean(np.array(path_rewards))))
@@ -412,7 +418,7 @@ def main():
     # standard deviation for Gaussian distribution over locations
     parser.add_argument('--std_dev', '-std', type=int, default=1e-3)
     # use neural network baseline
-    parser.add_argument('--nn_baseline', type=bool, default=False)
+    parser.add_argument('--nn_baseline', '-bl', action='store_true')
 
     ############################## Training args ################################
 

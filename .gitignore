@@ -15,3 +15,5 @@ __pycache__
 
 bionetz/bdgenomics_data
 bionetz/deepsea_train
+
+ram/MNIST_data/
