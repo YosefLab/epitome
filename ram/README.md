@@ -1,3 +1,8 @@
+## To run:
+```
+python ram.py --nn_baseline
+```
+
 ### Existing implementations of RAM:
 * https://github.com/jlindsey15/RAM
 * https://github.com/zhongwen/RAM
