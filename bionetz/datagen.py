@@ -1,12 +1,10 @@
-import argparse
 import os
+import argparse
 import threading
-
 import h5py
 import numpy as np
-from scipy.io import loadmat
 import tensorflow as tf
-
+from scipy.io import loadmat
 import iio
 
 tmp = h5py.File('./deepsea_train/train.mat', 'r')
@@ -17,14 +15,12 @@ tmp = loadmat('./deepsea_train/valid.mat')
 valid_input = tmp['validxdata']
 valid_target = tmp['validdata']
 
-
 def test_and_valid_iter(input_, target):
     for i in xrange(input_.shape[0]):
         yield iio.make_example({
             'input': iio.make_float_feature(input_[i].flatten()),
             'target': iio.make_int64_feature(target[i].flatten()),
         })
-
     
 def train_iter(input_, target):
     for i in xrange(input_.shape[2]):
@@ -32,7 +28,6 @@ def train_iter(input_, target):
             'input': iio.make_float_feature(input_[:,:,i].flatten()),
             'target': iio.make_int64_feature(target[:,i].flatten()),
         })
-
 
 def write_tfrecords(examples, filename, num_shards=100):
     filenames = iio.sharded_filenames(filename, num_shards)
@@ -43,7 +38,6 @@ def write_tfrecords(examples, filename, num_shards=100):
             args=(example.SerializeToString(),))
         t.daemon = True
         t.start()
-
 
 def main():
 	parser = argparse.ArgumentParser()
@@ -67,7 +61,6 @@ def main():
 	    filename=os.path.join(args.output_dir, 'train.tfrecord'),
 	    num_shards=args.num_shards)
 	print('Done.')
-
 
 if __name__ == '__main__':
 	main()
