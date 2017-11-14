@@ -18,8 +18,6 @@
 
 
 import numpy as np
-import os
-import time
 import tensorflow.contrib.distributions as ds
 from sklearn.utils import shuffle
 from math import pi
