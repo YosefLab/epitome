@@ -46,7 +46,7 @@ mv ENCFF391EDU.bam ENCFF391EDU_HCT116.bam
 
 # H1-hesc
 wget https://www.encodeproject.org/files/ENCFF059BEU/@@download/ENCFF059BEU.bam
-mv  ENCFF059BEU_h1hesc.bam
+mv ENCFF059BEU.bam ENCFF059BEU_h1hesc.bam
 
 
 :'

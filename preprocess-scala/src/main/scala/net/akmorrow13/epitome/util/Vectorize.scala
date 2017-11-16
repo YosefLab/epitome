@@ -12,6 +12,7 @@ import org.apache.spark.rdd.RDD
 import org.bdgenomics.adam.models.{Coverage, ReferenceRegion}
 import breeze.linalg.DenseVector
 import org.bdgenomics.adam.rdd.ADAMContext._
+import htsjdk.samtools.ValidationStringency
 
 /**
  * Class for taking in TF binding sites and ATAC/DNASE-seq bam files and merging
@@ -37,7 +38,11 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
 
     // read in ATAC-seq reads and TF binding sites
     val (reads: AlignmentRecordRDD, features: FeatureRDD)  = {
-      val reads = sc.loadAlignments(conf.readsPath)
+      val reads = sc.loadAlignments(conf.readsPath, stringency=ValidationStringency.LENIENT)      
+	.transform(rdd => rdd.filter(r => r.getReadMapped))
+
+      reads.rdd.cache()
+      reads.rdd.count
 
       // copy over because conf is transient
 
@@ -53,7 +58,9 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
       ).reduce(_ union _)
 
       features = features.replaceSequences(reads.sequences)
-
+      features.rdd.cache
+      features.rdd.count
+ 
       if (conf.partitions > 0) {
         (reads.transform(r => r.repartition(conf.partitions)), features.transform(r => r.repartition(conf.partitions)))
       } else {
@@ -96,10 +103,6 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
         })
         (r._1.get, vector)
       })
-
-  // cache reads for join
-  reads.rdd.cache()
-  reads.rdd.count()
 
   // region function for (coverage, feature) tuples, used for GenomicRDD
   def regionFn(r: (Coverage, DenseVector[Int])): Seq[ReferenceRegion] = Seq(ReferenceRegion(r._1))
