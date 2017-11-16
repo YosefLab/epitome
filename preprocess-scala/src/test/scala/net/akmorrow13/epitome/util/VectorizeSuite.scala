@@ -25,27 +25,27 @@ class VectorizerSuite extends EpitomeFunSuite {
 
     val vectorizer = Vectorizer(sc, conf)
 
-    val featurized: RDD[(DenseVector[Int], DenseVector[Int])] =
+    val featurized =
       vectorizer.partitionAndFeaturize()
 
-    val positives = featurized.filter(r => r._1.sum == 2)
+    val positives = featurized.filter(r => r.labels.sum == 2)
 
     // should have negative examples
     assert(featurized.count > 2)
     assert(positives.count == 1)
 
-    assert(positives.first._2.length == conf.windowSize)
-    assert(positives.first._2.findAll(x => x > 0).length == 2)
+    assert(positives.first.atacCounts.length == conf.windowSize)
+    assert(positives.first.atacCounts.findAll(x => x > 0).length == 2)
 
   }
 
   sparkTest("saves values locally") {
     val filepath = new java.io.File(Files.createTempDir(), "tempOutput")
 
-    val features: RDD[DenseVector[Int]] = sc.parallelize(Array(DenseVector(1,2), DenseVector(1,3)))
-    val labels: RDD[DenseVector[Int]]  = sc.parallelize(Array(DenseVector(1,2,0,0,2), DenseVector(1,2,0,0,1)))
+    val item1 = ATACandSequenceFeature(DenseVector(1,2), DenseVector(1,2,0,0,2), "ATTG")
+    val item2 = ATACandSequenceFeature(DenseVector(1,3), DenseVector(1,2,0,0,1), "ATTG")
 
-    val featuresAndLabels = features.zip(labels)
+    val featuresAndLabels = sc.parallelize(Seq(item1, item2))
 
     // setup configuration
     val conf = new EpitomeArgs()

@@ -13,8 +13,16 @@ import org.bdgenomics.adam.models.{Coverage, ReferenceRegion}
 import breeze.linalg.DenseVector
 import org.bdgenomics.adam.rdd.ADAMContext._
 
+/**
+ * Class for taking in TF binding sites and ATAC/DNASE-seq bam files and merging
+ * them to learning records. This class first validates the arguments
+ *
+ * @param sc Spark Context
+ * @param conf EpitomeArgs arguments to run on
+ */
 case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs) {
 
+  // validate arguments
   conf.validate()
 
   /**
@@ -22,11 +30,12 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
    *
    * @return RDD of (vector of labels, vector of features)
    */
-  def partitionAndFeaturize(): RDD[(DenseVector[Int], DenseVector[Int])] = {
+  def partitionAndFeaturize(): RDD[ATACandSequenceFeature] = {
 
+    // get array of TFs for labels
     val featurePathLabelArray = conf.getFeaturePathLabelsArray()
 
-
+    // read in ATAC-seq reads and TF binding sites
     val (reads: AlignmentRecordRDD, features: FeatureRDD)  = {
       val reads = sc.loadAlignments(conf.readsPath)
 
@@ -57,8 +66,9 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
     // Step 1: Get candidate regions (ATAC called peaks)
 
     // TODO: START replace with MACS2 caller
-    val coverage = reads.toCoverage()
+    val coverage = reads.toCoverage().flatten()
 
+    // get reads coverage
     val filteredCoverage: CoverageRDD = coverage.transform(rdd => {
       rdd
         .map(r => new Coverage(r.contigName, r.start - (r.start % 1000), r.end + 1000 - (r.end % 1000), r.count)) // TODO combine if overlapping/next to eachother
@@ -68,11 +78,12 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
     })
     // TODO END replace with MACS2 caller
 
-    require(filteredCoverage.rdd.count>0, "filteredCoverageRDD empty")
+    val coverageCount = filteredCoverage.rdd.count
+    require(coverageCount>0, "filteredCoverageRDD empty")
+    println("coverage count from reads", coverageCount)
 
     // Step 2: Join ATAC peaks and ChIP-seq peaks Join(atac, chipseq)
-    // use this line instead of the above when getting an error for unequal number of partitions
-    val joinedPeaks = filteredCoverage.rightOuterShuffleRegionJoinAndGroupByLeft(features)
+    val joinedPeaks: RDD[(Coverage, DenseVector[Int])] = filteredCoverage.rightOuterShuffleRegionJoinAndGroupByLeft(features)
       .rdd.filter(_._1.isDefined)
       .map(r => {
         val labels = r._2.map(_.getFeatureType).toArray.distinct
@@ -105,23 +116,39 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
     .filter(r => r._1.isDefined)
     .map(r => (ReferenceRegion(r._1.get._1), r._1.get._2, r._2))
 
-  // Step 4: Featurize Reads into DenseVector of cutsite counts
-  vectorizeCutSites(labelsAndAlignments)
+
+  // Step 4: Gather genomic sequences and add to the examples
+  val referenceFile = sc.loadReferenceFile(conf.referencePath, 10000)
+
+  // broadcast reference to be accessible on all workers
+  val broadCastReference = sc.broadcast(referenceFile)
+
+  val labelsAndAlignmentsWithDNASequence: RDD[(ReferenceRegion, DenseVector[Int], Iterable[AlignmentRecord], String)] =
+    labelsAndAlignments.map(r => {
+      val sequence = broadCastReference.value.extract(r._1)
+      (r._1, r._2, r._3, sequence)
+    })
+
+  print("final training count ", labelsAndAlignmentsWithDNASequence.count)
+
+  // Step 5: Featurize Reads into DenseVector of cutsite counts
+  vectorizeCutSites(labelsAndAlignmentsWithDNASequence)
 
   }
 
   /**
    * Featurizes Iterable[AlignmentRecords] by ReferenceRegion to DenseVector of cut sites
    *
-   * @param featurizedCuts RDD[(Region, label vector, reads to featurize for this datapoint)]
-   * @return RDD[(Labels, Features)]
+   * @param featurizedCuts RDD[(Region, label vector, reads, DNA sequence to featurize for this datapoint)]
+   * @return RDD[(Labels, ATAC-seq Features, DNA Sequence)]
    */
-  private def vectorizeCutSites(featurizedCuts: RDD[(ReferenceRegion, DenseVector[Int], Iterable[AlignmentRecord])]): RDD[(DenseVector[Int], DenseVector[Int])] = {
+  private def vectorizeCutSites(featurizedCuts: RDD[(ReferenceRegion, DenseVector[Int], Iterable[AlignmentRecord], String)]): RDD[ATACandSequenceFeature] = {
 
     // get window size
     val windowSize = conf.windowSize
 
-    val featurized: RDD[(DenseVector[Int], DenseVector[Int])] =
+    // RDD[labels, ATAC seq counts, DNA Sequence]
+    val featurized: RDD[ATACandSequenceFeature] =
       featurizedCuts.map(window => {
         val region = window._1
 
@@ -142,7 +169,7 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
         })
 
         // positions should be size of window
-        (window._2, positions)
+        ATACandSequenceFeature(window._2, positions, window._4)
       })
 
     featurized
@@ -151,10 +178,10 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
   /**
    * Saves features to local file
    *
-   * @param RDD of labels, features
+   * @param rdd of labels, features
    * @param filepath to save data to
    */
-  def saveValuesLocally(rdd: RDD[(DenseVector[Int], DenseVector[Int])], filepath: String) = {
+  def saveValuesLocally(rdd: RDD[ATACandSequenceFeature], filepath: String) = {
 
     val collected= rdd.collect
 
@@ -165,7 +192,7 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
     file.write(header)
 
     collected.toList.foreach(r => {
-      file.write(r._1.toArray.mkString(",") + ";" + r._2.toArray.mkString(",") + "\n")
+      file.write(r.labels.toArray.mkString(",") + ";" + r.atacCounts.toArray.mkString(",") + ";" + r.sequence + "\n")
     })
 
     file.close()
@@ -173,3 +200,7 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
   }
 
 }
+
+
+
+case class ATACandSequenceFeature(labels: DenseVector[Int], atacCounts: DenseVector[Int], sequence: String)
