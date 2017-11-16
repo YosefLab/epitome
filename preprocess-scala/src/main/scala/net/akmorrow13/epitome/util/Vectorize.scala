@@ -119,23 +119,10 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
     .filter(r => r._1.isDefined)
     .map(r => (ReferenceRegion(r._1.get._1), r._1.get._2, r._2))
 
-
-  // Step 4: Gather genomic sequences and add to the examples
-  val referenceFile = sc.loadReferenceFile(conf.referencePath, 10000)
-
-  // broadcast reference to be accessible on all workers
-  val broadCastReference = sc.broadcast(referenceFile)
-
-  val labelsAndAlignmentsWithDNASequence: RDD[(ReferenceRegion, DenseVector[Int], Iterable[AlignmentRecord], String)] =
-    labelsAndAlignments.map(r => {
-      val sequence = broadCastReference.value.extract(r._1)
-      (r._1, r._2, r._3, sequence)
-    })
-
-  print("final training count ", labelsAndAlignmentsWithDNASequence.count)
+  print("final training count ", labelsAndAlignments.count)
 
   // Step 5: Featurize Reads into DenseVector of cutsite counts
-  vectorizeCutSites(labelsAndAlignmentsWithDNASequence)
+  vectorizeCutSites(labelsAndAlignments)
 
   }
 
@@ -145,7 +132,7 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
    * @param featurizedCuts RDD[(Region, label vector, reads, DNA sequence to featurize for this datapoint)]
    * @return RDD[(Labels, ATAC-seq Features, DNA Sequence)]
    */
-  private def vectorizeCutSites(featurizedCuts: RDD[(ReferenceRegion, DenseVector[Int], Iterable[AlignmentRecord], String)]): RDD[ATACandSequenceFeature] = {
+  private def vectorizeCutSites(featurizedCuts: RDD[(ReferenceRegion, DenseVector[Int], Iterable[AlignmentRecord])]): RDD[ATACandSequenceFeature] = {
 
     // get window size
     val windowSize = conf.windowSize
@@ -172,7 +159,7 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
         })
 
         // positions should be size of window
-        ATACandSequenceFeature(window._2, positions, window._4)
+        ATACandSequenceFeature(window._2, positions, window._1) // placeholder
       })
 
     featurized
@@ -188,14 +175,27 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
 
     val collected= rdd.collect
 
-    val file = new PrintWriter(new File(filepath))
+    var file = new PrintWriter(new File(filepath + "_tmp"))
 
     val header = s"#${conf.featurePathLabels}\n"
 
     file.write(header)
 
     collected.toList.foreach(r => {
-      file.write(r.labels.toArray.mkString(",") + ";" + r.atacCounts.toArray.mkString(",") + ";" + r.sequence + "\n")
+      file.write(r.labels.toArray.mkString(",") + ";" + r.atacCounts.toArray.mkString(",") + ";" + r.region.toString() + "\n")
+    })
+
+    file.close()
+
+    val referenceFile = sc.loadReferenceFile(conf.referencePath, 10000)
+
+    file = new PrintWriter(new File(filepath))
+
+    file.write(header)
+
+    collected.toList.foreach(r => {
+      val sequence = referenceFile.extract(r.region)
+      file.write(r.labels.toArray.mkString(",") + ";" + r.atacCounts.toArray.mkString(",") + ";" + sequence + "\n")
     })
 
     file.close()
@@ -206,4 +206,4 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
 
 
 
-case class ATACandSequenceFeature(labels: DenseVector[Int], atacCounts: DenseVector[Int], sequence: String)
+case class ATACandSequenceFeature(labels: DenseVector[Int], atacCounts: DenseVector[Int], region: ReferenceRegion)

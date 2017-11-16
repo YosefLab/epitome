@@ -5,6 +5,7 @@ import com.google.common.io.Files
 import breeze.linalg.DenseVector
 import net.akmorrow13.epitome.{EpitomeArgs, EpitomeFunSuite}
 import org.apache.spark.rdd.RDD
+import org.bdgenomics.adam.models.ReferenceRegion
 
 import scala.io.Source
 
@@ -42,8 +43,8 @@ class VectorizerSuite extends EpitomeFunSuite {
   sparkTest("saves values locally") {
     val filepath = new java.io.File(Files.createTempDir(), "tempOutput")
 
-    val item1 = ATACandSequenceFeature(DenseVector(1,2), DenseVector(1,2,0,0,2), "ATTG")
-    val item2 = ATACandSequenceFeature(DenseVector(1,3), DenseVector(1,2,0,0,1), "ATTG")
+    val item1 = ATACandSequenceFeature(DenseVector(1,2), DenseVector(1,2,0,0,2),  ReferenceRegion("chr1", 1, 100))
+    val item2 = ATACandSequenceFeature(DenseVector(1,3), DenseVector(1,2,0,0,1), ReferenceRegion("chr1", 1, 100))
 
     val featuresAndLabels = sc.parallelize(Seq(item1, item2))
 

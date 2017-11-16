@@ -29,7 +29,7 @@ class EpitomeArgs extends Args4jBase with ParquetArgs {
   @Argument(required = true, metaVar = "-reads", usage = "ATAC/DNase-seq file", index = 0)
   var readsPath: String = null
 
-  @Argument(required = true, metaVar = "-reference", usage = "TwoBit file, stored locally (not on hdfs)", index = 1)
+  @Argument(required = true, metaVar = "-features", usage = "List of Chip-seq files, separated by commas (,)", index = 1)
   var featurePaths: String = null
 
   @Argument(required = true, metaVar = "-featurePathLabels", usage = "A list of names for Chip-seq files, separated by commas (,)", index = 2)
