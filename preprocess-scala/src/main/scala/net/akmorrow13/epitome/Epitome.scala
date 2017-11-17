@@ -19,50 +19,68 @@ import net.akmorrow13.epitome.util.Vectorizer
 import org.apache.log4j.{Level, Logger}
 import org.apache.parquet.filter2.dsl.Dsl.{BinaryColumn, _}
 import org.apache.spark.{SparkConf, SparkContext}
-import org.yaml.snakeyaml.Yaml
-import org.yaml.snakeyaml.constructor.Constructor
+import org.bdgenomics.adam.rdd.ADAMContext._
+import org.bdgenomics.utils.cli._
+import org.bdgenomics.utils.misc.Logging
+import org.kohsuke.args4j.{ Argument, Option => Args4jOption }
 
 
+class EpitomeArgs extends Args4jBase with ParquetArgs {
+  @Argument(required = true, metaVar = "-reads", usage = "ATAC/DNase-seq file", index = 0)
+  var readsPath: String = null
 
-object Epitome extends Serializable  {
-  val commandName = "epitome"
-  val commandDescription = "learning from chromatin"
-  /**
-   * The actual driver receives its configuration parameters from spark-submit usually.
-   * @param args
-   */
-  def main(args: Array[String]) = {
-    if (args.size < 1) {
-      println("Incorrect number of arguments...Exiting now.")
-    } else {
-      val configfile = scala.io.Source.fromFile(args(0))
-      val configtext = try configfile.mkString finally configfile.close()
-      val yaml = new Yaml(new Constructor(classOf[EpitomeConf]))
-      val appConfig = yaml.load(configtext).asInstanceOf[EpitomeConf]
-      val conf = new SparkConf().setAppName("Epitome")
-      Logger.getLogger("org").setLevel(Level.WARN)
-      Logger.getLogger("akka").setLevel(Level.WARN)
-      conf.remove("spark.jars")
-      conf.setIfMissing("spark.master", "local[16]")
-      conf.set("spark.driver.maxResultSize", "0")
-      val sc = new SparkContext(conf)
-      run(sc, appConfig)
-      sc.stop()
-    }
+  @Argument(required = true, metaVar = "-features", usage = "List of Chip-seq files, separated by commas (,)", index = 1)
+  var featurePaths: String = null
+
+  @Argument(required = true, metaVar = "-featurePathLabels", usage = "A list of names for Chip-seq files, separated by commas (,)", index = 2)
+  var featurePathLabels: String = null
+
+  @Argument(required = true, metaVar = "-reference", usage = "TwoBit file stored locally (not on hdfs)", index = 3)
+  var referencePath: String = null
+
+  @Argument(required = true, metaVar = "-output", usage = "Local filepath to save results to", index=4)
+  var featurizedPath: String = null
+
+  @Args4jOption(required = false, name = "-parititons", usage = "Number of partitions for reads and features")
+  var partitions: Int = 0
+
+  @Args4jOption(required = false, name = "-windowSize", usage = "Number of base pairs to window over")
+  var windowSize: Int = 1000
+
+  def validate(): Unit = {
+    require(featurePaths.split(',').length == featurePathLabels.split(',').length,
+    "feature paths != feature path labels lengtt")
   }
 
-  def run(sc: SparkContext, conf: EpitomeConf) {
+  def getFeaturePathsArray(): Array[String] = featurePaths.split(',')
+
+  def getFeaturePathLabelsArray(): Array[String] = featurePathLabels.split(',')
+
+}
+
+object Epitome extends BDGCommandCompanion {
+  override val commandName = "epitomepreprocess"
+  override val commandDescription = "Convert ADAM nucleotide contig fragments to FASTA files"
+
+  override def apply(cmdLine: Array[String]): Epitome =
+    new Epitome(Args4j[EpitomeArgs](cmdLine))
+}
+
+class Epitome(val args: EpitomeArgs) extends BDGSparkCommand[EpitomeArgs] with Logging {
+  override val companion = Epitome
+
+  override def run(sc: SparkContext) {
 
     // make sure configuration is valid
-    EpitomeConf.validate(conf)
+    args.validate()
 
     // featurize reads and features
-    val vectorize = new Vectorizer(sc, conf)
+    val vectorize = new Vectorizer(sc, args)
 
     val featuresAndLabels = vectorize.partitionAndFeaturize()
 
     // save results
-    vectorize.saveValuesLocally(featuresAndLabels, conf.featurizedPath)
+    vectorize.saveValuesLocally(featuresAndLabels, args.featurizedPath)
 
   }
 }

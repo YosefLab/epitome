@@ -426,6 +426,8 @@ def main():
     parser.add_argument('--learning_rate', '-lr', type=int, default=1e-2)
     # batch size for each training iterations
     parser.add_argument('--batch_size', '-b', type=int, default=1000)
+    # random seed for deterministic training
+    parser.add_argument('--random_seed', '-rs', type=int, default=42)
 
     ############################## Input data args ##############################
 
@@ -441,6 +443,10 @@ def main():
     # number of channels in the input data
     parser.add_argument('--num_channels', type=int, default=1)
     args = parser.parse_args()
+
+    # setting random seed
+    np.random.seed(args.random_seed)
+    tf.set_random_seed(args.random_seed)
     
     train(glimpse_size=args.glimpse_size, 
         num_glimpses=args.num_glimpses,
