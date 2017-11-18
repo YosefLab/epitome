@@ -34,6 +34,7 @@ def build_glimpse_network(
         glimpse_size, 
         img_size,
         loc_size,
+        length,
         scope,
         output_size=256,
         size=128,
@@ -48,8 +49,10 @@ def build_glimpse_network(
         num_resolutions=num_resolutions, 
         glimpse_size=glimpse_size, 
         img_size=img_size,
-        loc_size=loc_size)
+        loc_size=loc_size,
+        length=length)
 
+    print("GLIMPSE SHAPE:", glimpses.shape)
     with tf.variable_scope(scope):
         h_l = tf.layers.dense(
             location,
@@ -63,6 +66,7 @@ def build_glimpse_network(
             activation=activation,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             bias_initializer=tf.contrib.layers.xavier_initializer())
+        print(h_l.shape, h_g.shape)
         out_1 = tf.layers.dense(
             h_l,
             units=output_size,
@@ -85,7 +89,7 @@ def build_core_network(
         scope,
         output_size,
         output_activation=tf.nn.relu):
-
+    
     with tf.variable_scope(scope):
         out_1 = tf.layers.dense(
             state,
@@ -99,6 +103,8 @@ def build_core_network(
             activation=None,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             bias_initializer=tf.contrib.layers.xavier_initializer())
+        print(out_1, out_2)
+        print(glimpse.shape, state.shape)
         h_t = output_activation(out_1 + out_2)
         return h_t
 
@@ -155,7 +161,11 @@ def build_action_network(
         return ac_probs
     
 
-def get_glimpses(data, location, batch_size, num_resolutions, glimpse_size, img_size, loc_size):
+def get_glimpses(data, location, batch_size, num_resolutions, glimpse_size, img_size, loc_size,
+    length):
+    # first four channels of data are the one-hot encoded dna sequence
+    dna = data[:, :, :4]
+    data = data[:, :, 4:]
     glimpses = []
     for i in range(num_resolutions):
         resolution = 2**i
@@ -166,36 +176,50 @@ def get_glimpses(data, location, batch_size, num_resolutions, glimpse_size, img_
             pooling_type='MAX',
             padding='SAME')
         glimpses.append(glimpse)
+    
+    return index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size, 
+        length, batch_size)
 
-    # first four channels of data are the one-hot encoded dna sequence
-    dna = data[:, :, :4]
-    return index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size)
 
-
-def index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size):
+def index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size, length, batch_size):
     to_concatenate = []
     for i in range(num_resolutions):
         glimpse = glimpses[i]
-        location_index = tf.to_int32(location / 2.0**i)
-
-        left_pad = tf.maximum(glimpse_size - location_index, 0)
-        right_pad = tf.maximum(glimpse_size + location_index - glimpse.get_shape().as_list()[1], 0)
-        
-        left_index = tf.maximum(location_index - glimpse_size, 0)
-        right_index = tf.minimum(location_index + glimpse_size, glimpse.get_shape().as_list()[1])
-        
-        # add the dna sequence on the first iteration
-        print(dna.shape)
-        print(left_index, right_index)
-        print(dna[:, left_index: right_index, :])
-
+        # add glimpse_size to location_index
+        # because glimpses will be padded with glimpse_size values on each side
+        location_index = tf.to_int32(location / 2.0**i) + glimpse_size
+        start_index = location_index - glimpse_size
+        boolean_mask = get_boolean_mask(glimpse_size, start_index, glimpse.shape[1])
+        padded_glimpse = get_padded_glimspe(glimpse, glimpse_size)
         if i == 0:
-            to_concatenate.append(dna[:, left_index: right_index, :])
-        resolution = glimpse[:, left_index:right_index, :]
-        resolution = tf.pad(resolution, [[0, 0], [left_pad, right_pad], [0, 0]])
-        
-        to_concatenate.append(resolution)
+            padded_dna = get_padded_dna(dna, glimpse_size)
+            # get mask into correct shape, tf.stack does weird things
+            dna_boolean_mask = tf.squeeze(tf.stack([boolean_mask]*4, axis=-1), axis=2)
+            sliced_dna = tf.boolean_mask(tensor=padded_dna, mask=dna_boolean_mask)
+            sliced_dna = tf.reshape(sliced_dna, [batch_size, glimpse_size * 2, 4])
+            to_concatenate.append(sliced_dna)
+        sliced_glimpse = tf.boolean_mask(tensor=padded_glimpse, mask=boolean_mask)
+        sliced_glimpse = tf.reshape(sliced_glimpse, [batch_size, glimpse_size * 2, 1])
+        to_concatenate.append(sliced_glimpse)
     return tf.concat(to_concatenate, axis=-1)
+
+        
+def get_boolean_mask(glimpse_size, start_index, length):
+    curr_index = start_index
+    padded_size = length + 2 * glimpse_size
+    index_mask = tf.one_hot(indices=curr_index, depth=padded_size, axis=1)
+    for i in range(glimpse_size * 2 - 1):
+        curr_index += 1
+        index_mask += tf.one_hot(indices=curr_index, depth=padded_size, axis=1)
+    return index_mask > 0
+    
+
+def get_padded_glimspe(glimpse, glimpse_size):
+    return tf.pad(glimpse, paddings=[[0, 0], [glimpse_size, glimpse_size], [0, 0]], constant_values=-1)
+
+
+def get_padded_dna(dna, glimpse_size):
+    return get_padded_glimspe(dna, glimpse_size)
 
 
 def get_location(location_output, std_dev, loc_size, clip=False, clip_low=-1, clip_high=1):
@@ -207,7 +231,7 @@ def get_location(location_output, std_dev, loc_size, clip=False, clip_low=-1, cl
     samples = tf.squeeze(dist.sample(sample_shape=[1]))
     if clip:
         samples = tf.clip_by_value(samples, clip_low, clip_high)
-    return samples, tf.squeeze(dist.log_prob(samples))
+    return samples, tf.squeeze(dist.log_prob(tf.expand_dims(samples, -1)))
 
 
 def get_action(action_output):
@@ -290,7 +314,9 @@ def train(glimpse_size,
         glimpse_size=glimpse_size, 
         img_size=img_size,
         loc_size=loc_size,
-        scope="glimpse")
+        length=length,
+        scope="glimpse",
+        )
 
     hidden_output = build_core_network(
         state=sy_h,
@@ -432,7 +458,7 @@ def main():
     ########################## Model architecture args ##########################
 
     # height, width to which glimpses get resized
-    parser.add_argument('--glimpse_size', type=int, default=10)
+    parser.add_argument('--glimpse_size', type=int, default=13)
     # number of glimpses per image
     parser.add_argument('--num_glimpses', type=int, default=7)
     # number of resolutions per glimpse
@@ -467,7 +493,7 @@ def main():
     # original size of images
     parser.add_argument('--img_size', type=int, default=28)
     # number of classes for classification
-    parser.add_argument('--num_classes', type=int, default=10)
+    parser.add_argument('--num_classes', type=int, default=2)
     # number of channels in the input data
     parser.add_argument('--num_channels', type=int, default=1)
     args = parser.parse_args()
