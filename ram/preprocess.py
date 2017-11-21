@@ -67,21 +67,15 @@ def main():
 
     # create a hdf5 file to write to
     f = h5py.File(args.outfile, "w")
-    f.create_dataset("label", (n, 1), dtype='i')
-    f.create_dataset("atac", (n, 1000), dtype='i')
-    f.create_dataset("seq", (n, 1000, 4), dtype='i')
+    f.create_dataset("label", (n, 1), maxshape=(n, 1), dtype='i')
+    f.create_dataset("atac", (n, 1000), maxshape=(n, 1000), dtype='i')
+    f.create_dataset("seq", (n, 1000, 4), maxshape=(n, 1000, 4), dtype='i')
 
     # index of the example being processed
     i = 0
 
     for shard in shards:
         for line in open(shard):
-            # status update for logging
-            if i % args.log_freq == 0:
-                print('[ %s / %s ]' % (
-                    str(i).rjust(6, '0'),
-                    str(n).rjust(6, '0')))
-
             # each field is delimited by a semi-colon
             label, atac, seq = line.strip().split(';')
 
@@ -90,19 +84,31 @@ def main():
             atac = parse_dense_vector_string(atac)
             seq = seq_to_one_hot(seq)
 
-            # TODO: figure out why some sequences are length 2000
-            # when they are all supposed to be length 1000
-            if len(seq) > 1000:
-                print('WARNING: Expected a sequence of length 1000, '
-                      'but got a sequence of length %d. '
-                      'Taking the first 1000 bases instead.' % len(seq))
-                seq = seq[:1000]
-
             # index the datasets in the hdf5 file
-            f['label'][i] = label
-            f['atac'][i] = atac
-            f['seq'][i] = seq
-            i += 1
+            try:
+                f['label'][i] = label
+                f['atac'][i] = atac
+                f['seq'][i] = seq
+                i += 1
+            except:
+                # filter out bad examples
+                n -= 1
+                continue
+
+            # status update for logging
+            if i % args.log_freq == 0:
+                print('[ %s / %s ] :: %.4f percent' % (
+                    str(i).rjust(6, '0'),
+                    str(n).rjust(6, '0'),
+                    (float(i) / n) * 100))
+
+    # print for debugging
+    print('%i examples written to %s' % (i + 1, args.outfile))
+
+    # resize to the number of good examples
+    f['label'].resize(i + 1, axis=0)
+    f['atac'].resize(i + 1, axis=0)
+    f['seq'].resize(i + 1, axis=0)
 
 
 if __name__ == "__main__":
