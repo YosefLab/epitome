@@ -32,10 +32,18 @@ BASES = list('ACTGN')
 ################################# Utility Functions ################################
 
 def parse_dense_vector_string(string, dtype=None):
-    # removes the DenseVector string wrapper
-    match = re.search('DenseVector\((.+?)\)', string).group(1)
+    # search for the DenseVector string wrapper
+    match = re.search('DenseVector\((.+?)\)', string)
+    if match is None:
+        # if there is no DenseVector wrapper then
+        # the string is just comma separated numbers
+        # and turn it into an array
+        array = np.asarray(map(eval, string.split(',')))
+    else:
+        # extract content of regex match, if there is a match
+        # and turn it into an array
+        array = np.asarray(map(eval, match.group(1).split(', ')))
     # returns an array, maybe enforcing a data type
-    array = np.asarray(map(eval, match.split(', ')))
     return array if dtype is None else array.astype(dtype)
 
 
@@ -83,7 +91,7 @@ def main():
             # each field is delimited by a semi-colon
             label, atac, seq = line.strip().split(';')
 
-            # parse reach field
+            # parse each field
             label = parse_dense_vector_string(label)
             atac = parse_dense_vector_string(atac)
             seq = seq_to_one_hot(seq)
