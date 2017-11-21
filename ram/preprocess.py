@@ -26,6 +26,11 @@ import argparse
 
 ################################# Utility Functions ################################
 
+# possible bases, where 'N' is the unknown base
+BASES = list('ACTGN')
+
+################################# Utility Functions ################################
+
 def parse_dense_vector_string(string, dtype=None):
     # removes the DenseVector string wrapper
     match = re.search('DenseVector\((.+?)\)', string).group(1)
@@ -35,13 +40,11 @@ def parse_dense_vector_string(string, dtype=None):
 
 
 def seq_to_one_hot(string):
-    # bases that occur in the data
-    _bases = list('ACTG')
     # mapping bases to indices
-    indices = map(lambda base: _bases.index(base), list(string))
+    indices = map(lambda base: BASES.index(base), list(string))
     # using indices to index an idenity matrix
     # equivalent to one-hot-encoding the data
-    return np.eye(len(_bases))[indices]
+    return np.eye(len(BASES))[indices]
 
 
 ################################# Main Body ################################
@@ -69,7 +72,8 @@ def main():
     f = h5py.File(args.outfile, "w")
     f.create_dataset("label", (n, 1), maxshape=(n, 1), dtype='i')
     f.create_dataset("atac", (n, 1000), maxshape=(n, 1000), dtype='i')
-    f.create_dataset("seq", (n, 1000, 4), maxshape=(n, 1000, 4), dtype='i')
+    f.create_dataset("seq", (n, 1000, len(BASES)),
+                     maxshape=(n, 1000, len(BASES)), dtype='i')
 
     # index of the example being processed
     i = 0
