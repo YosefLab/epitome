@@ -249,9 +249,6 @@ def train(glimpse_size,
     length = 1000
     num_tfs = 919
 
-    # TODO do not hard code this
-    num_classes = num_tfs
-
     # deepsea sequence-only data
     import deepsea_data
 

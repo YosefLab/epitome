@@ -492,7 +492,7 @@ def main():
 
     # number of full passes through the data
     # total training iterations = num_epochs * number of images / batch_size
-    parser.add_argument('--num_epochs', type=int, default=100000)
+    parser.add_argument('--num_epochs', type=int, default=64)
     parser.add_argument('--learning_rate', '-lr', type=int, default=1e-2)
     # batch size for each training iterations
     parser.add_argument('--batch_size', '-b', type=int, default=1000)
@@ -516,7 +516,7 @@ def main():
     
     # setting random seed
     np.random.seed(args.random_seed)
-    tf.set_random_seed(rargs.andom_seed)
+    tf.set_random_seed(args.random_seed)
 
     train(glimpse_size=args.glimpse_size, 
         num_glimpses=args.num_glimpses,
