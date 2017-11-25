@@ -249,6 +249,9 @@ def train(glimpse_size,
     length = 1000
     num_tfs = 919
 
+    # TODO do not hardcode this
+    num_classes = num_tfs
+
     # deepsea sequence-only data
     import deepsea_data
 
@@ -314,9 +317,8 @@ def train(glimpse_size,
     ################################# Define ops ################################
 
     # cross entropy loss for actions that are output at final timestep 
-
-    cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-        labels=sy_y,
+    cross_entropy_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+        labels=tf.cast(sy_y, tf.float32),
         logits=raw_action_output))
 
     rewards = tf.cast(tf.equal(action_output, tf.argmax(sy_y, output_type=tf.int32, axis = 1)), tf.float32)
@@ -372,7 +374,6 @@ def train(glimpse_size,
             num_epochs=1)
 
         for x_train_batch, y_train_batch in train_batches:
-            print(x_train_batch.shape, y_train_batch.shape, state.shape)
             for j in range(num_glimpses - 1):        
                 fetches = [location_output, hidden_output]              
                 outputs = sess.run(fetches=fetches, feed_dict={
@@ -426,7 +427,7 @@ def main():
     # height, width to which glimpses get resized
     parser.add_argument('--glimpse_size', type=int, default=8)
     # number of glimpses per image
-    parser.add_argument('--num_glimpses', type=int, default=4)
+    parser.add_argument('--num_glimpses', type=int, default=7)
     # number of resolutions per glimpse
     parser.add_argument('--num_resolutions', type=int, default=4) 
     # dimensionality of glimpse network output
@@ -446,7 +447,7 @@ def main():
     parser.add_argument('--num_epochs', type=int, default=100000)
     parser.add_argument('--learning_rate', '-lr', type=int, default=1e-2)
     # batch size for each training iterations
-    parser.add_argument('--batch_size', '-b', type=int, default=64)
+    parser.add_argument('--batch_size', '-b', type=int, default=1000)
     # random seed for deterministic training
     parser.add_argument('--random_seed', '-rs', type=int, default=42)
 
