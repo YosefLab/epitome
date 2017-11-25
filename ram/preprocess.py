@@ -32,10 +32,18 @@ BASES = list('ACTGN')
 ################################# Utility Functions ################################
 
 def parse_dense_vector_string(string, dtype=None):
-    # removes the DenseVector string wrapper
-    match = re.search('DenseVector\((.+?)\)', string).group(1)
+    # search for the DenseVector string wrapper
+    match = re.search('DenseVector\((.+?)\)', string)
+    if match is None:
+        # if there is no DenseVector wrapper then
+        # the string is just comma separated numbers
+        # and turn it into an array
+        array = np.asarray(map(eval, string.split(',')))
+    else:
+        # extract content of regex match, if there is a match
+        # and turn it into an array
+        array = np.asarray(map(eval, match.group(1).split(', ')))
     # returns an array, maybe enforcing a data type
-    array = np.asarray(map(eval, match.split(', ')))
     return array if dtype is None else array.astype(dtype)
 
 
@@ -58,6 +66,8 @@ def main():
     parser.add_argument('--outfile', '-o', type=str)
     # how often to log the preprocessing status
     parser.add_argument('--log_freq', '-l', type=int, default=1000)
+    # generate an hdf5 file?
+    parser.add_argument('--hdf5', type=bool, default=False)
     args = parser.parse_args()
 
     # check the success flag
@@ -68,12 +78,19 @@ def main():
     # code below counts the number of lines
     n = sum(sum(1 for _ in open(x)) for x in shards)
 
-    # create a hdf5 file to write to
-    f = h5py.File(args.outfile, "w")
-    f.create_dataset("label", (n, 1), maxshape=(n, 1), dtype='i')
-    f.create_dataset("atac", (n, 1000), maxshape=(n, 1000), dtype='i')
-    f.create_dataset("seq", (n, 1000, len(BASES)),
-                     maxshape=(n, 1000, len(BASES)), dtype='i')
+    if args.hdf5:
+        # create a hdf5 file to write to
+        f = h5py.File(args.outfile, "w")
+        f.create_dataset("label", (n, 1), maxshape=(n, 1), dtype='i')
+        f.create_dataset("atac", (n, 1000), maxshape=(n, 1000), dtype='i')
+        f.create_dataset("seq", (n, 1000, len(BASES)),
+                         maxshape=(n, 1000, len(BASES)), dtype='i')
+    else:
+        # use a dictionary of lists for now
+        f = {}
+        f['label'] = np.zeros([n, 1], dtype=int)
+        f['atac'] = np.zeros([n, 1000], dtype=int)
+        f['seq'] = np.zeros([n, 1000, len(BASES)], dtype=int)
 
     # index of the example being processed
     i = 0
@@ -83,7 +100,7 @@ def main():
             # each field is delimited by a semi-colon
             label, atac, seq = line.strip().split(';')
 
-            # parse reach field
+            # parse each field
             label = parse_dense_vector_string(label)
             atac = parse_dense_vector_string(atac)
             seq = seq_to_one_hot(seq)
@@ -106,13 +123,18 @@ def main():
                     str(n).rjust(6, '0'),
                     (float(i) / n) * 100))
 
+    if args.hdf5:
+        # resize to the number of good examples
+        f['label'].resize(i + 1, axis=0)
+        f['atac'].resize(i + 1, axis=0)
+        f['seq'].resize(i + 1, axis=0)
+    else:
+        # truncate by slicing and save to outfile
+        f = {k: v[:i + 1] for k, v in f.iteritems()}
+        np.savez(args.outfile, **f)
+
     # print for debugging
     print('%i examples written to %s' % (i + 1, args.outfile))
-
-    # resize to the number of good examples
-    f['label'].resize(i + 1, axis=0)
-    f['atac'].resize(i + 1, axis=0)
-    f['seq'].resize(i + 1, axis=0)
 
 
 if __name__ == "__main__":
