@@ -127,7 +127,7 @@ def build_location_network(
 # TODO is this the best structure for baseline network?
 def build_baseline_network(
         input_placeholder, 
-        output_size,ß
+        output_size,
         scope, 
         n_layers=2, 
         size=64, 
@@ -515,8 +515,8 @@ def main():
     args = parser.parse_args()
     
     # setting random seed
-    np.random.seed(random_seed)
-    tf.set_random_seed(random_seed)
+    np.random.seed(args.random_seed)
+    tf.set_random_seed(rargs.andom_seed)
 
     train(glimpse_size=args.glimpse_size, 
         num_glimpses=args.num_glimpses,

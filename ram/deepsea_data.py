@@ -26,7 +26,7 @@ from scipy.io import loadmat
 
 def chunk_iterator(array, chunk_size=1):
     # iterates and chunks along first dimension
-    for i in xrange(array.shape[0] // chunk_size):
+    for i in range(array.shape[0] // chunk_size):
         yield array[chunk_size * i: (i + 1) * chunk_size]
 
 
@@ -37,11 +37,13 @@ def train_iterator(source, batch_size=32, num_epochs=200):
     targets = tmp['traindata']
     # last index in the batch dimension
     num_examples = inputs.shape[2]
-    for epoch in xrange(num_epochs):
+    for epoch in range(num_epochs):
         permutation = np.random.permutation(num_examples)
         for indices in chunk_iterator(permutation, batch_size):
             # h5py datasets require sorted point-wise indexing
-            yield inputs[:,:,sorted(indices)], targets[:,sorted(indices)]
+            inputs_batch = inputs[:,:,sorted(indices)].transpose([2, 0, 1])
+            targets_batch = targets[:,sorted(indices)].transpose([1, 0])
+            yield inputs_batch, targets_batch
 
 
 def valid_iterator(source, batch_size=32, num_epochs=200):
@@ -51,7 +53,7 @@ def valid_iterator(source, batch_size=32, num_epochs=200):
     targets = tmp['validdata']
     # first index is the batch dimension
     num_examples = inputs.shape[0]
-    for epoch in xrange(num_epochs):
+    for epoch in range(num_epochs):
         permutation = np.random.permutation(num_examples)
         for indices in chunk_iterator(permutation, batch_size):
             yield inputs[indices,:,:], targets[indices,:]
