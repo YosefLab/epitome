@@ -175,7 +175,7 @@ def get_glimpses(data, location, batch_size, num_resolutions, glimpse_size, img_
     start_index = tf.to_int32(location)
     boolean_mask = get_boolean_mask(glimpse_size, start_index, length, batch_size)
 
-    # pad DNA with -1 values on each side
+    # pad DNA with 0 values on each side
     # new length of padded data is (2 * glimpse) + length
     padded_dna = get_padded_dna(dna, glimpse_size)
 
@@ -199,8 +199,7 @@ def get_boolean_mask(glimpse_size, start_index, length, batch_size):
     
 
 def get_padded_glimspe(glimpse, glimpse_size):
-    return tf.pad(glimpse, paddings=[[0, 0], [glimpse_size, glimpse_size], [0, 0]], 
-        constant_values=-1)
+    return tf.pad(glimpse, paddings=[[0, 0], [glimpse_size, glimpse_size], [0, 0]])
 
 
 def get_padded_dna(dna, glimpse_size):
