@@ -132,10 +132,10 @@ def build_baseline_network(
         output_activation=None):
 
     with tf.variable_scope(scope):
-        net = input_placeholder
+        out = input_placeholder
         for _ in range(n_layers):
-            net = tf.layers.dense(net, size, activation)
-        return tf.layers.dense(net, output_size, output_activation)
+            out = tf.layers.dense(out, size, activation)
+        return tf.layers.dense(out, output_size, output_activation)
 
 
 def build_action_network(
@@ -175,7 +175,6 @@ def get_glimpses(data, location, batch_size, num_resolutions, glimpse_size, img_
         extrapolation_value=extrapolation_value)
 
     # flatten each image into a vector
-    # TODO concatenate all resolutions per image?
     return tf.reshape(tf.squeeze(glimpses), 
         [batch_size, num_resolutions * glimpse_size * glimpse_size])
 
@@ -195,11 +194,9 @@ def get_boxes(loc, batch_size, num_resolutions, glimpse_size, img_size, loc_size
 
 def get_location(location_output, std_dev, loc_size, clip=False, clip_low=-1, clip_high=1):
     # location network outputs the mean
-    # TODO restrcit mean to be between (-1, 1)
     # sample from gaussian with above mean and predefined STD_DEV
-    # TODO verify that this samples from multiple distributions
     dist = ds.MultivariateNormalDiag(loc=location_output, scale_diag=[std_dev] * loc_size)
-    samples = tf.squeeze(dist.sample(sample_shape=[1]))
+    samples = tf.squeeze(dist.sample(sample_shape=[1]), axis=0)
     if clip:
         samples = tf.clip_by_value(samples, clip_low, clip_high)
     return samples, tf.squeeze(dist.log_prob(samples))
@@ -354,8 +351,6 @@ def train(glimpse_size,
                     sy_y: y_train_batch, 
                     sy_l: location, 
                     sy_h: state})
-                # location = np.random.uniform(size=[batch_size, loc_size], low=-0.5, high=0.5)
-                # location = np.zeros(shape=[batch_size, loc_size])
                 location = outputs[0]
                 state = outputs[1]
 
@@ -380,8 +375,8 @@ def train(glimpse_size,
             if nn_baseline:
                 baseline_losses.append(outputs[6])
 
-            ######################### Train baseline ########################
-        
+        ######################### Print out statistics ########################
+            
         print("*" * 100)
         print("Epoch: {}".format(epoch))
         print("Accuracy: {}".format(np.mean(np.array(acs))))
@@ -407,7 +402,6 @@ def main():
     parser.add_argument('--num_glimpses', type=int, default=7)
     # number of resolutions per glimpse
     parser.add_argument('--num_resolutions', type=int, default=4)
-    # dimensionality of hidden state vector
     # dimensionality of glimpse network output
     # TODO better names for size of glimpse image/glimpse vector
     parser.add_argument('--glimpse_vector_size', type=int, default=256)
