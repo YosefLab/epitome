@@ -3,7 +3,6 @@
 *.iml
 venv
 
-
 python/target/
 workfiles
 *.pyc
@@ -17,3 +16,5 @@ bionetz/bdgenomics_data
 bionetz/deepsea_train
 
 ram/MNIST_data/
+
+*deepsea_train*
