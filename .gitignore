@@ -18,3 +18,5 @@ bionetz/deepsea_train
 ram/MNIST_data/
 
 *deepsea_train*
+ram/results/
+*nohup.out*
