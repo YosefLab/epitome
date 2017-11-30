@@ -254,8 +254,7 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
     val sqlContext = new SQLContext(sc)
 
     val df: DataFrame = sqlContext.createDataFrame(withSequences.map(r => r._1.toSchema(r._2)), schema)
-    df.write.format("tensorflow").save(filepath)
-
+    df.write.format("tfrecords").option("recordType", "Example").save(filepath)
   }
 
 
