@@ -13,6 +13,9 @@ import org.bdgenomics.adam.models.{Coverage, ReferenceRegion}
 import breeze.linalg.DenseVector
 import org.bdgenomics.adam.rdd.ADAMContext._
 import htsjdk.samtools.ValidationStringency
+import org.bdgenomics.adam.util.{TwoBitFile}
+import org.bdgenomics.utils.io.LocalFileByteAccess
+import java.io.File
 
 /**
  * Class for taking in TF binding sites and ATAC/DNASE-seq bam files and merging
@@ -104,14 +107,31 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
         (r._1.get, vector)
       })
 
+
   // region function for (coverage, feature) tuples, used for GenomicRDD
   def regionFn(r: (Coverage, DenseVector[Int])): Seq[ReferenceRegion] = Seq(ReferenceRegion(r._1))
 
-  val peakGenomicRDD = GenericGenomicRDD(joinedPeaks, filteredCoverage.sequences, regionFn)
+  var peakGenomicRDD = GenericGenomicRDD(joinedPeaks, filteredCoverage.sequences, regionFn)
 
   // cache peaks for join
   peakGenomicRDD.rdd.cache()
-  println("peakGenomicRDD count",peakGenomicRDD.rdd.count())
+
+  // sample negatives
+  val positiveCount = peakGenomicRDD.rdd.filter(r => r._2.sum > 0).count
+  val negativeCount = peakGenomicRDD.rdd.filter(r => r._2.sum == 0).count
+  val totalCount = positiveCount+ negativeCount
+  println("total count before sampling " , totalCount)
+
+  var fraction = (positiveCount*2).toDouble/negativeCount
+  if (fraction > 1.0)
+    fraction = 1.0
+  println("sampling negatives with fraction " + fraction)
+
+  val negatives = peakGenomicRDD.rdd.filter(r => r._2.sum == 0).sample(false, fraction)
+  val positives = peakGenomicRDD.rdd.filter(r => r._2.sum > 0)
+  peakGenomicRDD = peakGenomicRDD.transform(rdd => negatives.union(positives))
+
+  println("final count after sampling negatives: ", peakGenomicRDD.rdd.count)
 
   // Step 3: join dense vector of features and reads
   val labelsAndAlignments: RDD[(ReferenceRegion, DenseVector[Int], Iterable[AlignmentRecord])] =
@@ -119,7 +139,8 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
     .filter(r => r._1.isDefined)
     .map(r => (ReferenceRegion(r._1.get._1), r._1.get._2, r._2))
 
-  print("final training count ", labelsAndAlignments.count)
+   print("final training count ", labelsAndAlignments.count)
+   reads.rdd.unpersist()
 
   // Step 5: Featurize Reads into DenseVector of cutsite counts
   vectorizeCutSites(labelsAndAlignments)
@@ -171,39 +192,37 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
    * @param rdd of labels, features
    * @param filepath to save data to
    */
-  def saveValuesLocally(rdd: RDD[ATACandSequenceFeature], filepath: String) = {
+  def saveValuesToHdfs(rdd: RDD[ATACandSequenceFeature], filepath: String) = {
 
-    val collected= rdd.collect
+    //save in spark in case collect fails
+    println(s"saving to hdfs at ${filepath}")
+    rdd.map(r => r.formatToString).saveAsTextFile(s"${filepath}_noSequence")
 
-    var file = new PrintWriter(new File(filepath + "_tmp"))
+    val referencePath = conf.referencePath
+    // map rows to sequences
+    val withSequences = rdd.repartition(40).mapPartitions(part => {
+      val reference = new TwoBitFile(new LocalFileByteAccess(new File(referencePath)))
+      part.flatMap(r => {
+   	try {
+          val sequence = reference.extract(r.region)
+          Some(s"${r.labels};${r.atacCounts};${sequence}")
+        } catch {
+          case e: AssertionError => None
+        }
+      })
 
-    val header = s"#${conf.featurePathLabels}\n"
-
-    file.write(header)
-
-    collected.toList.foreach(r => {
-      file.write(r.labels.toArray.mkString(",") + ";" + r.atacCounts.toArray.mkString(",") + ";" + r.region.toString() + "\n")
-    })
-
-    file.close()
-
-    val referenceFile = sc.loadReferenceFile(conf.referencePath, 10000)
-
-    file = new PrintWriter(new File(filepath))
-
-    file.write(header)
-
-    collected.toList.foreach(r => {
-      val sequence = referenceFile.extract(r.region)
-      file.write(r.labels.toArray.mkString(",") + ";" + r.atacCounts.toArray.mkString(",") + ";" + sequence + "\n")
-    })
-
-    file.close()
+    }).filter(r => !r.contains("NNNNNNNNNNN"))
+    
+    withSequences.saveAsTextFile(filepath)
 
   }
 
 }
 
 
+case class ATACandSequenceFeature(labels: DenseVector[Int], atacCounts: DenseVector[Int], region: ReferenceRegion) {
 
-case class ATACandSequenceFeature(labels: DenseVector[Int], atacCounts: DenseVector[Int], region: ReferenceRegion)
+  def formatToString(): String = {
+	labels.toArray.mkString(",") + ";" + atacCounts.toArray.mkString(",") + ";" + region.toString()	
+  }
+}
