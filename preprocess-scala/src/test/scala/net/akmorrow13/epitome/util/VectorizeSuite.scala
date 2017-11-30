@@ -57,7 +57,7 @@ class VectorizerSuite extends EpitomeFunSuite {
 
     val vectorizer = new Vectorizer(sc, conf)
 
-    vectorizer.saveValuesLocally(featuresAndLabels, filepath.toString)
+    vectorizer.saveValuesToHdfs(featuresAndLabels, filepath.toString)
 
     val header="#TF1"
 
