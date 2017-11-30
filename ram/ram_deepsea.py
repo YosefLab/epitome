@@ -349,6 +349,9 @@ def train(glimpse_size,
     sess.__enter__() # equivalent to `with sess:`
     tf.global_variables_initializer().run() # pylint: disable=E1101
 
+    num_params = np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])
+    print(num_params)
+
     ################################### Train ###################################
 
     # hidden state initialized to zeros
