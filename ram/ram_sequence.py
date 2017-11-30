@@ -20,7 +20,6 @@
 import numpy as np
 import tensorflow.contrib.distributions as ds
 from sklearn.utils import shuffle
-from math import pi
 import tensorflow as tf
 import argparse
 
@@ -35,7 +34,9 @@ def build_glimpse_network(
         glimpse_size, 
         img_size,
         loc_size,
+        length,
         scope,
+        dna_dim,
         output_size=256,
         size=128,
         activation=tf.nn.relu,
@@ -49,7 +50,9 @@ def build_glimpse_network(
         num_resolutions=num_resolutions, 
         glimpse_size=glimpse_size, 
         img_size=img_size,
-        loc_size=loc_size)
+        loc_size=loc_size,
+        length=length,
+        dna_dim=dna_dim)
 
     with tf.variable_scope(scope):
         h_l = tf.layers.dense(
@@ -77,7 +80,7 @@ def build_glimpse_network(
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             bias_initializer=tf.contrib.layers.xavier_initializer())
         g_t = output_activation(out_1 + out_2)
-    return g_t
+        return g_t
 
 
 def build_core_network(
@@ -86,7 +89,7 @@ def build_core_network(
         scope,
         output_size,
         output_activation=tf.nn.relu):
-
+    
     with tf.variable_scope(scope):
         out_1 = tf.layers.dense(
             state,
@@ -101,7 +104,7 @@ def build_core_network(
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             bias_initializer=tf.contrib.layers.xavier_initializer())
         h_t = output_activation(out_1 + out_2)
-    return h_t
+        return h_t
 
 
 def build_location_network(
@@ -119,9 +122,11 @@ def build_location_network(
             activation=None,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             bias_initializer=tf.contrib.layers.xavier_initializer())
-    return tf.clip_by_value(mean, -1, 1)
+        # clip mean to be in between -1 and 1
+        return tf.clip_by_value(mean, -1, 1)
 
 
+# TODO is this the best structure for baseline network?
 def build_baseline_network(
         input_placeholder, 
         output_size,
@@ -133,9 +138,16 @@ def build_baseline_network(
 
     with tf.variable_scope(scope):
         out = input_placeholder
+        # network has n_layers hidden layers
         for _ in range(n_layers):
-            out = tf.layers.dense(out, size, activation)
-        return tf.layers.dense(out, output_size, output_activation)
+            out = tf.layers.dense(
+                out, 
+                units=size, 
+                activation=activation)
+        return tf.layers.dense(
+            out, 
+            units=output_size, 
+            activation=output_activation)
 
 
 def build_action_network(
@@ -153,53 +165,95 @@ def build_action_network(
             activation=output_activation,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             bias_initializer=tf.contrib.layers.xavier_initializer())
-    return ac_probs
+        return ac_probs
     
 
-def get_glimpses(data, location, batch_size, num_resolutions, glimpse_size, img_size, loc_size):
-
-    boxes = get_boxes(location, batch_size, num_resolutions, glimpse_size, img_size, loc_size)
-    box_ind = np.arange(batch_size).repeat(num_resolutions)
-    crop_size = [glimpse_size, glimpse_size]
-    method = "bilinear"
-    extrapolation_value = 0.0
-
-    data = tf.expand_dims(tf.reshape(data, [batch_size, img_size, img_size]), 3)
-
-    glimpses = tf.image.crop_and_resize(
-        data,
-        boxes=boxes,
-        box_ind=box_ind,
-        crop_size=crop_size,
-        method=method,
-        extrapolation_value=extrapolation_value)
-
-    # flatten each image into a vector
-    return tf.reshape(tf.squeeze(glimpses), 
-        [batch_size, num_resolutions * glimpse_size * glimpse_size])
-
-
-def get_boxes(loc, batch_size, num_resolutions, glimpse_size, img_size, loc_size):
-    offset = glimpse_size / (loc_size * img_size)
-    scale = np.expand_dims(np.arange(1, num_resolutions + 1), -1)
-    first_corners = np.repeat(np.array([[-offset, -offset, offset, offset]]), num_resolutions, 
-        axis=0)
-    all_corners = np.tile(first_corners * scale, reps=[batch_size, 1])
-    # repeated_locs = np.tolist(loc) * NUM_RESOLUTIONS
-    repeated_loc = tf.reshape(tf.tile(loc, multiples=[1, num_resolutions]),
-        [num_resolutions * batch_size, loc_size])
-    repeated_loc = tf.tile(repeated_loc, multiples=[1, 2])
-    return all_corners + repeated_loc
+def get_glimpses(data, location, batch_size, num_resolutions, glimpse_size, img_size, loc_size,
+    length, dna_dim):
+    # first four channels of data are the one-hot encoded dna sequence
+    dna = data[:, :, :dna_dim]
+    # rest of channels are the ATAC-seq data
+    data = data[:, :, dna_dim:]
+    
+    # max pool ATAC-seq data at different resolutions
+    glimpses = []
+    for i in range(num_resolutions):
+        resolution = 2**i
+        glimpse = tf.nn.pool(
+            input=data,
+            window_shape=[resolution],
+            strides=[resolution],
+            pooling_type="MAX",
+            padding="SAME")
+        glimpses.append(glimpse)
+    
+    # combine DNA and ATAC data, slice to right size, return glimpses
+    return index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size, 
+        length, batch_size, dna_dim)
 
 
-def get_location(location_output, std_dev, loc_size, clip=False, clip_low=-1, clip_high=1):
+def index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size, length, batch_size, dna_dim):
+    to_concatenate = []
+    for i in range(num_resolutions):
+        glimpse = glimpses[i]
+        # glimpse centered at start_index
+        start_index = tf.to_int32(location / 2.0**i)
+        boolean_mask = get_boolean_mask(glimpse_size, start_index, glimpse.shape[1], batch_size)
+        
+        # pad ATAC-seq and DNA with -1 values on each side
+        # new length of padded data is (2 * glimpse) + length
+        padded_glimpse = get_padded_glimspe(glimpse, glimpse_size)
+        
+        # concatenate DNA
+        if i == 0:
+            padded_dna = get_padded_dna(dna, glimpse_size)
+            # get mask into correct shape, tf.stack does weird things
+            dna_boolean_mask = tf.squeeze(tf.stack([boolean_mask] * dna_dim, axis=-1), axis=2)
+            sliced_dna = tf.boolean_mask(tensor=padded_dna, mask=dna_boolean_mask)
+            sliced_dna = tf.reshape(sliced_dna, [batch_size, glimpse_size * 2, dna_dim])
+            to_concatenate.append(sliced_dna)
+            
+        sliced_glimpse = tf.boolean_mask(tensor=padded_glimpse, mask=boolean_mask)
+        sliced_glimpse = tf.reshape(sliced_glimpse, [batch_size, glimpse_size * 2])
+        sliced_glimpse = tf.expand_dims(sliced_glimpse, axis=-1)
+        to_concatenate.append(sliced_glimpse)
+
+    # flatten all channels
+    flat_shape = [batch_size, (num_resolutions + dna_dim) * (glimpse_size * 2)]
+    return tf.reshape(tf.concat(to_concatenate, axis=-1), flat_shape)
+
+        
+def get_boolean_mask(glimpse_size, start_index, length, batch_size):
+    curr_index = start_index
+    padded_size = length + (2 * glimpse_size)
+    index_mask = tf.one_hot(indices=curr_index, depth=padded_size, axis=1)
+    for i in range((glimpse_size * 2) - 1):
+        curr_index += 1
+        index_mask += tf.one_hot(indices=curr_index, depth=padded_size, axis=1)
+    return index_mask > 0
+    
+
+def get_padded_glimspe(glimpse, glimpse_size):
+    return tf.pad(glimpse, paddings=[[0, 0], [glimpse_size, glimpse_size], [0, 0]], 
+        constant_values=-1)
+
+
+def get_padded_dna(dna, glimpse_size):
+    return get_padded_glimspe(dna, glimpse_size)
+
+
+def get_location(location_output, std_dev, loc_size, length, clip=False, clip_low=-1, clip_high=1):
     # location network outputs the mean
+    # TODO restrcit mean to be between (-1, 1)
     # sample from gaussian with above mean and predefined STD_DEV
+    # TODO verify that this samples from multiple distributions
     dist = ds.MultivariateNormalDiag(loc=location_output, scale_diag=[std_dev] * loc_size)
     samples = tf.squeeze(dist.sample(sample_shape=[1]), axis=0)
     if clip:
         samples = tf.clip_by_value(samples, clip_low, clip_high)
-    return samples, tf.squeeze(dist.log_prob(samples))
+    # locations for sequences should be between 0 and length
+    samples = (samples + 1) * (length/2)
+    return samples, tf.squeeze(dist.log_prob(tf.expand_dims(samples, -1)))
 
 
 def get_action(action_output):
@@ -207,6 +261,24 @@ def get_action(action_output):
     softmax_output = tf.nn.softmax(action_output)
     # get action with highest probability
     return softmax_output, tf.argmax(softmax_output, output_type=tf.int32, axis=-1)
+
+
+################################# Generate toy data #############################
+
+# TODO DELETE THIS ONCE WE HAVE REAL DATA
+
+def make_dna_seq(batch_size, length, dna_dim):
+    one_hot_bases = np.eye(dna_dim)
+    sample_indices = np.random.randint(0, dna_dim, [batch_size, length])
+    return one_hot_bases[sample_indices]
+
+
+def make_atac_seq(batch_size, length):
+    return np.random.randint(0, 20, [batch_size, length, 1])
+    
+
+def make_chip_seq(batch_size, num_tfs):
+    return np.random.randint(0, 2, [batch_size, num_tfs])
 
 
 def train(glimpse_size, 
@@ -226,12 +298,21 @@ def train(glimpse_size,
 
     ################################# Download data #############################
     
-    from tensorflow.examples.tutorials.mnist import input_data
-    mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+    # lenght of the region in the genome
+    length = 100
+    num_tfs = 2
+    # dna_dim is four, bases are ATCG
+    dna_dim = 4
+    # generate batch_size * 5 data points and labels
+    dna = make_dna_seq(batch_size * 5, length, dna_dim)
+    atac = make_atac_seq(batch_size * 5, length)
+    # concatenate the sequence and cut information 
+    x_train = np.concatenate([dna, atac], axis=-1)
+    y_train = make_chip_seq(batch_size * 5, num_tfs)
 
     ################################# Placeholders ##############################
 
-    sy_x = tf.placeholder(shape=[None, img_size * img_size], 
+    sy_x = tf.placeholder(shape=[None, length, dna_dim + 1],
         name="data", 
         dtype=tf.float32)
 
@@ -257,7 +338,9 @@ def train(glimpse_size,
         glimpse_size=glimpse_size, 
         img_size=img_size,
         loc_size=loc_size,
-        scope="glimpse")
+        length=length,
+        scope="glimpse",
+        dna_dim=dna_dim)
 
     hidden_output = build_core_network(
         state=sy_h,
@@ -266,9 +349,9 @@ def train(glimpse_size,
         output_size=state_size)
 
     baseline_output = build_baseline_network(
-        input_placeholder = hidden_output, 
-        output_size = 1,
-        scope = "baseline", 
+        input_placeholder=hidden_output, 
+        output_size=1,
+        scope="baseline", 
         n_layers=2, 
         size=64, 
         activation=tf.tanh,
@@ -276,14 +359,16 @@ def train(glimpse_size,
 
     raw_action_output = build_action_network(
         state=hidden_output,
-        scope="action")
+        scope="action",
+        output_size=num_classes)
     d, action_output = get_action(raw_action_output)
 
     mean_location_output = build_location_network(
         state=hidden_output,
         scope="location",
         output_size=loc_size)
-    location_output, log_probs = get_location(mean_location_output, std_dev, loc_size, clip=True)
+    location_output, log_probs = get_location(mean_location_output, std_dev, loc_size, length,
+        clip=True)
 
     ################################# Define ops ################################
 
@@ -324,11 +409,9 @@ def train(glimpse_size,
 
     ################################### Train ###################################
 
-    # location = np.random.uniform(size=[batch_size, loc_size], low=-0.5, high=0.5)
     # hidden state initialized to zeros
-    location = np.zeros(shape=[batch_size, loc_size])
-
     state = np.zeros(shape=[batch_size, state_size])
+    location = np.zeros(shape=[batch_size, loc_size])
     
     for epoch in range(num_epochs):
         
@@ -341,32 +424,29 @@ def train(glimpse_size,
         # total rewards for num_glimpses timesteps
         path_rewards = []
 
-        x_train, y_train = shuffle(mnist.train.images, mnist.train.labels)
         for i in range(0, len(x_train), batch_size):
             x_train_batch, y_train_batch = x_train[i:i+batch_size], y_train[i:i+batch_size]
-
-            for j in range(num_glimpses - 1):
-                fetches = [location_output, hidden_output]
+            
+            for j in range(num_glimpses - 1):        
+                fetches = [location_output, hidden_output]              
                 outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch, 
                     sy_y: y_train_batch, 
                     sy_l: location, 
                     sy_h: state})
                 location = outputs[0]
                 state = outputs[1]
-
-            fetches = [location_output, hidden_output, update_op, cross_entropy_loss, policy_gradient_loss, rewards]
-
+            
+            fetches = [location_output, hidden_output, update_op, cross_entropy_loss,
+                policy_gradient_loss, rewards]
+            
             if nn_baseline:
                 fetches.append(baseline_loss)
-
             # make sure action_output is last in outputs
             fetches.append(action_output)
-
             outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch, 
-                    sy_y: y_train_batch, 
-                    sy_l: location, 
-                    sy_h: state})
-
+                sy_y: y_train_batch, 
+                sy_l: location, 
+                sy_h: state})
             correct_prediction = np.mean(np.equal(np.argmax(y_train_batch, axis=1), outputs[-1]))
             acs.append(correct_prediction)
             ce_losses.append(outputs[3])
@@ -375,16 +455,16 @@ def train(glimpse_size,
             if nn_baseline:
                 baseline_losses.append(outputs[6])
 
-        ######################### Print out statistics ########################
-            
-        print("*" * 100)
-        print("Epoch: {}".format(epoch))
-        print("Accuracy: {}".format(np.mean(np.array(acs))))
-        print("Cross Entropy Loss: {}".format(np.mean(np.array(ce_losses))))
-        print("Policy Gradient Loss: {}".format(np.mean(np.array(pg_losses))))
-        if nn_baseline:
-            print("Baseline Loss: {}".format(np.mean(np.array(baseline_losses))))
-        print("Rewards: {}".format(np.mean(np.array(path_rewards))))
+            ######################### Print out epoch stats ########################
+
+            print("*" * 100)
+            print("Epoch: {}".format(epoch))
+            print("Accuracy: {}".format(np.mean(np.array(acs))))
+            print("Cross Entropy Loss: {}".format(np.mean(np.array(ce_losses))))
+            print("Policy Gradient Loss: {}".format(np.mean(np.array(pg_losses))))
+            if nn_baseline:
+                print("Baseline Loss: {}".format(np.mean(np.array(baseline_losses))))
+            print("Rewards: {}".format(np.mean(np.array(path_rewards))))
 
 
 # constant for normalization purposes
@@ -397,31 +477,31 @@ def main():
     ########################## Model architecture args ##########################
 
     # height, width to which glimpses get resized
-    parser.add_argument('--glimpse_size', type=int, default=8)
+    parser.add_argument("--glimpse_size", type=int, default=8)
     # number of glimpses per image
-    parser.add_argument('--num_glimpses', type=int, default=7)
+    parser.add_argument("--num_glimpses", type=int, default=7)
     # number of resolutions per glimpse
-    parser.add_argument('--num_resolutions', type=int, default=4)
+    parser.add_argument("--num_resolutions", type=int, default=4) 
     # dimensionality of glimpse network output
     # TODO better names for size of glimpse image/glimpse vector
-    parser.add_argument('--glimpse_vector_size', type=int, default=256)
+    parser.add_argument("--glimpse_vector_size", type=int, default=256)
     # dimensionality of hidden state vector
-    parser.add_argument('--state_size', type=int, default=256)
+    parser.add_argument("--state_size", type=int, default=256)
     # standard deviation for Gaussian distribution over locations
-    parser.add_argument('--std_dev', '-std', type=int, default=1e-3)
+    parser.add_argument("--std_dev", "-std", type=int, default=1e-3)
     # use neural network baseline
-    parser.add_argument('--nn_baseline', '-bl', action='store_true')
+    parser.add_argument("--nn_baseline", "-bl", action="store_true")
 
     ############################## Training args ################################
 
     # number of full passes through the data
     # total training iterations = num_epochs * number of images / batch_size
-    parser.add_argument('--num_epochs', type=int, default=100000)
-    parser.add_argument('--learning_rate', '-lr', type=int, default=1e-2)
+    parser.add_argument("--num_epochs", type=int, default=64)
+    parser.add_argument("--learning_rate", "-lr", type=int, default=1e-2)
     # batch size for each training iterations
-    parser.add_argument('--batch_size', '-b', type=int, default=1000)
+    parser.add_argument("--batch_size", "-b", type=int, default=1000)
     # random seed for deterministic training
-    parser.add_argument('--random_seed', '-rs', type=int, default=42)
+    parser.add_argument("--random_seed", "-rs", type=int, default=42)
 
     ############################## Input data args ##############################
 
@@ -429,19 +509,19 @@ def main():
     # Will need to update for DNA sequence inputs
 
     # dimensionality of location vector
-    parser.add_argument('--loc_size', type=int, default=2)
+    parser.add_argument("--loc_size", type=int, default=1)
     # original size of images
-    parser.add_argument('--img_size', type=int, default=28)
+    parser.add_argument("--img_size", type=int, default=28)
     # number of classes for classification
-    parser.add_argument('--num_classes', type=int, default=10)
+    parser.add_argument("--num_classes", type=int, default=2)
     # number of channels in the input data
-    parser.add_argument('--num_channels', type=int, default=1)
+    parser.add_argument("--num_channels", type=int, default=1)
     args = parser.parse_args()
-
+    
     # setting random seed
     np.random.seed(args.random_seed)
     tf.set_random_seed(args.random_seed)
-    
+
     train(glimpse_size=args.glimpse_size, 
         num_glimpses=args.num_glimpses,
         num_resolutions=args.num_resolutions,
