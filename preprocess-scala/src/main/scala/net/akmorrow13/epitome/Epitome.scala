@@ -84,7 +84,7 @@ class Epitome(val args: EpitomeArgs) extends BDGSparkCommand[EpitomeArgs] with L
     val featuresAndLabels = vectorize.partitionAndFeaturize()
 
     // save results
-    vectorize.saveValuesToHdfs(featuresAndLabels, args.featurizedPath)
+    vectorize.saveValuesAsTFRecord(featuresAndLabels, args.featurizedPath)
 
   }
 }

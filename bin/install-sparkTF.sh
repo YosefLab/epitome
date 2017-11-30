@@ -1,5 +1,5 @@
 git clone https://github.com/tensorflow/ecosystem.git
-cd ecosystem
+cd ecosystem/spark/spark-tensorflow-connector/
 mvn install clean install
 # can use:
 #     <groupId>org.tensorflow</groupId>

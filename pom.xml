@@ -18,9 +18,9 @@
 
   <properties>
     <adam.version>0.23.0-SNAPSHOT</adam.version>
-    <spark.version>1.6.3</spark.version>
-    <scala.version>2.10.6</scala.version>
-    <scala.version.prefix>2.10</scala.version.prefix>
+    <spark.version>2.1.0</spark.version>
+    <scala.version>2.11.7</scala.version>
+    <scala.version.prefix>2.11</scala.version.prefix>
     <bdg-utils.version>0.2.9</bdg-utils.version>
     <avro.version>1.8.1</avro.version>
     <bdg-formats.version>0.11.3</bdg-formats.version>
@@ -218,7 +218,7 @@
         <exclusions>
           <exclusion>
             <groupId>org.scalanlp</groupId>
-            <artifactId>breeze-math_2.10</artifactId>
+            <artifactId>breeze-math_${scala.version.prefix}</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.xerial.snappy</groupId>
@@ -240,7 +240,7 @@
       </dependency>
       <dependency>
         <groupId>org.scalanlp</groupId>
-        <artifactId>breeze_2.10</artifactId>
+        <artifactId>breeze_${scala.version.prefix}</artifactId>
         <version>0.13.2</version>
       </dependency>
       <dependency>

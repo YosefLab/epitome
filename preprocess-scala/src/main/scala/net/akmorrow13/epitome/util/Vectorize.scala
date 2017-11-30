@@ -16,6 +16,10 @@ import htsjdk.samtools.ValidationStringency
 import org.bdgenomics.adam.util.{TwoBitFile}
 import org.bdgenomics.utils.io.LocalFileByteAccess
 import java.io.File
+import org.apache.commons.io.FileUtils
+import org.apache.spark.sql.{ DataFrame, Row, SQLContext }
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.types._
 
 /**
  * Class for taking in TF binding sites and ATAC/DNASE-seq bam files and merging
@@ -217,10 +221,53 @@ case class Vectorizer(@transient sc: SparkContext, @transient conf: EpitomeArgs)
 
   }
 
+
+  def saveValuesAsTFRecord(rdd: RDD[ATACandSequenceFeature], filepath: String) = {
+
+    //save in spark in case collect fails
+    println(s"saving to hdfs as TF records at ${filepath}")
+
+    val referencePath = conf.referencePath
+    val windowSize = conf.windowSize
+
+    // map rows to sequences
+    val withSequences = rdd.repartition(40).mapPartitions(part => {
+      val reference = new TwoBitFile(new LocalFileByteAccess(new File(referencePath)))
+      part.flatMap(r => {
+        try {
+          val sequence = reference.extract(r.region)
+          Some((r, sequence))
+        } catch {
+          case e: AssertionError => None
+        }
+      })
+
+    }).filter(r => !r._2.contains("NNNNNNNNNNN") && r._2.length == windowSize)
+
+    val schema = StructType(List(StructField("Chromosome", StringType),
+      StructField("Start", LongType),
+      StructField("End", LongType),
+      StructField("Labels", ArrayType(IntegerType, true)),
+      StructField("atacCounts", ArrayType(IntegerType, true)),
+      StructField("sequence", StringType)))
+
+    val sqlContext = new SQLContext(sc)
+
+    val df: DataFrame = sqlContext.createDataFrame(withSequences.map(r => r._1.toSchema(r._2)), schema)
+    df.write.format("tensorflow").save(filepath)
+
+  }
+
+
 }
 
 
 case class ATACandSequenceFeature(labels: DenseVector[Int], atacCounts: DenseVector[Int], region: ReferenceRegion) {
+
+  def toSchema(sequence: String): Row = {
+    new GenericRow(Array[Any](region.referenceName, region.start, region.end, labels.toArray, atacCounts.toArray, sequence))
+  }
+
 
   def formatToString(): String = {
 	labels.toArray.mkString(",") + ";" + atacCounts.toArray.mkString(",") + ";" + region.toString()	
