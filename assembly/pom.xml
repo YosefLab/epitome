@@ -113,7 +113,7 @@
   <dependencies>
     <dependency>
       <groupId>org.bdgenomics.adam</groupId>
-      <artifactId>adam-assembly_${scala.version.prefix}</artifactId>
+      <artifactId>adam-assembly${spark.version.prefix}${scala.version.prefix}</artifactId>
     </dependency>
     <dependency>
       <groupId>net.akmorrow13.epitome</groupId>
