@@ -18,9 +18,10 @@
 
   <properties>
     <adam.version>0.23.0-SNAPSHOT</adam.version>
-    <spark.version>1.6.3</spark.version>
-    <scala.version>2.10.6</scala.version>
-    <scala.version.prefix>2.10</scala.version.prefix>
+    <spark.version>2.2.0</spark.version>
+    <spark.version.prefix>-spark2_</spark.version.prefix>
+    <scala.version>2.11.8</scala.version>
+    <scala.version.prefix>2.11</scala.version.prefix>
     <bdg-utils.version>0.2.9</bdg-utils.version>
     <avro.version>1.8.1</avro.version>
     <bdg-formats.version>0.11.3</bdg-formats.version>
@@ -177,8 +178,13 @@
   <dependencyManagement>
     <dependencies>
       <dependency>
+    	<groupId>org.tensorflow</groupId>
+    	<artifactId>spark-tensorflow-connector</artifactId>
+    	<version>1.0-SNAPSHOT</version>
+      </dependency>
+      <dependency>
         <groupId>org.bdgenomics.adam</groupId>
-        <artifactId>adam-assembly_${scala.version.prefix}</artifactId>
+        <artifactId>adam-assembly${spark.version.prefix}${scala.version.prefix}</artifactId>
         <version>0.23.0-SNAPSHOT</version>
         <exclusions>
           <exclusion>
@@ -195,7 +201,7 @@
       </dependency>
       <dependency>
         <groupId>org.bdgenomics.utils</groupId>
-        <artifactId>utils-misc_${scala.version.prefix}</artifactId>
+        <artifactId>utils-misc${spark.version.prefix}${scala.version.prefix}</artifactId>
         <version>${bdg-utils.version}</version>
         <scope>test</scope>
         <type>test-jar</type>
@@ -213,7 +219,7 @@
         <exclusions>
           <exclusion>
             <groupId>org.scalanlp</groupId>
-            <artifactId>breeze-math_2.10</artifactId>
+            <artifactId>breeze-math_${scala.version.prefix}</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.xerial.snappy</groupId>
@@ -235,7 +241,7 @@
       </dependency>
       <dependency>
         <groupId>org.scalanlp</groupId>
-        <artifactId>breeze_2.10</artifactId>
+        <artifactId>breeze_${scala.version.prefix}</artifactId>
         <version>0.13.2</version>
       </dependency>
       <dependency>
@@ -346,12 +352,12 @@
       </dependency>
       <dependency>
         <groupId>org.bdgenomics.utils</groupId>
-        <artifactId>utils-cli_${scala.version.prefix}</artifactId>
+        <artifactId>utils-cli${spark.version.prefix}${scala.version.prefix}</artifactId>
         <version>${bdg-utils.version}</version>
       </dependency>
       <dependency>
         <groupId>org.bdgenomics.adam</groupId>
-        <artifactId>adam-core_${scala.version.prefix}</artifactId>
+        <artifactId>adam-core${spark.version.prefix}${scala.version.prefix}</artifactId>
         <version>${adam.version}</version>
         <exclusions>
           <exclusion>

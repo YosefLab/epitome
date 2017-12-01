@@ -23,6 +23,7 @@ import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.utils.cli._
 import org.bdgenomics.utils.misc.Logging
 import org.kohsuke.args4j.{ Argument, Option => Args4jOption }
+import org.apache.log4j.{Level, Logger}
 
 
 class EpitomeArgs extends Args4jBase with ParquetArgs {
@@ -71,6 +72,9 @@ class Epitome(val args: EpitomeArgs) extends BDGSparkCommand[EpitomeArgs] with L
 
   override def run(sc: SparkContext) {
 
+    // turn off info logs
+    sc.setLogLevel("ERROR")
+    
     // make sure configuration is valid
     args.validate()
 
@@ -80,7 +84,7 @@ class Epitome(val args: EpitomeArgs) extends BDGSparkCommand[EpitomeArgs] with L
     val featuresAndLabels = vectorize.partitionAndFeaturize()
 
     // save results
-    vectorize.saveValuesLocally(featuresAndLabels, args.featurizedPath)
+    vectorize.saveValuesAsTFRecord(featuresAndLabels, args.featurizedPath)
 
   }
 }
