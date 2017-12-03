@@ -119,7 +119,9 @@ def build_location_network(
             activation=None,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             bias_initializer=tf.contrib.layers.xavier_initializer())
-    return tf.clip_by_value(mean, -1, 1)
+        return tf.clip_by_value(mean, -1, 1)
+        # return mean
+        # return tf.tanh(mean)
 
 
 def build_baseline_network(
@@ -199,6 +201,7 @@ def get_location(location_output, std_dev, loc_size, clip=False, clip_low=-1, cl
     samples = tf.squeeze(dist.sample(sample_shape=[1]), axis=0)
     if clip:
         samples = tf.clip_by_value(samples, clip_low, clip_high)
+        # samples = tf.tanh(samples)
     return samples, tf.squeeze(dist.log_prob(samples))
 
 
@@ -277,7 +280,7 @@ def train(glimpse_size,
     raw_action_output = build_action_network(
         state=hidden_output,
         scope="action")
-    d, action_output = get_action(raw_action_output)
+    softmax_output, action_output = get_action(raw_action_output)
 
     mean_location_output = build_location_network(
         state=hidden_output,
@@ -324,12 +327,6 @@ def train(glimpse_size,
 
     ################################### Train ###################################
 
-    # location = np.random.uniform(size=[batch_size, loc_size], low=-0.5, high=0.5)
-    # hidden state initialized to zeros
-    location = np.zeros(shape=[batch_size, loc_size])
-
-    state = np.zeros(shape=[batch_size, state_size])
-    
     for epoch in range(num_epochs):
         
         # accuracies
@@ -341,20 +338,24 @@ def train(glimpse_size,
         # total rewards for num_glimpses timesteps
         path_rewards = []
 
-        x_train, y_train = shuffle(mnist.train.images, mnist.train.labels)
-        for i in range(0, len(x_train), batch_size):
-            x_train_batch, y_train_batch = x_train[i:i+batch_size], y_train[i:i+batch_size]
+        for i in range(0, 55000, batch_size):
+            x_train_batch, y_train_batch = mnist.train.next_batch(batch_size, shuffle=True)
+
+            location = np.random.uniform(size=[batch_size, loc_size], low=-1, high=1)
+            # hidden state initialized to zeros
+            state = np.zeros(shape=[batch_size, state_size])
 
             for j in range(num_glimpses - 1):
                 fetches = [location_output, hidden_output]
-                outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch, 
-                    sy_y: y_train_batch, 
-                    sy_l: location, 
+                outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch,
+                    sy_y: y_train_batch,
+                    sy_l: location,
                     sy_h: state})
                 location = outputs[0]
                 state = outputs[1]
 
-            fetches = [location_output, hidden_output, update_op, cross_entropy_loss, policy_gradient_loss, rewards]
+            fetches = [location_output, hidden_output, cross_entropy_loss, policy_gradient_loss, rewards,
+                       update_op]
 
             if nn_baseline:
                 fetches.append(baseline_loss)
@@ -363,17 +364,18 @@ def train(glimpse_size,
             fetches.append(action_output)
 
             outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch, 
-                    sy_y: y_train_batch, 
-                    sy_l: location, 
-                    sy_h: state})
+                sy_y: y_train_batch,
+                sy_l: location,
+                sy_h: state})
 
             correct_prediction = np.mean(np.equal(np.argmax(y_train_batch, axis=1), outputs[-1]))
             acs.append(correct_prediction)
-            ce_losses.append(outputs[3])
-            pg_losses.append(outputs[4])
-            path_rewards.append(outputs[5])
+            ce_losses.append(outputs[2])
+            pg_losses.append(outputs[3])
+            path_rewards.append(outputs[4])
             if nn_baseline:
                 baseline_losses.append(outputs[6])
+
 
         ######################### Print out statistics ########################
             
@@ -385,6 +387,26 @@ def train(glimpse_size,
         if nn_baseline:
             print("Baseline Loss: {}".format(np.mean(np.array(baseline_losses))))
         print("Rewards: {}".format(np.mean(np.array(path_rewards))))
+
+
+    # test the model
+
+    location = np.random.uniform(size=[batch_size, loc_size], low=-1, high=1)
+    state = np.zeros(shape=[batch_size, state_size])
+    total = 0
+    num_ex = 0.
+    for i in range(0, 10000, batch_size):
+        x_test_batch, y_test_batch = mnist.test.next_batch(batch_size)
+        outputs = sess.run(action_output, feed_dict={sy_x: x_test_batch,
+            sy_y: y_test_batch,
+            sy_l: location,
+            sy_h: state})
+        total += np.sum(np.equal(np.argmax(y_test_batch, axis=1), outputs[-1]))
+        num_ex += len(y_test_batch)
+    print("*" * 100)
+    print("*" * 100)
+    print("*" * 100)
+    print("Test Accuracy: {}".format(total/num_ex))
 
 
 # constant for normalization purposes
@@ -408,7 +430,7 @@ def main():
     # dimensionality of hidden state vector
     parser.add_argument('--state_size', type=int, default=256)
     # standard deviation for Gaussian distribution over locations
-    parser.add_argument('--std_dev', '-std', type=int, default=1e-3)
+    parser.add_argument('--std_dev', '-std', type=float, default=1e-2)
     # use neural network baseline
     parser.add_argument('--nn_baseline', '-bl', action='store_true')
 
@@ -417,9 +439,9 @@ def main():
     # number of full passes through the data
     # total training iterations = num_epochs * number of images / batch_size
     parser.add_argument('--num_epochs', type=int, default=100000)
-    parser.add_argument('--learning_rate', '-lr', type=int, default=1e-2)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     # batch size for each training iterations
-    parser.add_argument('--batch_size', '-b', type=int, default=1000)
+    parser.add_argument('--batch_size', '-b', type=int, default=20)
     # random seed for deterministic training
     parser.add_argument('--random_seed', '-rs', type=int, default=42)
 
