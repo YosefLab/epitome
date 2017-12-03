@@ -231,6 +231,19 @@ def concatenate_dna(boolean_mask, dna, glimpse_size, batch_size, dna_dim):
     return sliced_dna
 
 
+def get_batch_glimpses(padded_glimpse, start_index, glimpse_size, batch_size):
+    adder = np.arange(2*glimpse_size)
+    indices = tf.map_fn(lambda index: index + adder, start_index)
+    indices = tf.expand_dims(indices, -1)
+    indices_index = tf.constant(np.repeat(np.arange(batch_size), glimpse_size*2).reshape([batch_size, glimpse_size*2]))
+    indices_index = tf.cast(indices_index, tf.int32)
+    indices_index = tf.expand_dims(indices_index, -1)
+    indices = tf.concat([indices_index, indices], axis = -1)
+    batched_glimpses = tf.gather_nd(tf.squeeze(padded_glimpse), indices)
+    batched_glimpses = tf.expand_dims(batched_glimpses, axis = -1)
+    return batched_glimpses
+
+
 def index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size, length, batch_size, dna_dim, deepsea):
     to_concatenate = []
 
@@ -239,11 +252,11 @@ def index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size, lengt
         glimpse = glimpses[i]
         # glimpse centered at start_index
         start_index = tf.to_int32(location / 2.0**i)
-        boolean_mask = get_boolean_mask(glimpse_size, start_index, glimpse.shape[1], batch_size)
-
-        # pad ATAC-seq and DNA with -1 or 0 values on each side
+        # pad ATAC-seq and DNA with -1 values on each side
         # new length of padded data is (2 * glimpse) + length
         padded_glimpse = get_padded_glimspe(glimpse, glimpse_size)
+        batched_glimpses = get_batch_glimpses(padded_glimpse, start_index, glimpse_size, 
+            batch_size)
 
         assert(glimpse.shape[1] == length / 2**i)
         assert(start_index.shape[1] == 1)
@@ -254,22 +267,21 @@ def index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size, lengt
 
         # concatenate DNA
         if i == 0:
-            sliced_dna = concatenate_dna(boolean_mask, dna, glimpse_size, batch_size, dna_dim)
-            to_concatenate.append(sliced_dna)
-            assert(sliced_dna.shape[1] == 2 * glimpse_size)
-            assert(sliced_dna.shape[2] == dna_dim)
+            padded_dna = get_padded_dna(dna, glimpse_size)
+            batched_dna_glimpses = get_batch_glimpses(tf.squeeze(padded_dna), start_index, glimpse_size, batch_size)
+            # need to split the data into channels, so that the shape match ATAC
+            channels = tf.split(batched_dna_glimpses, num_or_size_splits=dna_dim, axis=2)
+            for channel in channels:
+                to_concatenate.append(tf.squeeze(channel, axis = 2))
 
         # TODO look into why this line caused a bug
-        sliced_glimpse = tf.boolean_mask(tensor=padded_glimpse, mask=boolean_mask)
-        sliced_glimpse = tf.reshape(sliced_glimpse, [batch_size, glimpse_size * 2])
-        sliced_glimpse = tf.expand_dims(sliced_glimpse, axis=-1)
-        to_concatenate.append(sliced_glimpse)
+        to_concatenate.append(batched_glimpses)
 
     if deepsea:
         start_index = tf.to_int32(location)
-        boolean_mask = get_boolean_mask(glimpse_size, start_index, length, batch_size)
-        sliced_dna = concatenate_dna(boolean_mask, dna, glimpse_size, batch_size, dna_dim)
-        to_concatenate.append(sliced_dna)
+        padded_dna = get_padded_dna(dna, glimpse_size)
+        batched_dna_glimpses = get_batch_glimpses(padded_dna, start_index, glimpse_size, batch_size)
+        to_concatenate.append(batched_dna_glimpses)
         assert(sliced_dna.shape[1] == 2 * glimpse_size)
         assert(sliced_dna.shape[2] == dna_dim)
         assert(len(to_concatenate) == 1)
@@ -365,7 +377,7 @@ def train(glimpse_size,
         loc_size = 1
     else:
         # TODO remove file hardcoding later and use all files
-        data = h5py.File("results-hdf5/CEBPB-A549.hdf5", "r")
+        data = h5py.File("../../CEBPB-A549.hdf5", "r")
         dna = data["seq"]
         atac = np.expand_dims(data["atac"], -1)
         # dna_dim is either four (ATCG) or five (ATCGN)
