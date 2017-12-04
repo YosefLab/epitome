@@ -23,6 +23,125 @@ import tensorflow as tf
 import argparse
 import h5py
 from time import gmtime, strftime
+import glob as glob
+
+
+################################# Data Processing ################################
+
+def dna_encoder(seq, bases='ACTG'):
+    # one-hot-encoding for sequence data
+    # enumerates base in a sequence
+    indices = [
+        bases.index(x) if x in bases else -1
+        for x in seq
+    ]
+    # one extra index for unknown
+    eye = np.eye(len(bases) + 1)
+    return eye[indices].astype(np.float32)
+
+
+def tf_dna_encoder(seq, bases='ACTG'):
+    # wraps `dna_encoder` with a `py_func`
+    return tf.py_func(dna_encoder, [seq, bases], [tf.float32])[0]
+
+
+def dataset_input_fn(filenames,
+                     buffer_size=10000,
+                     batch_size=32,
+                     num_epochs=20,
+                     ):
+    dataset = tf.contrib.data.TFRecordDataset(filenames)
+
+    # Use `tf.parse_single_example()` to extract data from a `tf.Example`
+    # protocol buffer, and perform any additional per-record preprocessing.
+    def parser(record):
+        keys_to_features = {
+            "sequence": tf.FixedLenFeature((), tf.string),
+            "atacCounts": tf.FixedLenFeature((1000,), tf.int64),
+            "Labels": tf.FixedLenFeature((1,), tf.int64),
+        }
+        parsed = tf.parse_single_example(record, keys_to_features)
+
+        # Perform additional preprocessing on the parsed data.
+        seq = tf_dna_encoder(parsed["sequence"])
+        seq = tf.reshape(seq, [1000, 5])
+        atac = parsed["atacCounts"]
+        label = parsed["Labels"]
+
+        # add more here if needed
+        return {'seq': seq, 'atac': atac}, label
+
+    # Use `Dataset.map()` to build a pair of a feature dictionary and a label
+    # tensor for each example.
+    dataset = dataset.map(parser)
+    dataset = dataset.shuffle(buffer_size)
+    dataset = dataset.batch(batch_size)
+    dataset = dataset.repeat(num_epochs)
+    iterator = dataset.make_one_shot_iterator()
+
+    # `features` is a dictionary in which each value is a batch of values for
+    # that feature; `labels` is a batch of labels.
+    features, labels = iterator.get_next()
+    return features, labels
+
+
+##################################### CNN Code ###################################
+
+
+def cnn_hp(**kwargs):
+    hp = tf.contrib.training.HParams()
+    hp.n_conv_layers = 4
+    hp.n_dconv_layers = 4
+    hp.hidden_sizes = [64, 64, 64, 64]
+    hp.dconv_h_size = 64
+    hp.fc_h_size = 925
+    hp.kernel_size = 8
+    hp.pooling_sizes = [2, 2, 2, 4]
+    hp.stride = 1
+    hp.dropout_keep_probs = [0.9, 0.9, 0.9, 0.9]
+    hp.dropout = 1
+    hp.activation = lrelu
+    hp.output_activation = tf.sigmoid
+    hp.__dict__.update(kwargs)
+    return hp
+
+
+def lrelu(x, alpha=0.2):
+    return tf.maximum(alpha*x, x)
+
+
+def fc(x, n_units, dropout, activation=None):
+    net = tf.layers.dense(x, n_units)
+    net = tf.contrib.layers.layer_norm(net)
+    if activation:
+        net = activation(net)
+    return tf.layers.dropout(net, dropout)
+
+
+def conv1d(x, hidden_size, kernel_size, stride=1, dilation=1,
+           pooling_size=0, dropout=0.0, activation=None):
+    net = tf.layers.conv1d(x, hidden_size, kernel_size, stride, padding='same',
+                           dilation_rate=dilation, activation=activation)
+    if pooling_size:
+        net = tf.layers.max_pooling1d(net, pooling_size, pooling_size, padding="same")
+    return tf.layers.dropout(net, dropout)
+
+
+def cnn(input_, n_classes, hp):
+    net = input_
+    for i in range(hp.n_conv_layers):
+        net = conv1d(net, hp.hidden_sizes[i], hp.kernel_size, hp.stride, dilation=1,
+                     pooling_size=hp.pooling_sizes[i], dropout=hp.dropout_keep_probs[i],
+                     activation=hp.activation)
+    for i in range(hp.n_dconv_layers):
+        dilation= 2**(i + 1)
+        tmp = conv1d(net, hp.dconv_h_size, hp.kernel_size, hp.stride, dilation=1,
+                     pooling_size=0, dropout=hp.dropout, activation=hp.activation)
+        net = tf.concat([net, tmp], axis=2)
+    net = tf.contrib.layers.flatten(net)
+    net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation)
+    # return fc(net, n_classes, hp.dropout, activation=hp.output_activation)
+    return net
 
 
 ################################# Define Networks ################################
@@ -57,8 +176,15 @@ def build_glimpse_network(
         dna_dim=dna_dim,
         deepsea=deepsea)
 
-    assert(glimpses.shape[1] == (glimpse_size * 2) * (dna_dim + num_resolutions))
+    location = (location/(length / 2.0)) - 1
+
+    # assert(glimpses.shape[1] == (glimpse_size * 2) * (dna_dim + num_resolutions))
     with tf.variable_scope(scope):
+
+        hp = cnn_hp(n_dconv_layers=0)
+        if len(glimpses.shape) == 2:
+            glimpses = tf.expand_dims(glimpses, -1)
+        glimpses = cnn(glimpses, n_classes=1, hp=hp)
         h_l = tf.layers.dense(
             location,
             units=size,
@@ -85,7 +211,7 @@ def build_glimpse_network(
             bias_initializer=tf.contrib.layers.xavier_initializer())
         g_t = output_activation(out_1 + out_2)
         assert(g_t.shape[1] == output_size)
-        return g_t
+        return g_t, glimpses
 
 
 def build_core_network(
@@ -108,9 +234,9 @@ def build_core_network(
             activation=None,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             bias_initializer=tf.contrib.layers.xavier_initializer())
-        h_t = output_activation(out_1 + out_2)
-        assert(h_t.shape[1] == output_size)
-        return h_t
+        # h_t = output_activation(out_1 + out_2)
+        # assert(h_t.shape[1] == output_size)
+        return out_1 + out_2
 
 
 def build_location_network(
@@ -164,6 +290,9 @@ def build_action_network(
         state,
         scope,
         output_size=10,
+        n_layers=3,
+        size=64,
+        activation=tf.tanh,
         output_activation=None):
 
     # output is not passed through sigmoid
@@ -176,8 +305,7 @@ def build_action_network(
             activation=output_activation,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             bias_initializer=tf.contrib.layers.xavier_initializer())
-        assert(ac_probs.shape[1] == output_size)
-        return ac_probs
+    return ac_probs
 
 
 def get_glimpses(data, location, batch_size, num_resolutions, glimpse_size, img_size, loc_size,
@@ -238,9 +366,9 @@ def get_batch_glimpses(padded_glimpse, start_index, glimpse_size, batch_size):
     indices_index = tf.constant(np.repeat(np.arange(batch_size), glimpse_size*2).reshape([batch_size, glimpse_size*2]))
     indices_index = tf.cast(indices_index, tf.int32)
     indices_index = tf.expand_dims(indices_index, -1)
-    indices = tf.concat([indices_index, indices], axis = -1)
+    indices = tf.concat([indices_index, indices], axis=-1)
     batched_glimpses = tf.gather_nd(tf.squeeze(padded_glimpse), indices)
-    batched_glimpses = tf.expand_dims(batched_glimpses, axis = -1)
+    batched_glimpses = tf.expand_dims(batched_glimpses, axis=-1)
     return batched_glimpses
 
 
@@ -255,13 +383,11 @@ def index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size, lengt
         # pad ATAC-seq and DNA with -1 values on each side
         # new length of padded data is (2 * glimpse) + length
         padded_glimpse = get_padded_glimspe(glimpse, glimpse_size)
-        batched_glimpses = get_batch_glimpses(padded_glimpse, start_index, glimpse_size, 
+        batched_glimpses = get_batch_glimpses(padded_glimpse, start_index, glimpse_size,
             batch_size)
 
         assert(glimpse.shape[1] == length / 2**i)
         assert(start_index.shape[1] == 1)
-        assert(boolean_mask.shape[1] == (length / 2**i) + (2 * glimpse_size))
-        assert(boolean_mask.shape[2] == 1)
         assert(padded_glimpse.shape[1] == (length / 2**i) + (2 * glimpse_size))
         assert(padded_glimpse.shape[2] == 1)
 
@@ -272,7 +398,7 @@ def index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size, lengt
             # need to split the data into channels, so that the shape match ATAC
             channels = tf.split(batched_dna_glimpses, num_or_size_splits=dna_dim, axis=2)
             for channel in channels:
-                to_concatenate.append(tf.squeeze(channel, axis = 2))
+                to_concatenate.append(tf.squeeze(channel, axis=2))
 
         # TODO look into why this line caused a bug
         to_concatenate.append(batched_glimpses)
@@ -282,13 +408,13 @@ def index_glimpses(dna, location, num_resolutions, glimpses, glimpse_size, lengt
         padded_dna = get_padded_dna(dna, glimpse_size)
         batched_dna_glimpses = get_batch_glimpses(padded_dna, start_index, glimpse_size, batch_size)
         to_concatenate.append(batched_dna_glimpses)
-        assert(sliced_dna.shape[1] == 2 * glimpse_size)
-        assert(sliced_dna.shape[2] == dna_dim)
         assert(len(to_concatenate) == 1)
 
     # flatten all channels
-    flat_shape = [batch_size, (num_resolutions + dna_dim) * (glimpse_size * 2)]
-    return tf.reshape(tf.concat(to_concatenate, axis=-1), flat_shape)
+    # flat_shape = [batch_size, (num_resolutions + dna_dim) * (glimpse_size * 2)]
+    # return tf.reshape(tf.concat(to_concatenate, axis=-1), flat_shape)
+    not_flat_shape = [batch_size, glimpse_size * 2, num_resolutions + dna_dim]
+    return tf.reshape(tf.concat(to_concatenate, axis=-1), not_flat_shape)
 
 
 def get_boolean_mask(glimpse_size, start_index, length, batch_size):
@@ -371,27 +497,51 @@ def train(glimpse_size,
         num_classes = 919
         # TODO do not hardcode this file path
         train_batches = deepsea_data.train_iterator(
-            source='../../deepsea_train/train.mat',
+            source="../../deepsea_train/train.mat",
             batch_size=batch_size,
             num_epochs=1)
         loc_size = 1
     else:
-        # TODO remove file hardcoding later and use all files
-        data = h5py.File("../../CEBPB-A549.hdf5", "r")
-        dna = data["seq"]
-        atac = np.expand_dims(data["atac"], -1)
-        # dna_dim is either four (ATCG) or five (ATCGN)
-        dna_dim = dna.shape[-1]
-        x_train = np.concatenate([dna, atac], axis=-1)
-        y_train = data["label"]
-        train_batches = range(0, len(x_train), batch_size)
+        # # TODO remove file hardcoding later and use all files
+        # data = h5py.File("results-hdf5/CEBPB-A549.hdf5", "r")
+        # dna = data["seq"]
+        # atac = np.expand_dims(data["atac"], -1)
+        # # dna_dim is either four (ATCG) or five (ATCGN)
+        # dna_dim = dna.shape[-1]
+        # x_train = np.concatenate([dna, atac], axis=-1)
+        # y_train = data["label"]
+        # train_batches = range(0, len(x_train), batch_size)
+        #
+        # # TODO change num_classes to num_labels
+        # # y_train should be two dimensional (n x num_classes)
+        # assert(len(y_train.shape) == 2)
+        # # override default num_classes based on data
+        # num_classes = y_train.shape[1]
+        # loc_size = 1
 
-        # TODO change num_classes to num_labels
-        # y_train should be two dimensional (n x num_classes)
-        assert(len(y_train.shape) == 2)
-        # override default num_classes based on data
-        num_classes = y_train.shape[1]
-        loc_size = 1
+        # data pipeline parameters
+        buffer_size = 10000
+        batch_size = batch_size
+        num_epochs = num_epochs
+
+        # reset the graph because it might be finalized
+        tf.reset_default_graph()
+
+        # sharded tfrecord filenames
+        filenames = glob.glob('CEBPB-A549-hg38.txt/part-r-*')
+        features, labels = dataset_input_fn(filenames=filenames,
+            batch_size=batch_size,
+            buffer_size=buffer_size,
+            num_epochs=num_epochs)
+
+        dna = tf.cast(features['seq'], tf.float32)
+        atac = tf.cast(features['atac'], tf.float32)
+        chip = tf.cast(labels, tf.float32)
+        x_train = tf.concat([dna, tf.expand_dims(atac, -1)], axis=-1)
+        y_train = chip
+
+        dna_dim = 5
+        num_classes = 1
 
     ################################# Placeholders ##############################
 
@@ -415,7 +565,7 @@ def train(glimpse_size,
 
     ################################# RNN cell ##################################
 
-    glimpse_output = build_glimpse_network(
+    glimpse_output, glimpses = build_glimpse_network(
         data=sy_x,
         location=sy_l,
         batch_size=batch_size,
@@ -502,23 +652,19 @@ def train(glimpse_size,
 
     ############################## Tensorflow engineering #######################
 
-    # initialize config
-    tf_config = tf.ConfigProto(inter_op_parallelism_threads=1, intra_op_parallelism_threads=1)
-
-    # initialize session and variables
-    sess = tf.Session(config=tf_config)
-    sess.__enter__()  # equivalent to `with sess:`
-    tf.global_variables_initializer().run()  # pylint: disable=E1101
-    # create saver to checkpoint model
-    saver = tf.train.Saver()
+    # # initialize config
+    # tf_config = tf.ConfigProto(inter_op_parallelism_threads=1, intra_op_parallelism_threads=1)
+    #
+    # # initialize session and variables
+    # sess = tf.Session(config=tf_config)
+    # sess.__enter__()  # equivalent to `with sess:`
+    # tf.global_variables_initializer().run()  # pylint: disable=E1101
+    # # create saver to checkpoint model
+    # saver = tf.train.Saver()
 
     ################################### Train ###################################
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> fb59512122e8dd88fd00e26f467b56fef7830abd
-    for epoch in range(num_epochs):
+    with tf.train.MonitoredSession() as sess:
 
         # accuracies
         acs = []
@@ -529,24 +675,23 @@ def train(glimpse_size,
         # total rewards for num_glimpses timesteps
         path_rewards = []
 
-        # train_batches defined above based on data type
-        for i in train_batches:
+        iter = 0
+        while not sess.should_stop():
+
+            x_train_batch, y_train_batch = sess.run([x_train, y_train])
+
+            # TODO find a more elegant way to consider last bit of data
+            print(iter)
+            if len(x_train_batch) < batch_size:
+                continue
 
             # hidden state initialized to zeros
-            state = np.zeros(shape=[batch_size, state_size])
-            # TODO what should initial location be?
-            location = np.zeros(shape=[batch_size, loc_size]) + (length/2.0)
-                
-            x_train_batch = i[0] if deepsea else x_train[i:i+batch_size]
-            y_train_batch = i[1] if deepsea else y_train[i:i+batch_size]
-
-            # hidden state initialized to zeros
-            state = np.zeros(shape=[batch_size, state_size])
-            location = np.zeros(shape=[batch_size, loc_size]) + (length/2.0)
-
+            state = np.zeros(shape=[x_train_batch.shape[0], state_size])
+            # location = np.random.randint(0, length, size=[x_train_batch.shape[0], loc_size])
+            location = np.zeros(shape=[x_train_batch.shape[0], loc_size]) + (length/2.0)
 
             for j in range(num_glimpses - 1):
-                fetches = [location_output, hidden_output]
+                fetches = [location_output, hidden_output, glimpse_output]
                 outputs = sess.run(fetches=fetches, feed_dict={sy_x: x_train_batch,
                     sy_y: y_train_batch,
                     sy_l: location,
@@ -554,9 +699,10 @@ def train(glimpse_size,
 
                 location = outputs[0]
                 state = outputs[1]
+                # print(outputs[2])
 
             fetches = [update_op, glimpse_output, location_output, mean_location_output, log_probs, hidden_output,
-                       raw_action_output, sigmoid_output, rewards, cross_entropy_loss, policy_gradient_loss]
+                       raw_action_output, sigmoid_output, rewards, cross_entropy_loss, policy_gradient_loss, glimpses]
 
             if nn_baseline:
                 fetches.append(baseline_loss)
@@ -576,27 +722,34 @@ def train(glimpse_size,
             pg_losses.append(outputs[10])
             path_rewards.append(outputs[8])
             if nn_baseline:
-                baseline_losses.append(outputs[11])
+                baseline_losses.append(outputs[12])
 
 
             ######################### Print out epoch stats ########################
 
             print("*" * 100)
-            print("Epoch: {}".format(epoch))
-            print("Accuracy: {}".format(np.mean(np.array(acs))))
-            print("Cross Entropy Loss: {}".format(np.mean(np.array(ce_losses))))
-            print("Policy Gradient Loss: {}".format(np.mean(np.array(pg_losses))))
+            print("Iteration: {}".format(iter))
+            print("Accuracy: {}".format(correct_prediction))
+            print("Cross Entropy Loss: {}".format(outputs[9]))
+            print("Policy Gradient Loss: {}".format(outputs[10]))
             if nn_baseline:
-                print("Baseline Loss: {}".format(np.mean(np.array(baseline_losses))))
+                print("Baseline Loss: {}".format(outputs[12]))
             print("Rewards: {}".format(np.mean(np.array(path_rewards))))
+            print(outputs[7][:10])
+            # print(outputs[2][:10])
+            # if iter > 10:
+            #     import pdb; pdb.set_trace()
 
 
             ############################ Save the model ############################
 
             # save after each batch
-            saver.save(sess, checkpoint_path + strftime("%Y-%m-%d--%H:%M:%S", gmtime()))
-    # save the final model
-    saver.save(sess, checkpoint_path + strftime("%Y-%m-%d--%H:%M:%S--final", gmtime()))
+            # saver.save(sess, checkpoint_path + strftime("%Y-%m-%d--%H:%M:%S", gmtime()))
+
+            iter +=1
+
+        # save the final model
+        # saver.save(sess, checkpoint_path + strftime("%Y-%m-%d--%H:%M:%S--final", gmtime()))
 
 
 def main():
@@ -605,7 +758,7 @@ def main():
     ########################### Model architecture args ############################
 
     # height, width to which glimpses get resized
-    parser.add_argument("--glimpse_size", type=int, default=8)
+    parser.add_argument("--glimpse_size", type=int, default=50)
     # number of glimpses per image
     parser.add_argument("--num_glimpses", type=int, default=7)
     # number of resolutions per glimpse
@@ -616,7 +769,7 @@ def main():
     # dimensionality of hidden state vector
     parser.add_argument("--state_size", type=int, default=256)
     # standard deviation for Gaussian distribution over locations
-    parser.add_argument("--std_dev", "-std", type=int, default=1e-3)
+    parser.add_argument("--std_dev", "-std", type=float, default=1.0)
     # use neural network baseline
     parser.add_argument("--nn_baseline", "-bl", action="store_true")
 
@@ -625,7 +778,7 @@ def main():
     # number of full passes through the data
     # total training iterations = num_epochs * number of images / batch_size
     parser.add_argument("--num_epochs", type=int, default=64)
-    parser.add_argument("--learning_rate", "-lr", type=int, default=1e-3)
+    parser.add_argument("--learning_rate", "-lr", type=float, default=1e-3)
     # batch size for each training iterations
     parser.add_argument("--batch_size", "-b", type=int, default=1000)
     # random seed for deterministic training
@@ -641,13 +794,13 @@ def main():
     # original size of images
     parser.add_argument("--img_size", type=int, default=28)
     # number of classes for classification
-    parser.add_argument("--num_classes", type=int, default=2)
+    parser.add_argument("--num_classes", type=int, default=1)
     # number of channels in the input data
     parser.add_argument("--num_channels", type=int, default=1)
     # length of the sequences we are looking at
     parser.add_argument("--length", type=int, default=1000)
     # threshold above which examples classified as positive
-    parser.add_argument("--threshold", type=float, default=0.3)
+    parser.add_argument("--threshold", type=float, default=0.5)
     # use this flag when running with deepsea data
     parser.add_argument("--deepsea", action="store_true")
     # path to which models checkpoint gets saved
