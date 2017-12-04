@@ -21,7 +21,6 @@ import numpy as np
 import tensorflow.contrib.distributions as ds
 import tensorflow as tf
 import argparse
-import h5py
 from time import gmtime, strftime
 import glob as glob
 
@@ -87,61 +86,78 @@ def dataset_input_fn(filenames,
 
 ##################################### CNN Code ###################################
 
-
-def cnn_hp(**kwargs):
-    hp = tf.contrib.training.HParams()
-    hp.n_conv_layers = 4
-    hp.n_dconv_layers = 4
-    hp.hidden_sizes = [64, 64, 64, 64]
-    hp.dconv_h_size = 64
-    hp.fc_h_size = 925
-    hp.kernel_size = 8
-    hp.pooling_sizes = [2, 2, 2, 4]
-    hp.stride = 1
-    hp.dropout_keep_probs = [0.9, 0.9, 0.9, 0.9]
-    hp.dropout = 1
-    hp.activation = lrelu
-    hp.output_activation = tf.sigmoid
-    hp.__dict__.update(kwargs)
-    return hp
-
-
 def lrelu(x, alpha=0.2):
-    return tf.maximum(alpha*x, x)
+    # leaky-relu activation function
+    return tf.maximum(alpha * x, x)
 
 
-def fc(x, n_units, dropout, activation=None):
-    net = tf.layers.dense(x, n_units)
-    net = tf.contrib.layers.layer_norm(net)
-    if activation:
-        net = activation(net)
-    return tf.layers.dropout(net, dropout)
+def mlp(x, n_classes):
+    # specify hard-coded parameters here
+    print('using mlp')
+
+    # number of hidden units per fully-connected layer
+    units = [256, 128, n_classes]
+    # activation function at each layer
+    activations = [lrelu, lrelu, None]
+
+    # check that the hard-coded parameters are valid
+    assert len(units) == len(activations)
+
+    # flatten the inputs
+    x = tf.contrib.layers.flatten(x)
+    for u, a in zip(units, activations):
+        x = tf.layers.dense(x, units=u, activation=a)
+
+    # return logits (no activation)
+    return x
 
 
-def conv1d(x, hidden_size, kernel_size, stride=1, dilation=1,
-           pooling_size=0, dropout=0.0, activation=None):
-    net = tf.layers.conv1d(x, hidden_size, kernel_size, stride, padding='same',
-                           dilation_rate=dilation, activation=activation)
-    if pooling_size:
-        net = tf.layers.max_pooling1d(net, pooling_size, pooling_size, padding="same")
-    return tf.layers.dropout(net, dropout)
+def cnn(x, n_classes):
+    # specify hard-coded parameters here
+    print('using cnn')
 
+    # number of filters per conv1d layer
+    units = [64] * 4
+    # width of the 1d kernel
+    kernels = [8] * 4
+    # stride at each layer
+    strides = [1] * 4
+    # pooling window at each layer
+    pools = [2, 2, 2, 4]
+    # dropout keep prob at each layer
+    dropouts = [0.9] * 4
+    # activation function at each layer
+    activations = [lrelu] * 4
 
-def cnn(input_, n_classes, hp):
-    net = input_
-    for i in range(hp.n_conv_layers):
-        net = conv1d(net, hp.hidden_sizes[i], hp.kernel_size, hp.stride, dilation=1,
-                     pooling_size=hp.pooling_sizes[i], dropout=hp.dropout_keep_probs[i],
-                     activation=hp.activation)
-    for i in range(hp.n_dconv_layers):
-        dilation= 2**(i + 1)
-        tmp = conv1d(net, hp.dconv_h_size, hp.kernel_size, hp.stride, dilation=1,
-                     pooling_size=0, dropout=hp.dropout, activation=hp.activation)
-        net = tf.concat([net, tmp], axis=2)
-    net = tf.contrib.layers.flatten(net)
-    net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation)
-    # return fc(net, n_classes, hp.dropout, activation=hp.output_activation)
-    return net
+    # conv 1-4
+    for u, k, s, p, d, a in zip(units,
+                                kernels,
+                                strides,
+                                pools,
+                                dropouts,
+                                activations):
+        x = tf.layers.conv1d(x, u, k, s,
+                             padding='same',
+                             activation=a)
+        x = tf.layers.max_pooling1d(x, p, p,
+                                    padding="same")
+        x = tf.layers.dropout(x, d)
+
+    x = tf.contrib.layers.flatten(x)
+
+    # fc 1
+    x = tf.layers.dense(x, 925)
+    x = tf.contrib.layers.layer_norm(x)
+    x = lrelu(x)
+    x = tf.layers.dropout(x, 0.9)
+
+    # fc 2
+    x = tf.layers.dense(x, n_classes)
+    x = tf.contrib.layers.layer_norm(x)
+    x = tf.layers.dropout(x, 0.9)
+
+    # return logits (no activation)
+    return x
 
 
 ################################# Define Networks ################################
@@ -181,10 +197,9 @@ def build_glimpse_network(
     # assert(glimpses.shape[1] == (glimpse_size * 2) * (dna_dim + num_resolutions))
     with tf.variable_scope(scope):
 
-        hp = cnn_hp(n_dconv_layers=0)
         if len(glimpses.shape) == 2:
             glimpses = tf.expand_dims(glimpses, -1)
-        glimpses = cnn(glimpses, n_classes=1, hp=hp)
+        glimpses = mlp(glimpses, n_classes=1)
         h_l = tf.layers.dense(
             location,
             units=size,
@@ -528,7 +543,7 @@ def train(glimpse_size,
         tf.reset_default_graph()
 
         # sharded tfrecord filenames
-        filenames = glob.glob('CEBPB-A549-hg38.txt/part-r-*')
+        filenames = glob.glob('../../deleteme/CEBPB-A549-hg38.txt/part-r-*')
         features, labels = dataset_input_fn(filenames=filenames,
             batch_size=batch_size,
             buffer_size=buffer_size,
