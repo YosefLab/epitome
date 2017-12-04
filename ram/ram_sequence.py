@@ -449,11 +449,6 @@ def train(glimpse_size,
     tf.global_variables_initializer().run()  # pylint: disable=E1101
 
     ################################### Train ###################################
-
-    # hidden state initialized to zeros
-    state = np.zeros(shape=[batch_size, state_size])
-    # TODO what should initial location be?
-    location = np.zeros(shape=[batch_size, loc_size]) + (length/2.0)
     
     for epoch in range(num_epochs):
         
@@ -469,6 +464,11 @@ def train(glimpse_size,
         # train_batches defined above based on data type
         for i in train_batches:
 
+            # hidden state initialized to zeros
+            state = np.zeros(shape=[batch_size, state_size])
+            # TODO what should initial location be?
+            location = np.zeros(shape=[batch_size, loc_size]) + (length/2.0)
+                
             x_train_batch = i[0] if deepsea else x_train[i:i+batch_size]
             y_train_batch = i[1] if deepsea else y_train[i:i+batch_size]
             
