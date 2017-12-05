@@ -249,7 +249,7 @@ def build_core_network(
             activation=None,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             bias_initializer=tf.contrib.layers.xavier_initializer())
-        # h_t = output_activation(out_1 + out_2)
+        h_t = output_activation(out_1 + out_2)
         # assert(h_t.shape[1] == output_size)
         return out_1 + out_2
 
@@ -517,22 +517,6 @@ def train(glimpse_size,
             num_epochs=1)
         loc_size = 1
     else:
-        # # TODO remove file hardcoding later and use all files
-        # data = h5py.File("results-hdf5/CEBPB-A549.hdf5", "r")
-        # dna = data["seq"]
-        # atac = np.expand_dims(data["atac"], -1)
-        # # dna_dim is either four (ATCG) or five (ATCGN)
-        # dna_dim = dna.shape[-1]
-        # x_train = np.concatenate([dna, atac], axis=-1)
-        # y_train = data["label"]
-        # train_batches = range(0, len(x_train), batch_size)
-        #
-        # # TODO change num_classes to num_labels
-        # # y_train should be two dimensional (n x num_classes)
-        # assert(len(y_train.shape) == 2)
-        # # override default num_classes based on data
-        # num_classes = y_train.shape[1]
-        # loc_size = 1
 
         # data pipeline parameters
         buffer_size = 10000
@@ -540,11 +524,16 @@ def train(glimpse_size,
         num_epochs = num_epochs
 
         # reset the graph because it might be finalized
-        tf.reset_default_graph()
+        # tf.reset_default_graph()
 
+        TRAIN_PROPORTION = 0.9
         # sharded tfrecord filenames
-        filenames = glob.glob('../../deleteme/CEBPB-A549-hg38.txt/part-r-*')
-        features, labels = dataset_input_fn(filenames=filenames,
+        filenames = glob.glob('CEBPB-A549-hg38.txt/part-r-*')
+        num_train_files = int(len(filenames) * TRAIN_PROPORTION)
+        train_filenames = filenames[:num_train_files]
+        valid_filenames = filenames[num_train_files:]
+
+        features, labels = dataset_input_fn(filenames=train_filenames,
             batch_size=batch_size,
             buffer_size=buffer_size,
             num_epochs=num_epochs)
@@ -557,6 +546,18 @@ def train(glimpse_size,
 
         dna_dim = 5
         num_classes = 1
+
+        # validation data
+        features_valid, labels_valid = dataset_input_fn(filenames=valid_filenames,
+            batch_size=batch_size,
+            buffer_size=buffer_size,
+            num_epochs=num_epochs)
+        dna_valid = tf.cast(features_valid['seq'], tf.float32)
+        atac_valid = tf.cast(features_valid['atac'], tf.float32)
+        chip_valid = tf.cast(labels_valid, tf.float32)
+        x_valid = tf.concat([dna_valid, tf.expand_dims(atac_valid, -1)], axis=-1)
+        y_valid = chip_valid
+
 
     ################################# Placeholders ##############################
 
@@ -665,6 +666,11 @@ def train(glimpse_size,
     assert(rewards.shape[1] == 1)
     assert(adv_n.shape[1] == 1)
 
+    # computing area under ROC
+    sy_auc, auc_op = tf.metrics.auc(
+        labels=sy_y,
+        predictions=sigmoid_output)
+
     ############################## Tensorflow engineering #######################
 
     # # initialize config
@@ -717,7 +723,8 @@ def train(glimpse_size,
                 # print(outputs[2])
 
             fetches = [update_op, glimpse_output, location_output, mean_location_output, log_probs, hidden_output,
-                       raw_action_output, sigmoid_output, rewards, cross_entropy_loss, policy_gradient_loss, glimpses]
+                       raw_action_output, sigmoid_output, rewards, cross_entropy_loss, policy_gradient_loss, glimpses,
+                       sy_auc, auc_op]
 
             if nn_baseline:
                 fetches.append(baseline_loss)
@@ -747,10 +754,28 @@ def train(glimpse_size,
             print("Accuracy: {}".format(correct_prediction))
             print("Cross Entropy Loss: {}".format(outputs[9]))
             print("Policy Gradient Loss: {}".format(outputs[10]))
-            if nn_baseline:
-                print("Baseline Loss: {}".format(outputs[12]))
-            print("Rewards: {}".format(np.mean(np.array(path_rewards))))
-            print(outputs[7][:10])
+            print("AUC: {}".format(outputs[12]))
+
+            # compute validation data stats
+            x_valid_batch, y_valid_batch = sess.run([x_valid, y_valid])
+            if len(x_valid_batch) < batch_size:
+                continue
+            fetches_valid = [sy_auc, auc_op, action_output, cross_entropy_loss, policy_gradient_loss]
+            outputs_valid = sess.run(fetches=fetches_valid,
+                                     feed_dict={sy_x: x_valid_batch,
+                                               sy_y: y_valid_batch,
+                                               sy_l: location,
+                                               sy_h: state})
+
+            correct_prediction_valid = np.mean(np.equal(y_valid_batch, outputs_valid[2]))
+
+            print("Validation AUC: {}".format(outputs_valid[0]))
+            print("Validation accuracy: {}".format(correct_prediction_valid))
+
+            # if nn_baseline:
+            #     print("Baseline Loss: {}".format(outputs[12]))
+            # print("Rewards: {}".format(np.mean(np.array(path_rewards))))
+            # print(outputs[7][:10])
             # print(outputs[2][:10])
             # if iter > 10:
             #     import pdb; pdb.set_trace()
