@@ -528,7 +528,7 @@ def train(glimpse_size,
 
         TRAIN_PROPORTION = 0.9
         # sharded tfrecord filenames
-        filenames = glob.glob('CEBPB-A549-hg38.txt/part-r-*')
+        filenames = glob.glob('../../CEBPB-A549-hg38.txt/part-r-*')
         num_train_files = int(len(filenames) * TRAIN_PROPORTION)
         train_filenames = filenames[:num_train_files]
         valid_filenames = filenames[num_train_files:]
