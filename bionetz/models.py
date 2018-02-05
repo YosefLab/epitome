@@ -132,7 +132,7 @@ def build_CNN_graph(DNAse = False, pos_weight = 50, rate = 1e-3, hp = cnn_hp()):
     dnase_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 126])
     target_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 919 - 126])
     if DNAse:
-        logits = cheating_cnn2(input_placeholder, dnase_placeholder, 919 - 126, hp)
+        logits = cheating_cnn(input_placeholder, dnase_placeholder, 919 - 126, hp)
     else:
         logits = cnn(input_placeholder, 919 - 126, hp)
     loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
