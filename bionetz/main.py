@@ -32,8 +32,8 @@ logz.configure_output_dir(logdir)
 # This builds the tf graph, and returns a dictionary of the ops needed for 
 # training and testing.
 ops = build_CNN_graph(DNAse = args.DNAse,
-                    pos_weight = int(args.pos_weight),
-                    rate = int(args.rate))
+                    pos_weight = float(args.pos_weight),
+                    rate = float(args.rate))
 
 # This function contains the training and validation loops.
 train_iterator = make_data_iterator(args.train, args.batch, args.DNAse) 
