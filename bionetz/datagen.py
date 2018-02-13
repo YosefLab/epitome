@@ -1,3 +1,8 @@
+"""
+Converst the deepsea data into tfrecords.
+REDACTED: we no longer use this file.
+"""
+
 import os
 import argparse
 import threading

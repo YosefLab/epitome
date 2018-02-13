@@ -1,13 +1,40 @@
-import tensorflow as tf
+"""
+Training utilities.
+"""
 import glob
+import logz
 import numpy as np
 from sklearn.metrics import roc_curve, roc_auc_score
+import tensorflow as tf
 
 
-import logz
+def train(ops,
+          log_freq,
+          save_freq,
+          save_path,
+          DNAse,
+          iterations,
+          train_iterator,
+          valid_iterator,
+          valid_size=1000//64,
+          num_logits=919-126,
+          ):
+    """"Main training loop.
 
-def train(ops, log_freq, save_freq, save_path, DNAse, iterations,
- train_iterator, valid_iterator, valid_size = 1000 // 64, num_logits = 919 - 126):
+    Args:
+        ops: Dictionary mapping keys to Tensors.
+        log_freq: Int. How many gradient steps before logging summaries.
+        save_freq: Int. How many gradient steps before saving a checkpoint.
+        save_path: String. Path to save checkpoints and logs to.
+        DNAse: Boolean. If this is true, use the DNAse labes as inputs to the 
+            model. Otherwise, leave them in the training labels.
+        iterations: Int. Number of iterations/gradient steps to train for.
+        train_iterator: Iterator of the training data. See `load_data.py`.
+        valid_iterator: Iterator of the validation data. See `load_data.py`.
+        valid_size: Int. The number of examples in the validation set.
+            TODO(weston): can you verify this?
+        num_logits: Int. Number of dimensions in the output logits.
+    """
     with tf.Session() as sess:
         # If a model exists, restore it. Otherwise, initialize a new one
         if glob.glob(save_path + '*'):
@@ -67,8 +94,24 @@ def train(ops, log_freq, save_freq, save_path, DNAse, iterations,
                 valid_losses = []
 
 
+def log(i,
+        training_losses,
+        valid_losses,
+        valid_logits,
+        valid_targets,
+        ):
+    """Logging a single gradient step to outfile.
 
-def log(i, training_losses, valid_losses, valid_logits, valid_targets):
+    Args:
+        i: Int. Current gradient step iteration.
+        training_losses: Float. The training loss.
+        validation_losses: Float. The validation loss.
+        valid_logits: To comput ROC AUC.
+        valid_targets: To comput ROC AUC.
+
+    Returns:
+        Nothing. Logs get dumped to outfile.
+    """
     aucs = []
     for j in np.arange(919 - 126):
         try:
