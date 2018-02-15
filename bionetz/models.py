@@ -263,6 +263,8 @@ def build_CNN_graph(DNAse = False, pos_weight = 50, rate = 1e-3, hp = cnn_hp()):
     TODO(weston): stop mixing capitals and underscores and other gross stuff.
         Also no spaces between equal signs when specifying argument defaults.
 
+    TODO(alex): stop introducing bugs into the code.
+
     Args:
         DNAse: Boolean. Whether or not to use DNAse as input to the network.
         pos_weight: Float. How much to weight positive examples.
@@ -273,13 +275,15 @@ def build_CNN_graph(DNAse = False, pos_weight = 50, rate = 1e-3, hp = cnn_hp()):
         A dictionary of Tensors to be fed into the main training loop.
         See `main(...)` in `main.py` for usage.
     """
+    num_logits = 816 - 126
+
     input_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 1000, 4])
     dnase_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 126])
-    target_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 919 - 126])
+    target_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, num_logits])
     if DNAse:
-        logits = cheating_cnn(input_placeholder, dnase_placeholder, 919 - 126, hp)
+        logits = cheating_cnn(input_placeholder, dnase_placeholder, num_logits, hp)
     else:
-        logits = cnn(input_placeholder, 919 - 126, hp)
+        logits = cnn(input_placeholder, num_logits, hp)
     loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
         logits=logits,targets=target_placeholder, pos_weight=pos_weight))
     optimizer = tf.train.AdamOptimizer(rate).minimize(loss)
