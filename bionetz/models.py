@@ -19,7 +19,7 @@ def lrelu(x, alpha=0.2):
     return tf.maximum(alpha*x, x)
 
 
-def fc(x, n_units, dropout, activation=None):
+def fc(x, n_units, dropout, activation=None, training=False):
     """Fully connected layer with dropout.
 
     Args:
@@ -35,11 +35,11 @@ def fc(x, n_units, dropout, activation=None):
     net = tf.contrib.layers.layer_norm(net)
     if activation:
         net = activation(net)
-    return tf.layers.dropout(net, dropout)
+    return tf.layers.dropout(net, dropout, training=training)
 
 
 def conv1d(x, hidden_size, kernel_size, stride=1, dilation=1,
-           pooling_size=0, dropout=0.0, activation=None):
+           pooling_size=0, dropout=0.0, activation=None,training=False):
     """A convolutional layer.
 
     Args:
@@ -60,10 +60,10 @@ def conv1d(x, hidden_size, kernel_size, stride=1, dilation=1,
     if pooling_size:
         net = tf.layers.max_pooling1d(net, pooling_size, pooling_size,
                                       padding="same")
-    return tf.layers.dropout(net, dropout)
+    return tf.layers.dropout(net, dropout, training=training)
 
 
-def cnn(input_, n_classes, hp):
+def cnn(input_, n_classes, hp, training=False):
     """Contructs a 1D convolutional neural network from a set of hparams.
 
     Arguments:
@@ -79,19 +79,22 @@ def cnn(input_, n_classes, hp):
     for i in range(hp.n_conv_layers):
         net = conv1d(net, hp.hidden_sizes[i], hp.kernel_size, hp.stride,
                      dilation=1, pooling_size=hp.pooling_sizes[i],
-                     dropout=hp.dropout_keep_probs[i], activation=hp.activation)
+                     dropout=hp.drop_probs[i], activation=hp.activation,
+                     training=training)
     for i in range(hp.n_dconv_layers):
         dilation= 2**(i + 1)
         tmp = conv1d(net, hp.dconv_h_size, hp.kernel_size, hp.stride,
                      dilation=1, pooling_size=0, dropout=hp.dropout,
-                     activation=hp.activation)
+                     activation=hp.activation, training=training)
         net = tf.concat([net, tmp], axis=2)
     net = tf.contrib.layers.flatten(net)
-    net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation)
-    return fc(net, n_classes, hp.dropout, activation=hp.output_activation)
+    net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation, 
+        training=training)
+    return fc(net, n_classes, hp.dropout, activation=hp.output_activation,
+        training=training)
 
 
-def cheating_cnn(input_, dnase, n_classes, hp):
+def cheating_cnn(input_, dnase, n_classes, hp, training=False):
     """Contructs a 1D convolutional neural network from a set of hparams.
 
     This network cheats! It differs from cnn(...) by TODO(weston).
@@ -109,20 +112,23 @@ def cheating_cnn(input_, dnase, n_classes, hp):
     for i in range(hp.n_conv_layers):
         net = conv1d(net, hp.hidden_sizes[i], hp.kernel_size, hp.stride,
                      dilation=1, pooling_size=hp.pooling_sizes[i],
-                     dropout=hp.dropout_keep_probs[i], activation=hp.activation)
+                     dropout=hp.drop_probs[i], activation=hp.activation,
+                     training=training)
     for i in range(hp.n_dconv_layers):
         dilation= 2**(i + 1)
         tmp = conv1d(net, hp.dconv_h_size, hp.kernel_size, hp.stride,
                      dilation=1, pooling_size=0, dropout=hp.dropout,
-                     activation=hp.activation)
+                     activation=hp.activation, training=training)
         net = tf.concat([net, tmp], axis=2)
     net = tf.contrib.layers.flatten(net)
     net = tf.concat([net, dnase], axis = 1)
-    net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation)
-    return fc(net, n_classes, hp.dropout, activation=hp.output_activation)
+    net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation,
+        training=training)
+    return fc(net, n_classes, hp.dropout, activation=hp.output_activation,
+        training=training)
 
 
-def cheating_cnn2(input_, dnase, n_classes, hp):
+def cheating_cnn2(input_, dnase, n_classes, hp, training=False):
     """Contructs a 1D convolutional neural network from a set of hparams.
 
     This network cheats! It differs from chearing_cnn(...) by TODO(weston).
@@ -140,21 +146,25 @@ def cheating_cnn2(input_, dnase, n_classes, hp):
     for i in range(hp.n_conv_layers):
         net = conv1d(net, hp.hidden_sizes[i], hp.kernel_size, hp.stride,
                      dilation=1, pooling_size=hp.pooling_sizes[i],
-                     dropout=hp.dropout_keep_probs[i], activation=hp.activation)
+                     dropout=hp.drop_probs[i], activation=hp.activation,
+                     training=training)
     for i in range(hp.n_dconv_layers):
         dilation= 2**(i + 1)
         tmp = conv1d(net, hp.dconv_h_size, hp.kernel_size, hp.stride,
                      dilation=1, pooling_size=0, dropout=hp.dropout,
-                     activation=hp.activation)
+                     activation=hp.activation, training=training)
         net = tf.concat([net, tmp], axis=2)
     net = tf.contrib.layers.flatten(net)
     net = tf.concat([net, dnase], axis = 1)
-    net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation)
-    net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation)
-    return fc(net, n_classes, hp.dropout, activation=hp.output_activation)
+    net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation,
+        training=training)
+    net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation,
+        training=training)
+    return fc(net, n_classes, hp.dropout, activation=hp.output_activation,
+        training=training)
 
 
-def rnn(input_, n_classes, hp): # RNN
+def rnn(input_, n_classes, hp, training=False): # RNN
     """Contructs a recurrent neural network (RNN) from a set of hparams.
 
     Arguments:
@@ -171,10 +181,10 @@ def rnn(input_, n_classes, hp): # RNN
     values = tf.unstack(input_, axis=1)
     outputs, states = tf.contrib.rnn.static_rnn(cell, values, dtype=tf.float32)
     return fc(outputs[-1], n_classes, hp.dropout,
-              activation=hp.output_activation)
+              activation=hp.output_activation, training=training)
 
 
-def srnn(input_, n_classes, hp): # Stacked RNN
+def srnn(input_, n_classes, hp, training=False): # Stacked RNN
     """Contructs a stacked RNN from a set of hparams.
 
     Arguments:
@@ -193,10 +203,10 @@ def srnn(input_, n_classes, hp): # Stacked RNN
     values = tf.unstack(input_, axis=1)
     outputs, states = tf.contrib.rnn.static_rnn(cell, values, dtype=tf.float32)
     return fc(outputs[-1], n_classes, hp.dropout,
-              activation=hp.output_activation)
+              activation=hp.output_activation, training=training)
 
 
-def birnn(input_, n_classes, hp):
+def birnn(input_, n_classes, hp, training=False):
     """Contructs a bidirectional RNN from a set of hparams.
 
     Arguments:
@@ -214,7 +224,8 @@ def birnn(input_, n_classes, hp):
     values = tf.unstack(input_, axis=1)
     outputs, fw_states, bw_states = tf.contrib.rnn.static_bidirectional_rnn(
         fw, bw, values, dtype=tf.float32)
-    return fc(outputs[-1], n_classes, hp.dropout, activation=hp.output_activation)
+    return fc(outputs[-1], n_classes, hp.dropout,
+     activation=hp.output_activation, training=training)
 
 def cnn_hp(**kwargs):
     """Constructs a default set of hyperparameters for a CNN.
@@ -234,8 +245,8 @@ def cnn_hp(**kwargs):
     hp.kernel_size = 8
     hp.pooling_sizes = [2, 2, 2, 4]
     hp.stride = 1
-    hp.dropout_keep_probs = [0.9, 0.9, 0.9, 0.9]
-    hp.dropout = 1
+    hp.drop_probs = [0.1, 0.1, 0.1, 0.1]
+    hp.dropout = 0.1
     hp.activation = lrelu
     hp.output_activation = tf.sigmoid
     hp.__dict__.update(kwargs)
@@ -277,7 +288,7 @@ def load_hparams(hparams_file):
   else:
     return None
 
-def build_CNN_graph(DNAse = False, pos_weight = 50, rate = 1e-3, hp = cnn_hp()):
+def build_CNN_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp()):
     """Builds a CNN graph.
 
     TODO(weston): stop mixing capitals and underscores and other gross stuff.
@@ -300,10 +311,12 @@ def build_CNN_graph(DNAse = False, pos_weight = 50, rate = 1e-3, hp = cnn_hp()):
     input_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 1000, 4])
     dnase_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 126])
     target_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, num_logits])
+    training = tf.placeholder(dtype = tf.bool)
     if DNAse:
-        logits = cheating_cnn(input_placeholder, dnase_placeholder, num_logits, hp)
+        logits = cheating_cnn(input_placeholder, dnase_placeholder, num_logits,
+         hp, training)
     else:
-        logits = cnn(input_placeholder, num_logits, hp)
+        logits = cnn(input_placeholder, num_logits, hp, training)
     loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
         logits=logits,targets=target_placeholder, pos_weight=pos_weight))
     optimizer = tf.train.AdamOptimizer(rate).minimize(loss)
@@ -318,4 +331,5 @@ def build_CNN_graph(DNAse = False, pos_weight = 50, rate = 1e-3, hp = cnn_hp()):
     		"logits": logits,
     		"loss": loss,
     		"init_op": init_op,
+            "training": training,
      		"saver": saver}

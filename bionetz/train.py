@@ -63,6 +63,7 @@ def train(ops,
                 ops["input_placeholder"]: input_,
                 ops["dnase_placeholder"]: dnase,
                 ops["target_placeholder"]: target,
+                ops["training"]: True
             })
             training_losses.append(_loss)
 
@@ -83,7 +84,8 @@ def train(ops,
                      feed_dict={
                         ops["input_placeholder"]: b,
                         ops["dnase_placeholder"]: d,
-                        ops["target_placeholder"]: t})
+                        ops["target_placeholder"]: t,
+                        ops["training"]: False})
                     valid_losses += [_valid_loss]
                     all_logits = np.append(all_logits, _logits, axis = 0)
                     all_targets = np.append(all_targets, t, axis = 0)
