@@ -288,7 +288,7 @@ def load_hparams(hparams_file):
   else:
     return None
 
-def build_CNN_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp()):
+def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp()):
     """Builds a CNN graph.
 
     TODO(weston): stop mixing capitals and underscores and other gross stuff.
