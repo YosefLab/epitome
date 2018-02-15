@@ -5,13 +5,14 @@ Trains a network that predicts TF binding sites.
 
 import os
 import argparse
+import pickle
 
 print("Importing TensorFlow...")
 import tensorflow as tf
 print("Done importing TensorFlow!")
 
 import logz
-from models import build_CNN_graph
+from models import build_CNN_graph, cnn_hp, load_hparams, save_hparams
 from train import train
 from load_data import make_data_iterator
 
@@ -51,7 +52,18 @@ def main():
 
 	logdir = os.path.join(args.logdir, args.name)
 	save_path = os.path.join(logdir, "model.ckpt")
+	hp_path = os.path.join(logdir, "model.hp")
 	logz.configure_output_dir(logdir)
+
+	hps = None
+	if os.path.isdir(logdir):
+		hps = load_hparams(hp_path)
+		if hps:
+			print("Model restored.")
+	if not hps:
+		hps = cnn_hp()
+		save_hparams(hp_path, hps)	
+		print("Model initialized.")
 
 	# This builds the tf graph, and returns a dictionary of the ops needed for 
 	# training and testing.
@@ -65,6 +77,8 @@ def main():
 	# Train the network.
 	train(ops, int(args.log_freq), int(args.save_freq), save_path, args.DNAse,
 	     int(args.iterations), train_iterator, valid_iterator)
+
+
 
 
 if __name__ == '__main__':

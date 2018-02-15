@@ -3,6 +3,8 @@ Model specifications here.
 """
 import tensorflow as tf
 import numpy as np
+import codecs
+import json
 
 
 def lrelu(x, alpha=0.2):
@@ -214,7 +216,6 @@ def birnn(input_, n_classes, hp):
         fw, bw, values, dtype=tf.float32)
     return fc(outputs[-1], n_classes, hp.dropout, activation=hp.output_activation)
 
-
 def cnn_hp(**kwargs):
     """Constructs a default set of hyperparameters for a CNN.
 
@@ -256,6 +257,25 @@ def rnn_hp(**kwargs):
     hp.output_activation = tf.sigmoid
     hp.__dict__.update(kwargs)
     return hp
+
+def save_hparams(hparams_file, hparams):
+  """Save hparams."""
+  with codecs.getwriter("utf-8")(tf.gfile.GFile(hparams_file, "wb")) as f:
+    f.write(hparams.to_json())
+
+def load_hparams(hparams_file):
+  """Load hparams from an existing model directory."""
+  if tf.gfile.Exists(hparams_file):
+    with codecs.getreader("utf-8")(tf.gfile.GFile(hparams_file, "rb")) as f:
+      try:
+        hparams_values = json.load(f)
+        hparams = tf.contrib.training.HParams(**hparams_values)
+      except ValueError:
+        print_out("  can't load hparams file")
+        return None
+    return hparams
+  else:
+    return None
 
 def build_CNN_graph(DNAse = False, pos_weight = 50, rate = 1e-3, hp = cnn_hp()):
     """Builds a CNN graph.

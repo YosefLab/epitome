@@ -39,10 +39,10 @@ def train(ops,
         # If a model exists, restore it. Otherwise, initialize a new one
         if glob.glob(save_path + '*'):
             ops["saver"].restore(sess, save_path)
-            print("Model restored.")
+            print("Weights restored.")
         else:
             sess.run(ops["init_op"])
-            print("Model initialized.")
+            print("Weights initialized.")
         
         # Calculate and print the number of parameters
         n_parameters = np.sum([np.prod(v.shape) 
