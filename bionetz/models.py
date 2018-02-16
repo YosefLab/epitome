@@ -164,6 +164,120 @@ def cheating_cnn2(input_, dnase, n_classes, hp, training=False):
         training=training)
 
 
+def github_pwms_cnn(input_, pwms, n_classes, hp, training=False):
+    """Convolutional network using PWMs as fixed filters from the first layer.
+    Same architecture as the OrbWeaver model.
+
+    Arguments:
+        input_: Input to the model, should be shape [batch, length, dim].
+        pwms: Position weight matrices for first layer filters.
+        n_classes: Int. Number of dimensions in the logits.
+        hp: A hyperparameter set to be used to wire the network.
+            There should be a set of defaults one can build from below.
+
+    Returns:
+        The predictions of the model.
+    """
+    net = input_
+    net = tf.nn.conv2d(
+        input=net,
+        filter=pwms,
+        strides=[1, 1, 1, 1],
+        padding="VALID",
+        # dilations=[1, 1, 1, 1],
+        name=None)
+    
+    net = tf.layers.max_pooling2d(
+        inputs=net, 
+        pool_size=(4,1), 
+        strides=(4,1), 
+        padding="valid")
+
+    net = tf.layers.conv2d(
+        inputs=net,
+        filters=200,
+        kernel_size=(6, 1),
+        strides=(1, 1),
+        padding="valid",
+        dilation_rate=(1, 1),
+        activation=tf.nn.relu,
+        kernel_initializer=tf.glorot_uniform_initializer())
+    
+    net = tf.layers.max_pooling2d(
+        inputs=net, 
+        pool_size=(3, 1), 
+        strides=(3, 1), 
+        padding="valid")
+    
+    net = tf.contrib.layers.flatten(net)
+
+    net = tf.layers.dense(
+        net,
+        units=500,
+        activation=tf.nn.relu,
+        kernel_initializer=tf.glorot_uniform_initializer())
+    
+    # TODO check if this should be gaussian noise
+    net = tf.layers.dropout(net, rate=0.8, training=training)
+
+    net = tf.layers.dense(
+        net,
+        units=n_classes,
+        activation=hp.output_activation,
+        kernel_initializer=tf.glorot_uniform_initializer())
+    return net
+
+
+def our_pwms_cnn(input_, pwms, n_classes, hp, training=False):
+    """Convolutional network using PWMs as fixed filters from the first layer.
+    Only the first layer of the network is modeled after OrbWeaver. 
+    Rest of architecture is modeled after cnn().
+
+    Arguments:
+        input_: Input to the model, should be shape [batch, length, dim].
+        pwms: Position weight matrices for first layer filters.
+        h_classes: Int. Number of dimensions in the logits.
+        hp: A hyperparameter set to be used to wire the network.
+            There should be a set of defaults one can build from below.
+
+    Returns:
+        The predictions of the model.
+    """
+    net = input_
+    net = tf.nn.conv2d(
+        input=net,
+        filter=pwms,
+        strides=[1, 1, 1, 1],
+        padding="VALID",
+        # dilations=[1, 1, 1, 1],
+        name=None)
+
+    net = tf.layers.max_pooling2d(
+        inputs=net, 
+        pool_size=(4,1), 
+        strides=(4,1), 
+        padding="valid")
+    net = tf.squeeze(net, 2)
+
+    # skip first conv layer since we used PWMs
+    for i in range(1, hp.n_conv_layers):
+        net = conv1d(net, hp.hidden_sizes[i], hp.kernel_size, hp.stride,
+                     dilation=1, pooling_size=hp.pooling_sizes[i],
+                     dropout=hp.drop_probs[i], activation=hp.activation,
+                     training=training)
+    for i in range(hp.n_dconv_layers):
+        dilation= 2**(i + 1)
+        tmp = conv1d(net, hp.dconv_h_size, hp.kernel_size, hp.stride,
+                     dilation=1, pooling_size=0, dropout=hp.dropout,
+                     activation=hp.activation, training=training)
+        net = tf.concat([net, tmp], axis=2)
+    net = tf.contrib.layers.flatten(net)
+    net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation, 
+        training=training)
+    return fc(net, n_classes, hp.dropout, activation=hp.output_activation,
+        training=training)
+
+
 def rnn(input_, n_classes, hp, training=False): # RNN
     """Contructs a recurrent neural network (RNN) from a set of hparams.
 
