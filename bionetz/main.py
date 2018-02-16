@@ -12,7 +12,7 @@ import tensorflow as tf
 print("Done importing TensorFlow!")
 
 import logz
-from models import build_CNN_graph, cnn_hp, load_hparams, save_hparams
+from models import build_cnn_graph, cnn_hp, load_hparams, save_hparams
 from train import train
 from load_data import make_data_iterator
 
