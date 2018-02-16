@@ -32,13 +32,13 @@ def test_and_valid_batches(batch_size, input_, target, seperate_dnase=False):
         if seperate_dnase:
             yield (input_[i*batch_size:(i+1)*batch_size,:,0:1000
                           ].transpose([0,2,1]), 
-                    target[i*batch_size:(i+1)*batch_size,:126],
-                    target[i*batch_size:(i+1)*batch_size,126:816])
+                    target[i*batch_size:(i+1)*batch_size,:125],
+                    target[i*batch_size:(i+1)*batch_size,125:815])
         else:
             yield (input_[i*batch_size:(i+1)*batch_size,:,0:1000
                           ].transpose([0,2,1]),
-                   np.zeros([batch_size, 126]),
-                   target[i*batch_size:(i+1)*batch_size, 126:816])
+                   np.zeros([batch_size, 125]),
+                   target[i*batch_size:(i+1)*batch_size, 125:815])
 
 
 def train_batches(batch_size, input_, target, seperate_dnase=False):
@@ -69,15 +69,15 @@ def train_batches(batch_size, input_, target, seperate_dnase=False):
         if seperate_dnase:
             yield (input_[0:1000,:,i*batch_size:(i+1)*batch_size
                           ].transpose([2, 0, 1]),
-                    target[:126,i*batch_size:(i+1)*batch_size
+                    target[:125,i*batch_size:(i+1)*batch_size
                            ].transpose([1, 0]),
-                    target[126:816,i*batch_size:(i+1)*batch_size
+                    target[125:815,i*batch_size:(i+1)*batch_size
                            ].transpose([1, 0]))
         else:
             yield (input_[0:1000,:,i*batch_size:(i+1)*batch_size
                           ].transpose([2, 0, 1]),
-                   np.zeros([batch_size, 126]),
-                   target[126:816,i*batch_size:(i+1)*batch_size
+                   np.zeros([batch_size, 125]),
+                   target[125:815,i*batch_size:(i+1)*batch_size
                           ].transpose([1, 0]))
 
 

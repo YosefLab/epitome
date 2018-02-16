@@ -306,10 +306,10 @@ def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp()):
         A dictionary of Tensors to be fed into the main training loop.
         See `main(...)` in `main.py` for usage.
     """
-    num_logits = 816 - 126
+    num_logits = 815 - 125
 
     input_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 1000, 4])
-    dnase_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 126])
+    dnase_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 125])
     target_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, num_logits])
     training = tf.placeholder(dtype = tf.bool)
     if DNAse:

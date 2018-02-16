@@ -17,7 +17,7 @@ def train(ops,
           train_iterator,
           valid_iterator,
           valid_size=1000//64,
-          num_logits=816 - 126,
+          num_logits=815 - 125,
           ):
     """"Main training loop.
 
