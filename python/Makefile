@@ -108,8 +108,11 @@ prepare:
 	$(pip) install py2bit==0.2.0
 	$(pip) install pybedtools
 	$(pip) install pysam
-	easy_install dist/bdgenomics.adam-0.23.0_SNAPSHOT-py2.7.egg
-
+	$(pip) install h5py
+	$(pip) install ipykernel
+	$(pip) install bdgenomics.adam
+	$(pip) install scipy
+	$(pip) install pandas
 
 check_clean_working_copy:
 	@printf "$(green)Checking if your working copy is clean ...$(normal)"
