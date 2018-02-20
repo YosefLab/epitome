@@ -1,12 +1,12 @@
 #!/bin/bash
 
 
-let total=1000
+let total=4400000
 let numshards=$1
 # let features=$2
 # let out=$3
 # let data=$4
-for cell in 'HeLa-S3' # 'GM12878' 'H1-hESC' 'HepG2' 'K562'
+for cell in 'A549' # 'HeLa-S3'  'GM12878' 'H1-hESC' 'HepG2' 'K562'
 do
 	for i in `seq 1 $numshards`;
 	do
