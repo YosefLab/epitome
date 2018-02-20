@@ -17,7 +17,7 @@ def train(ops,
           train_iterator,
           valid_iterator,
           valid_size=1000//64,
-          num_logits=919-126,
+          num_logits=815 - 125,
           ):
     """"Main training loop.
 
@@ -26,23 +26,23 @@ def train(ops,
         log_freq: Int. How many gradient steps before logging summaries.
         save_freq: Int. How many gradient steps before saving a checkpoint.
         save_path: String. Path to save checkpoints and logs to.
-        DNAse: Boolean. If this is true, use the DNAse labes as inputs to the 
+        DNAse: Boolean. If this is true, use the DNAse labels as inputs to the 
             model. Otherwise, leave them in the training labels.
         iterations: Int. Number of iterations/gradient steps to train for.
         train_iterator: Iterator of the training data. See `load_data.py`.
         valid_iterator: Iterator of the validation data. See `load_data.py`.
-        valid_size: Int. The number of examples in the validation set.
-            TODO(weston): can you verify this?
+        valid_size: Int. The number of examples in the validation set floor
+            divided by the batch size.
         num_logits: Int. Number of dimensions in the output logits.
     """
     with tf.Session() as sess:
         # If a model exists, restore it. Otherwise, initialize a new one
         if glob.glob(save_path + '*'):
             ops["saver"].restore(sess, save_path)
-            print("Model restored.")
+            print("Weights restored.")
         else:
             sess.run(ops["init_op"])
-            print("Model initialized.")
+            print("Weights initialized.")
         
         # Calculate and print the number of parameters
         n_parameters = np.sum([np.prod(v.shape) 
@@ -63,6 +63,7 @@ def train(ops,
                 ops["input_placeholder"]: input_,
                 ops["dnase_placeholder"]: dnase,
                 ops["target_placeholder"]: target,
+                ops["training"]: True
             })
             training_losses.append(_loss)
 
@@ -83,13 +84,15 @@ def train(ops,
                      feed_dict={
                         ops["input_placeholder"]: b,
                         ops["dnase_placeholder"]: d,
-                        ops["target_placeholder"]: t})
+                        ops["target_placeholder"]: t,
+                        ops["training"]: False})
                     valid_losses += [_valid_loss]
                     all_logits = np.append(all_logits, _logits, axis = 0)
                     all_targets = np.append(all_targets, t, axis = 0)
 
                 # Log relevant statistics
-                log(i, training_losses, valid_losses, all_logits, all_targets)
+                log(i, training_losses, valid_losses, all_logits, all_targets,
+                    num_logits)
                 training_losses = []
                 valid_losses = []
 
@@ -99,6 +102,7 @@ def log(i,
         valid_losses,
         valid_logits,
         valid_targets,
+        num_logits
         ):
     """Logging a single gradient step to outfile.
 
@@ -113,7 +117,7 @@ def log(i,
         Nothing. Logs get dumped to outfile.
     """
     aucs = []
-    for j in np.arange(919 - 126):
+    for j in np.arange(num_logits):
         try:
             aucs += [roc_auc_score(valid_targets[:, j],valid_logits[:, j])]
         except ValueError:

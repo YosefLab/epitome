@@ -3,6 +3,7 @@ Loads in deepsea data to train on.
 """
 
 import numpy as np
+import itertools
 
 import h5py
 from scipy.io import loadmat
@@ -27,18 +28,17 @@ def test_and_valid_batches(batch_size, input_, target, seperate_dnase=False):
         [batch_size, 1000, 4], dnase batch with shape [batch_size, 126] and a
         TF binding and histone batch with shape [batch_size, 793].
     """
-    while True:
-        for i in range(int(input_.shape[0]/batch_size)):
-            if seperate_dnase:
-                yield (input_[i*batch_size:(i+1)*batch_size,:,0:1000
-                              ].transpose([0,2,1]), 
-                        target[i*batch_size:(i+1)*batch_size,:126],
-                        target[i*batch_size:(i+1)*batch_size,126:])
-            else:
-                yield (input_[i*batch_size:(i+1)*batch_size,:,0:1000
-                              ].transpose([0,2,1]),
-                       np.zeros([batch_size, 126]),
-                       target[i*batch_size:(i+1)*batch_size, 126:])
+    for i in range(int(input_.shape[0]/batch_size)):
+        if seperate_dnase:
+            yield (input_[i*batch_size:(i+1)*batch_size,:,0:1000
+                          ].transpose([0,2,1]), 
+                    target[i*batch_size:(i+1)*batch_size,:125],
+                    target[i*batch_size:(i+1)*batch_size,125:815])
+        else:
+            yield (input_[i*batch_size:(i+1)*batch_size,:,0:1000
+                          ].transpose([0,2,1]),
+                   np.zeros([batch_size, 125]),
+                   target[i*batch_size:(i+1)*batch_size, 125:815])
 
 
 def train_batches(batch_size, input_, target, seperate_dnase=False):
@@ -62,24 +62,23 @@ def train_batches(batch_size, input_, target, seperate_dnase=False):
         [batch_size, 1000, 4], dnase batch with shape [batch_size, 126] and a
         TF binding and histone batch with shape [batch_size, 793].
     """
-    while True:
-        num_samples = input_.shape[2]
-        num_batches = num_samples / batch_size
-        batch_order = np.random.permutation(int(num_batches))
-        for i in batch_order:
-            if seperate_dnase:
-                yield (input_[0:1000,:,i*batch_size:(i+1)*batch_size
-                              ].transpose([2, 0, 1]),
-                        target[:126,i*batch_size:(i+1)*batch_size
-                               ].transpose([1, 0]),
-                        target[126:,i*batch_size:(i+1)*batch_size
-                               ].transpose([1, 0]))
-            else:
-                yield (input_[0:1000,:,i*batch_size:(i+1)*batch_size
-                              ].transpose([2, 0, 1]),
-                       np.zeros([batch_size, 126]),
-                       target[126:,i*batch_size:(i+1)*batch_size
-                              ].transpose([1, 0]))
+    num_samples = input_.shape[2]
+    num_batches = num_samples / batch_size
+    batch_order = np.random.permutation(int(num_batches))
+    for i in batch_order:
+        if seperate_dnase:
+            yield (input_[0:1000,:,i*batch_size:(i+1)*batch_size
+                          ].transpose([2, 0, 1]),
+                    target[:125,i*batch_size:(i+1)*batch_size
+                           ].transpose([1, 0]),
+                    target[125:815,i*batch_size:(i+1)*batch_size
+                           ].transpose([1, 0]))
+        else:
+            yield (input_[0:1000,:,i*batch_size:(i+1)*batch_size
+                          ].transpose([2, 0, 1]),
+                   np.zeros([batch_size, 125]),
+                   target[125:815,i*batch_size:(i+1)*batch_size
+                          ].transpose([1, 0]))
 
 
 def repeater(iterator, num_repeat=None):
@@ -88,17 +87,23 @@ def repeater(iterator, num_repeat=None):
     Args:
         iterator: An iterator.
         num_repeat: None or Int. Number of times to repeat. If this is None
-            the iterator will loop 9999 times.
+            the iterator will loop forever.
 
     Yields:
         Elements in the iterator over and over.
     """
     if num_repeat is None:
-        num_repeat = 9999
+        while True:
+            iterator, backup = itertools.tee(iterator)
+            for item in iterator:
+                yield item
+            iterator = backup
 
     for _ in range(num_repeat):
+        iterator, backup = itertools.tee(iterator)
         for item in iterator:
             yield item
+        iterator = backup
 
 
 def make_data_iterator(path, batch_size, seperate_dnase=False, num_repeat=None):
@@ -120,6 +125,7 @@ def make_data_iterator(path, batch_size, seperate_dnase=False, num_repeat=None):
         then you get a 3-tuple with an input batch with shape
         [batch_size, 1000, 4], dnase batch with shape [batch_size, 126] and a
         TF binding and histone batch with shape [batch_size, 793].
+
     """
     if path.endswith('train.mat'):
         # Read an hdf5 file.
