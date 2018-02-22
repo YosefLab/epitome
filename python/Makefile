@@ -44,7 +44,7 @@ help:
 
 # This Makefile uses bash features like printf and <()
 SHELL=bash
-python=python2.7
+python=python3.6
 pip=pip
 tests=epitome
 extras=
@@ -113,6 +113,7 @@ prepare:
 	$(pip) install bdgenomics.adam
 	$(pip) install scipy
 	$(pip) install pandas
+	$(pip) install tensorflow==1.3.0
 
 check_clean_working_copy:
 	@printf "$(green)Checking if your working copy is clean ...$(normal)"
