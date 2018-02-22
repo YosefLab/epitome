@@ -95,7 +95,9 @@ def cnn(input_, n_classes, hp, training=False):
 
 
 def cheating_cnn(input_, dnase, n_classes, hp, training=False):
-    """Contructs a 1D convolutional neural network from a set of hparams.
+    """ Depricated: When using DNase, use tfrecords and a regular CNN.
+
+    Contructs a 1D convolutional neural network from a set of hparams.
 
     This network cheats! It differs from cnn(...) by TODO(weston).
 
@@ -129,7 +131,9 @@ def cheating_cnn(input_, dnase, n_classes, hp, training=False):
 
 
 def cheating_cnn2(input_, dnase, n_classes, hp, training=False):
-    """Contructs a 1D convolutional neural network from a set of hparams.
+    """ Depricated: When using DNase, use tfrecords and a regular CNN.
+
+    Contructs a 1D convolutional neural network from a set of hparams.
 
     This network cheats! It differs from chearing_cnn(...) by TODO(weston).
 
@@ -359,8 +363,8 @@ def cnn_hp(**kwargs):
     hp.kernel_size = 8
     hp.pooling_sizes = [2, 2, 2, 4]
     hp.stride = 1
-    hp.drop_probs = [0.1, 0.1, 0.1, 0.1]
-    hp.dropout = 0.1
+    hp.drop_probs = [0., 0., 0., 0.]
+    hp.dropout = 0.
     hp.activation = lrelu
     hp.output_activation = tf.sigmoid
     hp.__dict__.update(kwargs)

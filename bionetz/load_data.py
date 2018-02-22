@@ -106,9 +106,12 @@ def tf_example_iterator(path, buffer_size=10000, batch_size=32, num_repeat=None)
     dataset = dataset.map(_parse_function)
     dataset = dataset.shuffle(buffer_size)
     dataset = dataset.batch(batch_size)
-    dataset = dataset.repeat(num_repeat)
+    if num_repeat:
+        dataset = dataset.repeat(num_repeat)
+    else:
+        dataset = dataset.repeat()
     iterator = dataset.make_one_shot_iterator()
-    return iterator
+    return iterator.get_next()
 
 
 def repeater(iterator, num_repeat=None):

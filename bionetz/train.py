@@ -58,10 +58,9 @@ def train(ops,
         # Default values for when we don't want to use these
         d = dnase = np.zeros((1, 125))
         m = mask = np.zeros((1, 18))
-        
         for i in range(iterations):
             if tfrecords:
-                input_, target, mask = sess.run(train_iterator.get_next())
+                input_, target, mask = sess.run(train_iterator)
                 # dnase takes default
             else:
                 input_, dnase, target = next(train_iterator)
@@ -89,7 +88,7 @@ def train(ops,
                 # The validation loop
                 for _ in range(valid_size):
                     if tfrecords:
-                        b, t, m = sess.run(train_iterator.get_next())
+                        b, t, m = sess.run(valid_iterator)
                     else:
                         b, d, t = next(train_iterator)
                     _logits, _valid_loss = sess.run([ops["logits"], ops["loss"]],
