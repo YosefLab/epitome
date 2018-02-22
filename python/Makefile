@@ -114,6 +114,7 @@ prepare:
 	$(pip) install scipy
 	$(pip) install pandas
 	$(pip) install tensorflow==1.3.0
+	$(pip) install sklearn
 
 check_clean_working_copy:
 	@printf "$(green)Checking if your working copy is clean ...$(normal)"
