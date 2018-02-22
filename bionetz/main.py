@@ -45,6 +45,8 @@ def main():
 	 'training')
 	parser.add_argument('--seed', default=1,
 	 help='the random seed to be fed into tensorflow')
+	parser.add_argument('--tfrecords', action='store_true',
+	 help='read data in from tfrecords')
 	args = parser.parse_args()
 
 	# Configure the logging and checkpointing directories.
@@ -65,18 +67,27 @@ def main():
 		save_hparams(hp_path, hps)	
 		print("Model initialized.")
 
+	if args.tfrecords:
+		num_logits = 18
+	else:
+		num_logits = 815-125
+
 	# This builds the tf graph, and returns a dictionary of the ops needed for 
 	# training and testing.
 	ops = build_cnn_graph(DNAse=args.DNAse, pos_weight=float(args.pos_weight),
-		                  rate=float(args.rate))
+		                  rate=float(args.rate), tfrecords=args.tfrecords,
+		                  num_logits=num_logits)
 
 	# This function contains the training and validation loops.
-	train_iterator=make_data_iterator(args.train, args.batch, args.DNAse) 
-	valid_iterator=make_data_iterator(args.valid, args.batch, args.DNAse)
+	train_iterator=make_data_iterator(args.train, args.batch, args.DNAse, 
+		tfrecords=args.tfrecords) 
+	valid_iterator=make_data_iterator(args.valid, args.batch, args.DNAse, 
+		tfrecords=args.tfrecords) 
 
 	# Train the network.
 	train(ops, int(args.log_freq), int(args.save_freq), save_path, args.DNAse,
-	     int(args.iterations), train_iterator, valid_iterator)
+	     int(args.iterations), train_iterator, valid_iterator, 
+	     num_logits=num_logits, tfrecords=args.tfrecords)
 
 
 
