@@ -187,6 +187,8 @@ def github_pwms_cnn(input_, pwms, n_classes, hp, training=False):
         # dilations=[1, 1, 1, 1],
         name=None)
     
+    net = lrelu(net)
+    
     net = tf.layers.max_pooling2d(
         inputs=net, 
         pool_size=(4,1), 
@@ -252,6 +254,8 @@ def our_pwms_cnn(input_, pwms, n_classes, hp, training=False):
         # dilations=[1, 1, 1, 1],
         name=None)
 
+    net = lrelu(net)
+    
     net = tf.layers.max_pooling2d(
         inputs=net, 
         pool_size=(4,1), 
