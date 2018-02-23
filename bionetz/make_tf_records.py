@@ -117,7 +117,7 @@ def main():
 
     iio.write_tfrecord(
         protos=iterator,
-        path=os.path.join(output_dir, args.start),
+        path=os.path.join(output_dir, args.start.zfill(7)),
         options=compression_options)
 
 

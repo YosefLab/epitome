@@ -4,9 +4,14 @@ Loads in deepsea data to train on.
 
 import numpy as np
 import itertools
+import glob
+import os
 
 import h5py
 from scipy.io import loadmat
+import tensorflow as tf
+
+import iio
 
 
 def test_and_valid_batches(batch_size, input_, target, seperate_dnase=False):
@@ -81,6 +86,34 @@ def train_batches(batch_size, input_, target, seperate_dnase=False):
                           ].transpose([1, 0]))
 
 
+def _parse_function(example_proto):
+    """ 
+    A helper function for extracting data from an example_proto
+
+    """
+    features = {'x/data': tf.FixedLenFeature((5000,), tf.int64),
+              'y': tf.FixedLenFeature((18,), tf.int64),
+              'mask': tf.FixedLenFeature((18,), tf.int64)}
+    parsed_features = tf.parse_single_example(example_proto, features)
+    return (tf.reshape(parsed_features["x/data"], (1000, 5)), parsed_features["y"],
+   parsed_features["mask"])
+
+def tf_example_iterator(path, buffer_size=10000, batch_size=32, num_repeat=None):
+    filenames = glob.glob(os.path.join(path, '*'))
+    dataset = tf.data.TFRecordDataset(filenames, 
+        compression_type="GZIP")
+
+    dataset = dataset.map(_parse_function)
+    dataset = dataset.shuffle(buffer_size)
+    dataset = dataset.batch(batch_size)
+    if num_repeat:
+        dataset = dataset.repeat(num_repeat)
+    else:
+        dataset = dataset.repeat()
+    iterator = dataset.make_one_shot_iterator()
+    return iterator.get_next()
+
+
 def repeater(iterator, num_repeat=None):
     """Repeats an iterator over and over.
 
@@ -106,7 +139,8 @@ def repeater(iterator, num_repeat=None):
         iterator = backup
 
 
-def make_data_iterator(path, batch_size, seperate_dnase=False, num_repeat=None):
+def make_data_iterator(path, batch_size, seperate_dnase=False, num_repeat=None,
+    tfrecords=False):
     """Makes a deepsea data iterator from a path.
 
     Args:
@@ -127,6 +161,10 @@ def make_data_iterator(path, batch_size, seperate_dnase=False, num_repeat=None):
         TF binding and histone batch with shape [batch_size, 793].
 
     """
+    if tfrecords:
+        return tf_example_iterator(path, batch_size=batch_size,
+         num_repeat=num_repeat)
+
     if path.endswith('train.mat'):
         # Read an hdf5 file.
         tmp = h5py.File(path)

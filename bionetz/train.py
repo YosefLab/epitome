@@ -17,7 +17,8 @@ def train(ops,
           train_iterator,
           valid_iterator,
           valid_size=1000//64,
-          num_logits=815 - 125,
+          num_logits=815-125,
+          tfrecords=False
           ):
     """"Main training loop.
 
@@ -54,9 +55,16 @@ def train(ops,
         training_losses = []
         valid_losses = []
 
-        
+        # Default values for when we don't want to use these
+        d = dnase = np.zeros((1, 125))
+        m = mask = np.zeros((1, 18))
         for i in range(iterations):
-            input_, dnase, target = next(train_iterator)
+            if tfrecords:
+                input_, target, mask = sess.run(train_iterator)
+                # dnase takes default
+            else:
+                input_, dnase, target = next(train_iterator)
+                # mask takes default
 
             # One step of training
             _loss, _ = sess.run([ops["loss"], ops["optimizer"]], feed_dict={
@@ -79,7 +87,10 @@ def train(ops,
 
                 # The validation loop
                 for _ in range(valid_size):
-                    b, d, t = next(valid_iterator)
+                    if tfrecords:
+                        b, t, m = sess.run(valid_iterator)
+                    else:
+                        b, d, t = next(train_iterator)
                     _logits, _valid_loss = sess.run([ops["logits"], ops["loss"]],
                      feed_dict={
                         ops["input_placeholder"]: b,

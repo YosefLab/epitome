@@ -95,7 +95,9 @@ def cnn(input_, n_classes, hp, training=False):
 
 
 def cheating_cnn(input_, dnase, n_classes, hp, training=False):
-    """Contructs a 1D convolutional neural network from a set of hparams.
+    """ Depricated: When using DNase, use tfrecords and a regular CNN.
+
+    Contructs a 1D convolutional neural network from a set of hparams.
 
     This network cheats! It differs from cnn(...) by TODO(weston).
 
@@ -129,7 +131,9 @@ def cheating_cnn(input_, dnase, n_classes, hp, training=False):
 
 
 def cheating_cnn2(input_, dnase, n_classes, hp, training=False):
-    """Contructs a 1D convolutional neural network from a set of hparams.
+    """ Depricated: When using DNase, use tfrecords and a regular CNN.
+
+    Contructs a 1D convolutional neural network from a set of hparams.
 
     This network cheats! It differs from chearing_cnn(...) by TODO(weston).
 
@@ -363,8 +367,8 @@ def cnn_hp(**kwargs):
     hp.kernel_size = 8
     hp.pooling_sizes = [2, 2, 2, 4]
     hp.stride = 1
-    hp.drop_probs = [0.1, 0.1, 0.1, 0.1]
-    hp.dropout = 0.1
+    hp.drop_probs = [0., 0., 0., 0.]
+    hp.dropout = 0.
     hp.activation = lrelu
     hp.output_activation = tf.sigmoid
     hp.__dict__.update(kwargs)
@@ -406,7 +410,8 @@ def load_hparams(hparams_file):
   else:
     return None
 
-def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp()):
+def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp(), 
+    tfrecords=False, num_logits=815-125):
     """Builds a CNN graph.
 
     TODO(weston): stop mixing capitals and underscores and other gross stuff.
@@ -424,17 +429,29 @@ def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp()):
         A dictionary of Tensors to be fed into the main training loop.
         See `main(...)` in `main.py` for usage.
     """
-    num_logits = 815 - 125
+    if tfrecords:
+        in_height = 5
+    else:
+        in_height = 4
 
-    input_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 1000, 4])
-    dnase_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, 125])
-    target_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, num_logits])
+    input_placeholder = tf.placeholder(dtype=tf.float32,
+     shape=[None, 1000, in_height])
+    dnase_placeholder = tf.placeholder(dtype=tf.float32,
+     shape=[None, 125])
+    target_placeholder = tf.placeholder(dtype=tf.float32, 
+     shape=[None, num_logits])
+    mask_default = tf.constant(1., shape=[1, num_logits])
+    mask_placeholder = tf.placeholder_with_default(mask_default, 
+     shape=[None, num_logits])
     training = tf.placeholder(dtype = tf.bool)
-    if DNAse:
+
+    if DNAse and not tfrecords:
         logits = cheating_cnn(input_placeholder, dnase_placeholder, num_logits,
          hp, training)
     else:
         logits = cnn(input_placeholder, num_logits, hp, training)
+        logits = tf.multiply(logits, mask_placeholder)
+
     loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
         logits=logits,targets=target_placeholder, pos_weight=pos_weight))
     optimizer = tf.train.AdamOptimizer(rate).minimize(loss)
