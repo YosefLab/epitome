@@ -38,26 +38,9 @@ def fc(x, n_units, dropout, activation=None, training=False):
     return tf.layers.dropout(net, dropout, training=training)
 
 
-def gated_conv1d(x, hidden_size, kernel_size, stride, padding='same',
-                 dilation_rate=dilation, activation=activation):
-    """Gated linear wrapper around conv1d.
-    https://arxiv.org/pdf/1612.08083.pdf
-
-    See the `conv1d` function for argument documentation.
-    """
-    net = tf.layers.conv1d(x, hidden_size, kernel_size, stride, padding='same',
-                           dilation_rate=dilation, activation=activation)
-    gate = tf.layers.conv1d(x, hidden_size, kernel_size, stride, padding='same',
-                            dilation_rate=dilation, activation=tf.nn.sigmoid)
-    net = tf.multiply(net, gate)
-    if pooling_size:
-        net = tf.layers.max_pooling1d(net, pooling_size, pooling_size,
-                                      padding="same")
-    return tf.layers.dropout(net, dropout, training=training)
-
-
 def conv1d(x, hidden_size, kernel_size, stride=1, dilation=1,
-           pooling_size=0, dropout=0.0, activation=None,training=False):
+           pooling_size=0, dropout=0.0, activation=None, gated=False,
+           training=False):
     """A convolutional layer.
 
     Args:
@@ -75,6 +58,13 @@ def conv1d(x, hidden_size, kernel_size, stride=1, dilation=1,
     """
     net = tf.layers.conv1d(x, hidden_size, kernel_size, stride, padding='same',
                            dilation_rate=dilation, activation=activation)
+    if gated:
+        # Gated linear wrapper around conv1d.
+        # https://arxiv.org/pdf/1612.08083.pdf
+        gate = tf.layers.conv1d(x, hidden_size, kernel_size, stride,
+                                padding='same', dilation_rate=dilation,
+                                activation=tf.nn.sigmoid)
+        net = tf.multiply(net, gate)
     if pooling_size:
         net = tf.layers.max_pooling1d(net, pooling_size, pooling_size,
                                       padding="same")
@@ -98,12 +88,13 @@ def cnn(input_, n_classes, hp, training=False):
         net = conv1d(net, hp.hidden_sizes[i], hp.kernel_size, hp.stride,
                      dilation=1, pooling_size=hp.pooling_sizes[i],
                      dropout=hp.drop_probs[i], activation=hp.activation,
-                     training=training)
+                     training=training, gated=hp.gated)
     for i in range(hp.n_dconv_layers):
         dilation= 2**(i + 1)
         tmp = conv1d(net, hp.dconv_h_size, hp.kernel_size, hp.stride,
                      dilation=1, pooling_size=0, dropout=hp.dropout,
-                     activation=hp.activation, training=training)
+                     activation=hp.activation, training=training,
+                     gated=hp.gated)
         net = tf.concat([net, tmp], axis=2)
     net = tf.contrib.layers.flatten(net)
     net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation, 
@@ -389,6 +380,7 @@ def cnn_hp(**kwargs):
     hp.dropout = 0.
     hp.activation = lrelu
     hp.output_activation = tf.sigmoid
+    hp.gated = False
     hp.__dict__.update(kwargs)
     return hp
 
