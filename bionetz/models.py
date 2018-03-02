@@ -38,6 +38,24 @@ def fc(x, n_units, dropout, activation=None, training=False):
     return tf.layers.dropout(net, dropout, training=training)
 
 
+def gated_conv1d(x, hidden_size, kernel_size, stride, padding='same',
+                 dilation_rate=dilation, activation=activation):
+    """Gated linear wrapper around conv1d.
+    https://arxiv.org/pdf/1612.08083.pdf
+
+    See the `conv1d` function for argument documentation.
+    """
+    net = tf.layers.conv1d(x, hidden_size, kernel_size, stride, padding='same',
+                           dilation_rate=dilation, activation=activation)
+    gate = tf.layers.conv1d(x, hidden_size, kernel_size, stride, padding='same',
+                            dilation_rate=dilation, activation=tf.nn.sigmoid)
+    net = tf.multiply(net, gate)
+    if pooling_size:
+        net = tf.layers.max_pooling1d(net, pooling_size, pooling_size,
+                                      padding="same")
+    return tf.layers.dropout(net, dropout, training=training)
+
+
 def conv1d(x, hidden_size, kernel_size, stride=1, dilation=1,
            pooling_size=0, dropout=0.0, activation=None,training=False):
     """A convolutional layer.
