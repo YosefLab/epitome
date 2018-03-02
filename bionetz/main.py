@@ -12,7 +12,7 @@ import tensorflow as tf
 print("Done importing TensorFlow!")
 
 import logz
-from models import build_cnn_graph, cnn_hp, load_hparams, save_hparams
+from models import build_cnn_graph, cnn_hp, load_hparams, save_hparams, parse_hparam_string
 from train import train
 from load_data import make_data_iterator
 
@@ -35,6 +35,9 @@ def main():
 	 help='the name of the model to be created or loaded')
 	parser.add_argument('--logdir', default='../logs',
 	 help='the directory to save logs in')
+	parser.add_argument('--custom_hparams', default=None,
+	 help='custom comma-separated string of hparams to use for training. For'
+	 ' example, `n_conv_layers=10,gated=True`.')
 	parser.add_argument('--iterations', default=int(3e6),
 	 help='the number of batches to train on')
 	parser.add_argument('--log_freq', default=1000,
@@ -63,7 +66,8 @@ def main():
 		if hps:
 			print("Model restored.")
 	if not hps:
-		hps = cnn_hp()
+		custom_kwargs = parse_hparam_string(args.custom_hparams)
+		hps = cnn_hp(**custom_kwargs)
 		save_hparams(hp_path, hps)	
 		print("Model initialized.")
 

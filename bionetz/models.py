@@ -358,6 +358,7 @@ def birnn(input_, n_classes, hp, training=False):
     return fc(outputs[-1], n_classes, hp.dropout,
      activation=hp.output_activation, training=training)
 
+
 def cnn_hp(**kwargs):
     """Constructs a default set of hyperparameters for a CNN.
 
@@ -401,10 +402,12 @@ def rnn_hp(**kwargs):
     hp.__dict__.update(kwargs)
     return hp
 
+
 def save_hparams(hparams_file, hparams):
   """Save hparams."""
   with codecs.getwriter("utf-8")(tf.gfile.GFile(hparams_file, "wb")) as f:
     f.write(hparams.to_json())
+
 
 def load_hparams(hparams_file):
   """Load hparams from an existing model directory."""
@@ -419,6 +422,19 @@ def load_hparams(hparams_file):
     return hparams
   else:
     return None
+
+
+def parse_hparam_string(string):
+    """Parses a string specifying hparams.
+    Examples:
+        `n_conv_layers=10,gated=True`
+        `dropout=10,fc_h_size=1024`
+    """
+    if string is None:
+        return {}
+    tuples = [s.split('=') for s in string.split(',')]
+    return {k: eval(v) for k, v in tuples.items()}
+
 
 def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp(), 
     tfrecords=False, num_logits=815-125):
