@@ -7,6 +7,9 @@ import codecs
 import json
 
 
+################################# LAYERS #######################################
+
+
 def lrelu(x, alpha=0.2):
     """Leaky ReLU activation.
 
@@ -35,7 +38,8 @@ def fc(x, n_units, dropout, activation=None, training=False):
     net = tf.contrib.layers.layer_norm(net)
     if activation:
         net = activation(net)
-    return tf.layers.dropout(net, dropout, training=training)
+    return tf.layers.dropout(
+        net, dropout, training=training)
 
 
 def conv1d(x, hidden_size, kernel_size, stride=1, dilation=1,
@@ -69,6 +73,9 @@ def conv1d(x, hidden_size, kernel_size, stride=1, dilation=1,
         net = tf.layers.max_pooling1d(net, pooling_size, pooling_size,
                                       padding="same")
     return tf.layers.dropout(net, dropout, training=training)
+
+
+################################# MODELS #######################################
 
 
 def cnn(input_, n_classes, hp, training=False):
@@ -359,6 +366,9 @@ def birnn(input_, n_classes, hp, training=False):
      activation=hp.output_activation, training=training)
 
 
+############################## DEFAULT HPARAMS #################################
+
+
 def cnn_hp(**kwargs):
     """Constructs a default set of hyperparameters for a CNN.
 
@@ -403,6 +413,9 @@ def rnn_hp(**kwargs):
     return hp
 
 
+############################## HPARAMS UTILS ###################################
+
+
 def save_hparams(hparams_file, hparams):
   """Save hparams."""
   with codecs.getwriter("utf-8")(tf.gfile.GFile(hparams_file, "wb")) as f:
@@ -424,7 +437,7 @@ def load_hparams(hparams_file):
     return None
 
 
-def parse_hparam_string(string):
+def parse_hparams_string(string):
     """Parses a string specifying hparams.
     Examples:
         `n_conv_layers=10,gated=True`
@@ -434,6 +447,9 @@ def parse_hparam_string(string):
         return {}
     tuples = [s.split('=') for s in string.split(',')]
     return {k: eval(v) for k, v in tuples.items()}
+
+
+############################## GRAPH UTILS #####################################
 
 
 def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp(), 

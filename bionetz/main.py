@@ -12,7 +12,7 @@ import tensorflow as tf
 print("Done importing TensorFlow!")
 
 import logz
-from models import build_cnn_graph, cnn_hp, load_hparams, save_hparams, parse_hparam_string
+from models import build_cnn_graph, cnn_hp, load_hparams, save_hparams, parse_hparams_string
 from train import train
 from load_data import make_data_iterator
 
@@ -66,7 +66,7 @@ def main():
 		if hps:
 			print("Model restored.")
 	if not hps:
-		custom_kwargs = parse_hparam_string(args.custom_hparams)
+		custom_kwargs = parse_hparams_string(args.custom_hparams)
 		hps = cnn_hp(**custom_kwargs)
 		save_hparams(hp_path, hps)	
 		print("Model initialized.")
