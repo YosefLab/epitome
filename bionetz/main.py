@@ -61,15 +61,19 @@ def main():
 	logz.configure_output_dir(logdir)
 
 	hps = None
-	if os.path.isdir(logdir):
-		hps = load_hparams(hp_path)
-		if hps:
-			print("Model restored.")
+	# TODO(weston): Figure out why this doesn't work
+	# if os.path.isdir(logdir):
+	# 	hps = load_hparams(hp_path)
+	# 	if hps:
+	# 		print("Model restored.")
 	if not hps:
 		custom_kwargs = parse_hparams_string(args.custom_hparams)
 		hps = cnn_hp(**custom_kwargs)
+		print("!", hps.to_json())
+		print(hps.l1)
 		save_hparams(hp_path, hps)	
 		print("Model initialized.")
+
 
 	if args.tfrecords:
 		num_logits = 18
@@ -80,7 +84,7 @@ def main():
 	# training and testing.
 	ops = build_cnn_graph(DNAse=args.DNAse, pos_weight=float(args.pos_weight),
 		                  rate=float(args.rate), tfrecords=args.tfrecords,
-		                  num_logits=num_logits)
+		                  num_logits=num_logits, hp=hps)
 
 	# This function contains the training and validation loops.
 	train_iterator=make_data_iterator(args.train, args.batch, args.DNAse, 
