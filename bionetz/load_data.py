@@ -98,13 +98,15 @@ def _parse_function(example_proto):
     return (tf.reshape(parsed_features["x/data"], (1000, 5)), parsed_features["y"],
    parsed_features["mask"])
 
-def tf_example_iterator(path, buffer_size=10000, batch_size=32, num_repeat=None):
+def tf_example_iterator(path, buffer_size=10000, batch_size=32, num_repeat=None,
+    shuffle=True):
     filenames = glob.glob(os.path.join(path, '*'))
     dataset = tf.data.TFRecordDataset(filenames, 
         compression_type="GZIP")
 
     dataset = dataset.map(_parse_function)
-    dataset = dataset.shuffle(buffer_size)
+    if shuffle:
+        dataset = dataset.shuffle(buffer_size)
     dataset = dataset.batch(batch_size)
     if num_repeat:
         dataset = dataset.repeat(num_repeat)
@@ -140,7 +142,7 @@ def repeater(iterator, num_repeat=None):
 
 
 def make_data_iterator(path, batch_size, seperate_dnase=False, num_repeat=None,
-    tfrecords=False):
+    tfrecords=False, shuffle=True):
     """Makes a deepsea data iterator from a path.
 
     Args:
@@ -163,7 +165,7 @@ def make_data_iterator(path, batch_size, seperate_dnase=False, num_repeat=None,
     """
     if tfrecords:
         return tf_example_iterator(path, batch_size=batch_size,
-         num_repeat=num_repeat)
+         num_repeat=num_repeat, shuffle=shuffle)
 
     if path.endswith('train.mat'):
         # Read an hdf5 file.

@@ -23,6 +23,8 @@ def main():
 	 help='path to file containing training data. Must end in "train.mat"')
 	parser.add_argument('--valid', default='../../deepsea_train/valid.mat',
 	 help='path to file containing validation data. Must end in "valid.mat"')
+	parser.add_argument('--valid_size', default=1000,
+	 help='path to file containing validation data. Must end in "valid.mat"')
 	parser.add_argument('--DNAse', action='store_true',
 	 help='use DNAse for classification')
 	parser.add_argument('--batch', default=64,
@@ -89,12 +91,13 @@ def main():
 	train_iterator=make_data_iterator(args.train, args.batch, args.DNAse, 
 		tfrecords=args.tfrecords) 
 	valid_iterator=make_data_iterator(args.valid, args.batch, args.DNAse, 
-		tfrecords=args.tfrecords) 
+		tfrecords=args.tfrecords, shuffle=False) 
 
 	# Train the network.
 	train(ops, int(args.log_freq), int(args.save_freq), save_path, args.DNAse,
 	     int(args.iterations), train_iterator, valid_iterator, 
-	     num_logits=num_logits, tfrecords=args.tfrecords, rate=float(args.rate))
+	     num_logits=num_logits, tfrecords=args.tfrecords, rate=float(args.rate),
+	     valid_size=(int(args.valid_size)//int(args.batch)+1))
 
 
 

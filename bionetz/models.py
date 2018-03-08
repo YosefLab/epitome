@@ -507,7 +507,7 @@ def build_cnn_graph(DNAse=False, pos_weight=50, hp=cnn_hp(),
     if hp.l1 or hp.l2:
         loss += tf.losses.get_regularization_losses()
 
-    optimizer = tf.train.AdamOptimizer(rate).minimize(loss)
+    optimizer = tf.train.AdamOptimizer(learning_rate=rate).minimize(loss)
         
     init_op = tf.global_variables_initializer()
     saver = tf.train.Saver()
