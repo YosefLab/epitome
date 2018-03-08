@@ -24,7 +24,8 @@ def main():
 	parser.add_argument('--valid', default='../../deepsea_train/valid.mat',
 	 help='path to file containing validation data. Must end in "valid.mat"')
 	parser.add_argument('--valid_size', default=1000,
-	 help='path to file containing validation data. Must end in "valid.mat"')
+	 help='the number of examples in the validation set (needed since we cant' +
+	 'count tf_records')
 	parser.add_argument('--DNAse', action='store_true',
 	 help='use DNAse for classification')
 	parser.add_argument('--batch', default=64,
