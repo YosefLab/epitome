@@ -92,7 +92,7 @@ def main():
 	train_iterator=make_data_iterator(args.train, args.batch, args.DNAse, 
 		tfrecords=args.tfrecords) 
 	valid_iterator=make_data_iterator(args.valid, args.batch, args.DNAse, 
-		tfrecords=args.tfrecords, shuffle=False) 
+		tfrecords=args.tfrecords) 
 
 	# Train the network.
 	train(ops, int(args.log_freq), int(args.save_freq), save_path, args.DNAse,
