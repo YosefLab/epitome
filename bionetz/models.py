@@ -459,7 +459,7 @@ def parse_hparams_string(string):
 ############################## GRAPH UTILS #####################################
 
 
-def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp(), 
+def build_cnn_graph(DNAse=False, pos_weight=50, hp=cnn_hp(), 
     tfrecords=False, num_logits=815-125):
     """Builds a CNN graph.
 
@@ -493,6 +493,7 @@ def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp(),
     mask_placeholder = tf.placeholder_with_default(mask_default, 
      shape=[None, num_logits])
     training = tf.placeholder(dtype = tf.bool)
+    rate = tf.placeholder(dtype=tf.float32)
 
     if DNAse and not tfrecords:
         logits = cheating_cnn(input_placeholder, dnase_placeholder, num_logits,
@@ -506,7 +507,7 @@ def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp(),
     if hp.l1 or hp.l2:
         loss += tf.losses.get_regularization_losses()
 
-    optimizer = tf.train.AdamOptimizer(rate).minimize(loss)
+    optimizer = tf.train.AdamOptimizer(learning_rate=rate).minimize(loss)
         
     init_op = tf.global_variables_initializer()
     saver = tf.train.Saver()
@@ -519,4 +520,5 @@ def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp(),
     		"loss": loss,
     		"init_op": init_op,
             "training": training,
-     		"saver": saver}
+     		"saver": saver,
+            "rate": rate}

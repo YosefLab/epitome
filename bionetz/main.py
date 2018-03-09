@@ -23,6 +23,9 @@ def main():
 	 help='path to file containing training data. Must end in "train.mat"')
 	parser.add_argument('--valid', default='../../deepsea_train/valid.mat',
 	 help='path to file containing validation data. Must end in "valid.mat"')
+	parser.add_argument('--valid_size', default=1000,
+	 help='the number of examples in the validation set (needed since we cant' +
+	 'count tf_records')
 	parser.add_argument('--DNAse', action='store_true',
 	 help='use DNAse for classification')
 	parser.add_argument('--batch', default=64,
@@ -70,7 +73,6 @@ def main():
 		custom_kwargs = parse_hparams_string(args.custom_hparams)
 		hps = cnn_hp(**custom_kwargs)
 		print("!", hps.to_json())
-		print(hps.l1)
 		save_hparams(hp_path, hps)	
 		print("Model initialized.")
 
@@ -83,7 +85,7 @@ def main():
 	# This builds the tf graph, and returns a dictionary of the ops needed for 
 	# training and testing.
 	ops = build_cnn_graph(DNAse=args.DNAse, pos_weight=float(args.pos_weight),
-		                  rate=float(args.rate), tfrecords=args.tfrecords,
+		                  tfrecords=args.tfrecords,
 		                  num_logits=num_logits, hp=hps)
 
 	# This function contains the training and validation loops.
@@ -95,7 +97,8 @@ def main():
 	# Train the network.
 	train(ops, int(args.log_freq), int(args.save_freq), save_path, args.DNAse,
 	     int(args.iterations), train_iterator, valid_iterator, 
-	     num_logits=num_logits, tfrecords=args.tfrecords)
+	     num_logits=num_logits, tfrecords=args.tfrecords, rate=float(args.rate),
+	     valid_size=(int(args.valid_size)//int(args.batch)+1))
 
 
 
