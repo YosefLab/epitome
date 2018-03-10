@@ -18,7 +18,8 @@ def train(ops,
           valid_iterator,
           valid_size=1000//64,
           num_logits=815-125,
-          tfrecords=False
+          tfrecords=False,
+          rate=1e-3
           ):
     """"Main training loop.
 
@@ -71,7 +72,8 @@ def train(ops,
                 ops["input_placeholder"]: input_,
                 ops["dnase_placeholder"]: dnase,
                 ops["target_placeholder"]: target,
-                ops["training"]: True
+                ops["training"]: True,
+                ops["rate"]: rate
             })
             training_losses.append(_loss)
 
@@ -96,7 +98,8 @@ def train(ops,
                         ops["input_placeholder"]: b,
                         ops["dnase_placeholder"]: d,
                         ops["target_placeholder"]: t,
-                        ops["training"]: False})
+                        ops["training"]: False,
+                        ops["rate"]: rate})
                     valid_losses += [_valid_loss]
                     all_logits = np.append(all_logits, _logits, axis = 0)
                     all_targets = np.append(all_targets, t, axis = 0)

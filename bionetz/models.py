@@ -22,7 +22,7 @@ def lrelu(x, alpha=0.2):
     return tf.maximum(alpha*x, x)
 
 
-def fc(x, n_units, dropout, activation=None, training=False):
+def fc(x, n_units, dropout, activation=None, training=False, l1=0.0):
     """Fully connected layer with dropout.
 
     Args:
@@ -34,7 +34,9 @@ def fc(x, n_units, dropout, activation=None, training=False):
     Returns:
         The output activation of the layer.
     """
-    net = tf.layers.dense(x, n_units)
+    print(l1)
+    net = tf.layers.dense(x, n_units, 
+        kernel_regularizer=tf.contrib.layers.l1_regularizer(l1))
     net = tf.contrib.layers.layer_norm(net)
     if activation:
         net = activation(net)
@@ -44,7 +46,7 @@ def fc(x, n_units, dropout, activation=None, training=False):
 
 def conv1d(x, hidden_size, kernel_size, stride=1, dilation=1,
            pooling_size=0, dropout=0.0, activation=None, gated=False,
-           training=False):
+           training=False, l2=0.0):
     """A convolutional layer.
 
     Args:
@@ -61,7 +63,9 @@ def conv1d(x, hidden_size, kernel_size, stride=1, dilation=1,
         The output activation of the layer.
     """
     net = tf.layers.conv1d(x, hidden_size, kernel_size, stride, padding='same',
-                           dilation_rate=dilation, activation=activation)
+                           dilation_rate=dilation, activation=activation,
+                           kernel_regularizer=
+                           tf.contrib.layers.l2_regularizer(l2))
     if gated:
         # Gated linear wrapper around conv1d.
         # https://arxiv.org/pdf/1612.08083.pdf
@@ -95,19 +99,19 @@ def cnn(input_, n_classes, hp, training=False):
         net = conv1d(net, hp.hidden_sizes[i], hp.kernel_size, hp.stride,
                      dilation=1, pooling_size=hp.pooling_sizes[i],
                      dropout=hp.drop_probs[i], activation=hp.activation,
-                     training=training, gated=hp.gated)
+                     training=training, gated=hp.gated, l2=hp.l2)
     for i in range(hp.n_dconv_layers):
         dilation= 2**(i + 1)
         tmp = conv1d(net, hp.dconv_h_size, hp.kernel_size, hp.stride,
                      dilation=1, pooling_size=0, dropout=hp.dropout,
                      activation=hp.activation, training=training,
-                     gated=hp.gated)
+                     gated=hp.gated, l2=hp.l2)
         net = tf.concat([net, tmp], axis=2)
     net = tf.contrib.layers.flatten(net)
     net = fc(net, hp.fc_h_size, hp.dropout, activation=hp.activation, 
-        training=training)
+        training=training, l1=hp.l1)
     return fc(net, n_classes, hp.dropout, activation=hp.output_activation,
-        training=training)
+        training=training, l1=hp.l1)
 
 
 def cheating_cnn(input_, dnase, n_classes, hp, training=False):
@@ -392,6 +396,8 @@ def cnn_hp(**kwargs):
     hp.activation = lrelu
     hp.output_activation = tf.sigmoid
     hp.gated = False
+    hp.l1 = 0.0
+    hp.l2 = 0.0
     hp.__dict__.update(kwargs)
     return hp
 
@@ -428,6 +434,7 @@ def load_hparams(hparams_file):
     with codecs.getreader("utf-8")(tf.gfile.GFile(hparams_file, "rb")) as f:
       try:
         hparams_values = json.load(f)
+        print(hparams_values)
         hparams = tf.contrib.training.HParams(**hparams_values)
       except ValueError:
         print_out("  can't load hparams file")
@@ -445,14 +452,14 @@ def parse_hparams_string(string):
     """
     if string is None:
         return {}
-    tuples = [s.split('=') for s in string.split(',')]
-    return {k: eval(v) for k, v in tuples.items()}
+    tuples = [s.split('=') for s in string.split('/')]
+    return {k: eval(v) for k, v in tuples}
 
 
 ############################## GRAPH UTILS #####################################
 
 
-def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp(), 
+def build_cnn_graph(DNAse=False, pos_weight=50, hp=cnn_hp(), 
     tfrecords=False, num_logits=815-125):
     """Builds a CNN graph.
 
@@ -486,6 +493,7 @@ def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp(),
     mask_placeholder = tf.placeholder_with_default(mask_default, 
      shape=[None, num_logits])
     training = tf.placeholder(dtype = tf.bool)
+    rate = tf.placeholder(dtype=tf.float32)
 
     if DNAse and not tfrecords:
         logits = cheating_cnn(input_placeholder, dnase_placeholder, num_logits,
@@ -495,8 +503,11 @@ def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp(),
         logits = tf.multiply(logits, mask_placeholder)
 
     loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
-        logits=logits,targets=target_placeholder, pos_weight=pos_weight))
-    optimizer = tf.train.AdamOptimizer(rate).minimize(loss)
+            logits=logits,targets=target_placeholder, pos_weight=pos_weight))
+    if hp.l1 or hp.l2:
+        loss += tf.losses.get_regularization_losses()
+
+    optimizer = tf.train.AdamOptimizer(learning_rate=rate).minimize(loss)
         
     init_op = tf.global_variables_initializer()
     saver = tf.train.Saver()
@@ -509,4 +520,5 @@ def build_cnn_graph(DNAse=False, pos_weight=50, rate=1e-3, hp=cnn_hp(),
     		"loss": loss,
     		"init_op": init_op,
             "training": training,
-     		"saver": saver}
+     		"saver": saver,
+            "rate": rate}
