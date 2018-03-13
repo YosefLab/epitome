@@ -16,8 +16,9 @@ import tensorflow as tf
 
 
 @registry.register_model
-class GeneExpressionConv(t2t_model.T2TModel):
-  """Gene expression conv net.
+class ProteinBindingConv(t2t_model.T2TModel):
+  """Protein binding conv net.
+
   Based on "Basenji" model from
   http://www.biorxiv.org/content/early/2017/07/10/161851
   Uses layer_norm instead of batch_norm.
@@ -49,6 +50,7 @@ class GeneExpressionConv(t2t_model.T2TModel):
           hp.pooling_windows[i],
           hp.dropout,
           dilation_rate=1,
+          gated_linear=hp.gated_linear,
           name="conv_%d" % (i + 1))
 
     # Dense dilated conv layers
@@ -62,6 +64,7 @@ class GeneExpressionConv(t2t_model.T2TModel):
           pooling_window=0,
           dropout_rate=hp.dropout,
           dilation_rate=dilation_rate,
+          gated_linear=hp.gated_linear,
           name="dconv_%d" % (i + 1))
       out = tf.concat([out, dconv_out], axis=2)
 
@@ -117,25 +120,23 @@ def fc_layer(x, num_out, dropout_rate, name="fc"):
 
 
 @registry.register_hparams
-def gene_expression_conv_base():
-  """Hparams for GeneExpressionConv model."""
+def pb_conv_base():
+  """Hparams for ProteinBindingConv model."""
   hparams = common_hparams.basic_params1()
 
-  batch_size = 10
-  output_length = 2048
-  inputs_per_output = 128
-  chunk_size = 4
-  input_length = output_length * inputs_per_output // chunk_size
-  hparams.batch_size = input_length * batch_size
+  hparams.batch_size = 64
 
   hparams.dropout = 0.1
   hparams.add_hparam("num_conv_layers", 4)
-  hparams.add_hparam("num_dconv_layers", 7)
+  hparams.add_hparam("num_dconv_layers", 0)
+  # Whether to use gated-linear convolutions from
+  # https://arxiv.org/pdf/1612.08083.pdf
+  hparams.add_hparam("gated_linear", True)
   # The product of these pooling windows should match
   # input_length/target_length.
   hparams.add_hparam("pooling_windows", [2, 2, 2, 4])
 
-  hparams.hidden_size = 256
-  hparams.kernel_width = 20
+  hparams.hidden_size = 925
+  hparams.kernel_width = 8
   hparams.add_hparam("stride", 1)
   return hparams
