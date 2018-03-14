@@ -81,12 +81,11 @@ class ProteinBindingProblem(problem.Problem):
 class DeepSeaProblem(ProteinBindingProblem):
 	"""Transcription factor binding site prediction."""
 	_DEEPSEA_DOWNLOAD_URL = ("http://deepsea.princeton.edu/media/code/"
-	                     "deepsea_train_bundle.v0.9.tar.gz")
+	                     	 "deepsea_train_bundle.v0.9.tar.gz")
 	_DEEPSEA_FILENAME = "deepsea_train_bundle.v0.9.tar.gz"
 	_DEEPSEA_DIRNAME = "deepsea_train"
 	_DEEPSEA_TRAIN_FILENAME = "deepsea_train/train.mat"
 	_DEEPSEA_TEST_FILENAME = "deepsea_train/valid.mat"
-	_DEEPSEA_FEATURES_FILENAME = ""
 
 	def generator(self, tmp_dir, is_training):
 		self._get_data(tmp_dir)
@@ -157,5 +156,168 @@ class DeepSeaProblem(ProteinBindingProblem):
 
 
 class EpitomeProblem(ProteinBindingProblem):
-	
+	_DEEPSEA_DOWNLOAD_URL = ("http://deepsea.princeton.edu/media/code/"
+	                     	 "deepsea_train_bundle.v0.9.tar.gz")
+	_DEEPSEA_FILENAME = "deepsea_train_bundle.v0.9.tar.gz"
+	_DEEPSEA_DIRNAME = "deepsea_train"
+	_DEEPSEA_TRAIN_FILENAME = "deepsea_train/train.mat"
+	_DEEPSEA_TEST_FILENAME = "deepsea_train/valid.mat"
+	_DEEPSEA_FEATURES_FILENAME = "../data/feature_name"
 
+	@property
+	def train_cells(self):
+		return ['HeLa-S3', 'GM12878', 'H1-hESC', 'HepG2', 'K562']
+
+	@property
+	def train_proteins(self):
+		return ['p300', 'NRSF', 'CTCF', 'GABP', 'JunD', 'CEBPB', 'Pol2', 'EZH2',
+        		'Mxi1', 'Max', 'RFX5', 'TAF1', 'Nrf1', 'Rad21', 'TBP', 'USF2',
+             	'c-Myc','CHD2']
+
+    @property
+    def num_examples(self):
+    	return 4400000
+
+    @property
+	def num_output_predictions(self):
+		"""Number of binding site predictions."""
+		return len(self.train_proteins)
+
+	@property
+	def num_channels(self):
+		"""Input channels."""
+		return 6
+
+	def generator(self, tmp_dir, is_training):
+		self._get_data(tmp_dir)
+
+		if is_training:
+			return self._train_generator(tmp_dir)
+		else:
+			return self._test_generator(tmp_dir)
+
+	def _get_data(self, directory):
+		"""Download all files to directory unless they are there."""
+		zip_name = os.path.join(directory, self._DEEPSEA_FILENAME)
+		generator_utils.maybe_download(
+			directory, self._DEEPSEA_FILENAME, self._DEEPSEA_DOWNLOAD_URL)
+		zipfile.ZipFile(zip_name, "r").extractall(zip_name)
+
+	def generator(self, tmp_dir, is_training):
+		self._get_data(tmp_dir)
+
+		tmp = h5py.File(args.data)
+    	all_inputs, all_targets = tmp['trainxdata'], tmp['traindata']
+
+		if is_training:
+			for cell in self.train_cells:
+				for example in cell_generator(all_inputs, all_targets, cell, 0, 
+									self.num_examples * .9):
+					yield example
+		else:
+			for cell in self.train_cells:
+				for example in cell_generator(all_inputs, all_targets, cell, 
+									self.num_examples * .9, self.num_examples):
+					yield example
+
+    def example_reading_spec(self):
+	    data_fields = {
+	        "inputs/data": tf.FixedLenFeature([], tf.string),
+	        "inputs/shape": tf.FixedLenFeature([], tf.string),
+	        "targets": tf.FixedLenFeature([], tf.string),
+	        "mask": tf.FixedLenFeature([], tf.string),
+	    }
+	    data_items_to_decoders = None
+	    return (data_fields, data_items_to_decoders)
+
+	def preprocess_example(self, example, mode, unused_hparams):
+	    del mode
+
+	    inputs = example["inputs/data"]
+	    inputs_shape = example["inputs/shape"]
+	    targets = example["targets"]
+	    mask = example["mask"]
+
+	    targets_shape = [self.num_output_predictions, 1]
+
+	    # Parse the bytestring based on how you encoded it in common_generator
+	    inputs = tf.reshape(tf.decode_raw(inputs, tf.bool), 
+	    					tf.decode_raw(inputs_shape, tf.int32))
+	    targets = tf.reshape(tf.decode_raw(targets, tf.bool), targets_shape)
+	    mask = tf.reshape(tf.decode_raw(mask, tf.bool), targets_shape)
+
+	    example["inputs"] = tf.to_float(inputs)
+	    example["targets"] = tf.to_int32(targets)
+	    example["mask"] = tf.to_int32(mask)
+
+    	return example
+
+    def cell_generator(all_inputs, all_targets, cell, start, stop):
+	    # Builds dicts of indicies of different features
+	    dnase_dict, tf_dict = self.parse_feature_name(
+	    	self._DEEPSEA_FEATURES_FILENAME)
+	    
+	    # builds the vector of locations for querying from matrix, and the mask
+	    tf_locs, tf_mask = self.get_feature_indices()
+
+	    # Pre-build these features
+	    mask_feature = [tf_mask.astype(np.bool).tobytes()]
+
+	    num_samples = all_inputs.shape[2]
+	    for i in range(start, min(stop, num_samples)):
+
+	        # x is 1000 * 6:
+			# The first four are one-hot bases,
+			# The fifth is DNAse (the same value for every base)
+			# The sixth is strand
+	        inputs1 = all_inputs[:, :, i]
+	        inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
+	        inputs3 = np.array([[0 if i < self.num_examples / 2 else 1]] * 1000)
+	        inputs = np.concatenate([inputs1, inputs2, inputs3], 1)
+
+	        # y is queried from the target matrix. We mask by whether we 
+	        # actually have this TF for this cell type.
+	        targets = np.array([all_targets[c, i] for c in tf_locs]) * tf_mask
+
+	        yield {
+        		'inputs/data': [inputs.flatten().astype(np.bool).tobytes()],
+        		'inputs/shape': [inputs.shape.astype(np.int32).tobytes()],
+        		'targets': [targets.astype(np.bool).tobytes()],
+        		'mask': mask_feature
+        	}
+
+	def parse_feature_name(self, path):
+	    with open(path) as f:
+	        for _ in f:
+	            break
+
+	        i = 0
+	        dnase_dict = {}
+	        tf_dict = {}
+
+	        for line in f:
+	            if i == 815:
+	                break
+	            _, label = line.split('\t')
+	            cell, assay, note = label.split('|')
+	            if assay == "DNase":
+	                dnase_dict[cell] = i
+	            else:
+	                if cell not in tf_dict:
+	                    tf_dict[cell] = {}
+	                if assay not in tf_dict[cell]:
+	                    tf_dict[cell][assay] = i
+	            i += 1
+	    return dnase_dict, tf_dict
+
+    def get_feature_indices(self):
+    	tf_vec = []
+	    i = 0
+	    for tf in tfs:
+	        if tf in tf_dict[cell]:
+	            tf_vec += [(tf_dict[cell][tf], 1)]
+	        else:
+	            tf_vec += [(0, 0)]
+	    tf_locs = np.array([v[0] for v in tf_vec])
+	    tf_mask = np.array([v[1] for v in tf_vec])
+	    return tf_locs, tf_mask
