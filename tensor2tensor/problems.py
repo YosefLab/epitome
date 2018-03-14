@@ -155,3 +155,7 @@ class DeepSeaProblem(ProteinBindingProblem):
 
     	return example
 
+
+class EpitomeProblem(ProteinBindingProblem):
+	
+
