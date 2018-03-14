@@ -24,7 +24,8 @@ from tensor2tensor.utils import registry
 
 import tensorflow as tf
 
-		
+
+@registry.register_problem
 class ProteinBindingProblem(problem.Problem):
 	"""Transcription factor binding site prediction."""
 
@@ -78,6 +79,7 @@ class ProteinBindingProblem(problem.Problem):
 		p.target_space_id = problem.SpaceID.GENERIC
 
 
+@registry.register_problem
 class DeepSeaProblem(ProteinBindingProblem):
 	"""Transcription factor binding site prediction."""
 	_DEEPSEA_DOWNLOAD_URL = ("http://deepsea.princeton.edu/media/code/"
@@ -155,6 +157,7 @@ class DeepSeaProblem(ProteinBindingProblem):
     	return example
 
 
+@registry.register_problem
 class EpitomeProblem(ProteinBindingProblem):
 	_DEEPSEA_DOWNLOAD_URL = ("http://deepsea.princeton.edu/media/code/"
 	                     	 "deepsea_train_bundle.v0.9.tar.gz")

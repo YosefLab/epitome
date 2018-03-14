@@ -140,3 +140,4 @@ def pb_conv_base():
   hparams.kernel_width = 8
   hparams.add_hparam("stride", 1)
   return hparams
+  
