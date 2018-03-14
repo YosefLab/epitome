@@ -9,7 +9,6 @@ import argparse
 import glob
 
 
-
 # Builds dictionaries to look up coordinates
 def parse_feature_name(path):
     with open(path) as f:
@@ -41,7 +40,9 @@ tfs = ['p300', 'NRSF', 'CTCF', 'GABP', 'JunD', 'CEBPB', 'Pol2', 'EZH2',
              'c-Myc','CHD2']
 
 # Generates records for a given cell type and range
-def records_iterator(input_, target, cell, start, stop, features_path,
+
+# TODO: get allpos_bed file, use this to get regions in accessibility_path
+def records_iterator(input_, target, cell, start, stop, features_path, accessibility_path
     ):
 
     # Builds dicts of indicies of different features
@@ -95,6 +96,8 @@ def main():
     # On millennium, these paths should not be in the home directory!!!!
     parser.add_argument('--features', 
         default='../../DeepSEA-v0.94/resources/feature_name')
+    parser.add_argument('--accessibility', 
+        default='/data/epitome/accessibility/dnase/hg19')
     parser.add_argument('--out', default='./output')
     parser.add_argument('--data', default='../../deepsea_train/train.mat')
     args = parser.parse_args()
@@ -109,9 +112,20 @@ def main():
 
     tmp = h5py.File(args.data)
     i, t = tmp['trainxdata'], tmp['traindata']
+    
+    
+
+    # traverse through all files in accessibility directory and get filenames
+    accessibility_files = [f for f in os.listdir(args.accessibility) if os.isfile(os.join(args.accessibility, f))]
+    # get accessibility file with correct cell type
+    accessibility_path = filter(lambda x: x.contains(args.cell, accessibility_files)
+                                
+    # there should be accessibility
+    assert(len(accessibility_path) == 1)
+                    
 
     iterator = records_iterator(i, t, args.cell, int(args.start),
-     int(args.stop), features_path=args.features)
+     int(args.stop), features_path=args.features, accessibility = accessibility_path[0])
     compression_options = tf.python_io.TFRecordOptions(
         tf.python_io.TFRecordCompressionType.GZIP)
 
