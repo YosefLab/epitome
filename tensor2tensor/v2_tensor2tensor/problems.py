@@ -1,6 +1,7 @@
 import math
 import multiprocessing as mp
 import os
+import fnmatch
 import tarfile
 
 # Dependency imports
@@ -150,10 +151,15 @@ class Epitome(ProteinBinding):
 	_DEEPSEA_TRAIN_FILENAME = "deepsea_train/train.mat"
 	_DEEPSEA_TEST_FILENAME = "deepsea_train/valid.mat"
 	_DEEPSEA_FEATURES_FILENAME = "../data/feature_name"
+	_DNASE_BED_DIRNAME = "/data/epitome/accessibility/dnase/hg19"
 
 	@property
 	def train_cells(self):
 		return ['HeLa-S3', 'GM12878', 'H1-hESC', 'HepG2', 'K562']
+    
+	@property
+	def test_cells(self):
+		return ['A549']
 
 	@property
 	def train_proteins(self):
@@ -173,15 +179,16 @@ class Epitome(ProteinBinding):
 	@property
 	def num_channels(self):
 		"""Input channels."""
+		""" Channel for sequence data (4), accessibility data (1) and strand. """
 		return 6
 
-	def generator(self, tmp_dir, is_training):
-		self._get_data(tmp_dir)
+# 	def generator(self, tmp_dir, is_training):
+# 		self._get_data(tmp_dir)
 
-		if is_training:
-			return self._train_generator(tmp_dir)
-		else:
-			return self._test_generator(tmp_dir)
+# 		if is_training:
+# 			return self._train_generator(tmp_dir)
+# 		else:
+# 			return self._test_generator(tmp_dir)
 
 	def _get_data(self, directory):
 		"""Download all files to directory unless they are there."""
@@ -204,7 +211,7 @@ class Epitome(ProteinBinding):
 									self.num_examples * .9):
 					yield example
 		else:
-			for cell in self.train_cells:
+			for cell in self.test_cells:
 				for example in cell_generator(all_inputs, all_targets, cell, 
 									self.num_examples * .9, self.num_examples):
 					yield example
@@ -241,7 +248,32 @@ class Epitome(ProteinBinding):
 
 		return example
 
-	def cell_generator(all_inputs, all_targets, cell, start, stop):
+	def get_accessibility_vector(chr_, start, stop, accessibility_df):
+	'''
+	Returns an cut vector of length start - stop
+	@param chr_ chr to access
+	@param start start of region to process
+	@param stop end of region to process
+	@param accessibility_path path to bed file of DNase or ATAC seq data
+	as processed by seqOutBias. Example data in c66:/data/epitome/accessibility
+	 '''
+	    
+	    filtered_bed_df = accessibility_df[(accessibility_df['chr'] == chr_) & (accessibility_df['start'] < stop)& (accessibility_df['stop'] > start)]
+	    
+	    # length of vector
+		length = stop - start
+		assert(length > 0)
+
+		vector = np.zeros(length)
+
+		# TODO inefficient
+		for i, row in filtered_bed_df.iterrows():
+			vector[row['start'] - start] = row['value']
+
+			return vector
+
+
+	def cell_generator(all_inputs, all_targets, cell, chr_, start, stop):
 		# Builds dicts of indicies of different features
 		dnase_dict, tf_dict = self.parse_feature_name(self._DEEPSEA_FEATURES_FILENAME)
 		
@@ -252,6 +284,18 @@ class Epitome(ProteinBinding):
 		mask_feature = [tf_mask.astype(np.bool).tobytes()]
 
 		num_samples = all_inputs.shape[2]
+
+
+		# get accessibility path
+		accessibility_filename = ''
+		for file in os.listdir( _DNASE_BED_DIRNAME ):
+    			if fnmatch.fnmatch(file, ('*%s*' % cell)):
+       				accessibility_filename = _DNASE_BED_DIRNAME  + "/" + file
+
+		if (len(accessibility_filename) > 0):	
+    			accessibility_df = pd.read_csv(accessibility_path, delimiter='\t', header=None)
+			accessibility_df.columns = ['chr', 'start', 'stop', 'strand', 'value']
+
 		for i in range(start, min(stop, num_samples)):
 
 			# x is 1000 * 6:
@@ -259,7 +303,13 @@ class Epitome(ProteinBinding):
 			# The fifth is DNAse (the same value for every base)
 			# The sixth is strand
 			inputs1 = all_inputs[:, :, i]
-			inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
+
+			if accessibility_filename == '':
+				inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
+				
+			else:
+				inputs2 = np.array(getAccessibilityVector(chr_, start, stop, accessibility_df)
+				
 			inputs3 = np.array([[0 if i < self.num_examples / 2 else 1]] * 1000)
 			inputs = np.concatenate([inputs1, inputs2, inputs3], 1)
 
