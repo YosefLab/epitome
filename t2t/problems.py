@@ -18,7 +18,7 @@ from tensor2tensor.utils import registry
 import tensorflow as tf
 
 @registry.register_problem
-class ProteinBinding(problem.Problem):
+class ProteinBindingProblem(problem.Problem):
 	"""Transcription factor binding site prediction."""
 
 	@property
@@ -66,12 +66,11 @@ class ProteinBinding(problem.Problem):
 
 
 @registry.register_problem
-class Deepsea(ProteinBinding):
-	"""Predict next line of poetry from the last line. From Gutenberg texts."""
+class DeepSeaProblem(ProteinBindingProblem):
 	"""Transcription factor binding site prediction."""
 
 	_DEEPSEA_DOWNLOAD_URL = ("http://deepsea.princeton.edu/media/code/"
-												 "deepsea_train_bundle.v0.9.tar.gz")
+							 "deepsea_train_bundle.v0.9.tar.gz")
 	_DEEPSEA_FILENAME = "deepsea_train_bundle.v0.9.tar.gz"
 	_DEEPSEA_DIRNAME = "deepsea_train"
 	_DEEPSEA_TRAIN_FILENAME = "deepsea_train/train.mat"
@@ -86,9 +85,9 @@ class Deepsea(ProteinBinding):
 
 	def _get_data(self, directory):
 		"""Download all Deepsea files to directory unless they are there."""
-		tar_name = os.path.join(directory, self._DEEPSEA_FILENAME)
 		generator_utils.maybe_download(
 			directory, self._DEEPSEA_FILENAME, self._DEEPSEA_DOWNLOAD_URL)
+		tar_name = os.path.join(directory, self._DEEPSEA_FILENAME)
 		tar = tarfile.open(tar_name, "r:gz")
 		tar.extractall(directory)
 		tar.close()
@@ -103,11 +102,11 @@ class Deepsea(ProteinBinding):
 
 			yield {
 				"inputs": [inputs.astype(np.bool).tobytes()],
-				"targets": [targets.astype(np.bool).tobytes()],
+				"targets": [targets.astype(np.bool).tobytes()]
 			}
 
-	def _test_generator(tmp_dir, cell):
-		tmp = loadmat(path)
+	def _test_generator(self, tmp_dir):
+		tmp = loadmat(os.path.join(tmp_dir, self._DEEPSEA_TEST_FILENAME))
 		all_inputs, all_targets = tmp['validxdata'], tmp['validdata']
 
 		for i in range(all_inputs.shape[0]):
@@ -120,7 +119,10 @@ class Deepsea(ProteinBinding):
 			}
 
 	def example_reading_spec(self):
-		data_fields = {"inputs": tf.FixedLenFeature([], tf.string),"targets": tf.FixedLenFeature([], tf.string)}
+		data_fields = {
+			"inputs": tf.FixedLenFeature([], tf.string),
+			"targets": tf.FixedLenFeature([], tf.string)
+		}
 		data_items_to_decoders = None
 		return (data_fields, data_items_to_decoders)
 
@@ -141,10 +143,11 @@ class Deepsea(ProteinBinding):
 		example["targets"] = tf.to_int32(targets)
 		return example
 
+
 @registry.register_problem
-class Epitome(ProteinBinding):
+class EpitomeProblem(ProteinBindingProblem):
 	_DEEPSEA_DOWNLOAD_URL = ("http://deepsea.princeton.edu/media/code/"
-												 "deepsea_train_bundle.v0.9.tar.gz")
+							 "deepsea_train_bundle.v0.9.tar.gz")
 	_DEEPSEA_FILENAME = "deepsea_train_bundle.v0.9.tar.gz"
 	_DEEPSEA_DIRNAME = "deepsea_train"
 	_DEEPSEA_TRAIN_FILENAME = "deepsea_train/train.mat"
@@ -175,19 +178,11 @@ class Epitome(ProteinBinding):
 		"""Input channels."""
 		return 6
 
-	def generator(self, tmp_dir, is_training):
-		self._get_data(tmp_dir)
-
-		if is_training:
-			return self._train_generator(tmp_dir)
-		else:
-			return self._test_generator(tmp_dir)
-
 	def _get_data(self, directory):
 		"""Download all files to directory unless they are there."""
-		tar_name = os.path.join(directory, self._DEEPSEA_FILENAME)
 		generator_utils.maybe_download(
 			directory, self._DEEPSEA_FILENAME, self._DEEPSEA_DOWNLOAD_URL)
+		tar_name = os.path.join(directory, self._DEEPSEA_FILENAME)
 		tar = tarfile.open(tar_name, "r:gz")
 		tar.extractall(directory)
 		tar.close()
@@ -211,10 +206,10 @@ class Epitome(ProteinBinding):
 
 	def example_reading_spec(self):
 		data_fields = {
-				"inputs/data": tf.FixedLenFeature([], tf.string),
-				"inputs/shape": tf.FixedLenFeature([], tf.string),
-				"targets": tf.FixedLenFeature([], tf.string),
-				"mask": tf.FixedLenFeature([], tf.string),
+			"inputs/data": tf.FixedLenFeature([], tf.string),
+			"inputs/shape": tf.FixedLenFeature([], tf.string),
+			"targets": tf.FixedLenFeature([], tf.string),
+			"mask": tf.FixedLenFeature([], tf.string)
 		}
 		data_items_to_decoders = None
 		return (data_fields, data_items_to_decoders)
@@ -277,7 +272,7 @@ class Epitome(ProteinBinding):
 	def parse_feature_name(self, path):
 		with open(path) as f:
 			for _ in f:
-					break
+				break
 
 			i = 0
 			dnase_dict = {}
@@ -309,4 +304,3 @@ class Epitome(ProteinBinding):
 		tf_locs = np.array([v[0] for v in tf_vec])
 		tf_mask = np.array([v[1] for v in tf_vec])
 		return tf_locs, tf_mask
-			
