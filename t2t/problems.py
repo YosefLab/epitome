@@ -2,13 +2,14 @@ import math
 import multiprocessing as mp
 import os
 import fnmatch
+from data.accessibility import get_accessibility_vector
 import tarfile
 
 # Dependency imports
 
 import h5py
-import numpy as np
 from scipy.io import loadmat
+import fnmatch
 
 from tensor2tensor.data_generators import dna_encoder
 from tensor2tensor.data_generators import generator_utils
@@ -19,7 +20,7 @@ from tensor2tensor.utils import registry
 import tensorflow as tf
 
 @registry.register_problem
-class ProteinBinding(problem.Problem):
+class ProteinBindingProblem(problem.Problem):
 	"""Transcription factor binding site prediction."""
 
 	@property
@@ -67,12 +68,11 @@ class ProteinBinding(problem.Problem):
 
 
 @registry.register_problem
-class Deepsea(ProteinBinding):
-	"""Predict next line of poetry from the last line. From Gutenberg texts."""
+class DeepSeaProblem(ProteinBindingProblem):
 	"""Transcription factor binding site prediction."""
 
 	_DEEPSEA_DOWNLOAD_URL = ("http://deepsea.princeton.edu/media/code/"
-												 "deepsea_train_bundle.v0.9.tar.gz")
+							 "deepsea_train_bundle.v0.9.tar.gz")
 	_DEEPSEA_FILENAME = "deepsea_train_bundle.v0.9.tar.gz"
 	_DEEPSEA_DIRNAME = "deepsea_train"
 	_DEEPSEA_TRAIN_FILENAME = "deepsea_train/train.mat"
@@ -87,9 +87,9 @@ class Deepsea(ProteinBinding):
 
 	def _get_data(self, directory):
 		"""Download all Deepsea files to directory unless they are there."""
-		tar_name = os.path.join(directory, self._DEEPSEA_FILENAME)
 		generator_utils.maybe_download(
 			directory, self._DEEPSEA_FILENAME, self._DEEPSEA_DOWNLOAD_URL)
+		tar_name = os.path.join(directory, self._DEEPSEA_FILENAME)
 		tar = tarfile.open(tar_name, "r:gz")
 		tar.extractall(directory)
 		tar.close()
@@ -104,11 +104,11 @@ class Deepsea(ProteinBinding):
 
 			yield {
 				"inputs": [inputs.astype(np.bool).tobytes()],
-				"targets": [targets.astype(np.bool).tobytes()],
+				"targets": [targets.astype(np.bool).tobytes()]
 			}
 
-	def _test_generator(tmp_dir, cell):
-		tmp = loadmat(path)
+	def _test_generator(self, tmp_dir):
+		tmp = loadmat(os.path.join(tmp_dir, self._DEEPSEA_TEST_FILENAME))
 		all_inputs, all_targets = tmp['validxdata'], tmp['validdata']
 
 		for i in range(all_inputs.shape[0]):
@@ -121,7 +121,10 @@ class Deepsea(ProteinBinding):
 			}
 
 	def example_reading_spec(self):
-		data_fields = {"inputs": tf.FixedLenFeature([], tf.string),"targets": tf.FixedLenFeature([], tf.string)}
+		data_fields = {
+			"inputs": tf.FixedLenFeature([], tf.string),
+			"targets": tf.FixedLenFeature([], tf.string)
+		}
 		data_items_to_decoders = None
 		return (data_fields, data_items_to_decoders)
 
@@ -137,15 +140,16 @@ class Deepsea(ProteinBinding):
 		# Parse the bytestring based on how you encoded it in common_generator
 		inputs = tf.reshape(tf.decode_raw(inputs, tf.bool), inputs_shape)
 		targets = tf.reshape(tf.decode_raw(targets, tf.bool), targets_shape)
-		
+
 		example["inputs"] = tf.to_float(inputs)
 		example["targets"] = tf.to_int32(targets)
 		return example
 
+
 @registry.register_problem
-class Epitome(ProteinBinding):
+class EpitomeProblem(ProteinBindingProblem):
 	_DEEPSEA_DOWNLOAD_URL = ("http://deepsea.princeton.edu/media/code/"
-												 "deepsea_train_bundle.v0.9.tar.gz")
+							 "deepsea_train_bundle.v0.9.tar.gz")
 	_DEEPSEA_FILENAME = "deepsea_train_bundle.v0.9.tar.gz"
 	_DEEPSEA_DIRNAME = "deepsea_train"
 	_DEEPSEA_TRAIN_FILENAME = "deepsea_train/train.mat"
@@ -156,7 +160,7 @@ class Epitome(ProteinBinding):
 	@property
 	def train_cells(self):
 		return ['HeLa-S3', 'GM12878', 'H1-hESC', 'HepG2', 'K562']
-    
+
 	@property
 	def test_cells(self):
 		return ['A549']
@@ -182,19 +186,11 @@ class Epitome(ProteinBinding):
 		""" Channel for sequence data (4), accessibility data (1) and strand. """
 		return 6
 
-# 	def generator(self, tmp_dir, is_training):
-# 		self._get_data(tmp_dir)
-
-# 		if is_training:
-# 			return self._train_generator(tmp_dir)
-# 		else:
-# 			return self._test_generator(tmp_dir)
-
 	def _get_data(self, directory):
 		"""Download all files to directory unless they are there."""
-		tar_name = os.path.join(directory, self._DEEPSEA_FILENAME)
 		generator_utils.maybe_download(
 			directory, self._DEEPSEA_FILENAME, self._DEEPSEA_DOWNLOAD_URL)
+		tar_name = os.path.join(directory, self._DEEPSEA_FILENAME)
 		tar = tarfile.open(tar_name, "r:gz")
 		tar.extractall(directory)
 		tar.close()
@@ -207,21 +203,21 @@ class Epitome(ProteinBinding):
 
 		if is_training:
 			for cell in self.train_cells:
-				for example in cell_generator(all_inputs, all_targets, cell, 0, 
+				for example in cell_generator(all_inputs, all_targets, cell, 0,
 									self.num_examples * .9):
 					yield example
 		else:
 			for cell in self.test_cells:
-				for example in cell_generator(all_inputs, all_targets, cell, 
+				for example in cell_generator(all_inputs, all_targets, cell,
 									self.num_examples * .9, self.num_examples):
 					yield example
 
 	def example_reading_spec(self):
 		data_fields = {
-				"inputs/data": tf.FixedLenFeature([], tf.string),
-				"inputs/shape": tf.FixedLenFeature([], tf.string),
-				"targets": tf.FixedLenFeature([], tf.string),
-				"mask": tf.FixedLenFeature([], tf.string),
+			"inputs/data": tf.FixedLenFeature([], tf.string),
+			"inputs/shape": tf.FixedLenFeature([], tf.string),
+			"targets": tf.FixedLenFeature([], tf.string),
+			"mask": tf.FixedLenFeature([], tf.string)
 		}
 		data_items_to_decoders = None
 		return (data_fields, data_items_to_decoders)
@@ -237,7 +233,7 @@ class Epitome(ProteinBinding):
 		targets_shape = [self.num_output_predictions, 1]
 
 		# Parse the bytestring based on how you encoded it in common_generator
-		inputs = tf.reshape(tf.decode_raw(inputs, tf.bool), 
+		inputs = tf.reshape(tf.decode_raw(inputs, tf.bool),
 							tf.decode_raw(inputs_shape, tf.int32))
 		targets = tf.reshape(tf.decode_raw(targets, tf.bool), targets_shape)
 		mask = tf.reshape(tf.decode_raw(mask, tf.bool), targets_shape)
@@ -248,35 +244,12 @@ class Epitome(ProteinBinding):
 
 		return example
 
-	def get_accessibility_vector(chr_, start, stop, accessibility_df):
-	'''
-	Returns an cut vector of length start - stop
-	@param chr_ chr to access
-	@param start start of region to process
-	@param stop end of region to process
-	@param accessibility_path path to bed file of DNase or ATAC seq data
-	as processed by seqOutBias. Example data in c66:/data/epitome/accessibility
-	 '''
-	    
-	    filtered_bed_df = accessibility_df[(accessibility_df['chr'] == chr_) & (accessibility_df['start'] < stop)& (accessibility_df['stop'] > start)]
-	    
-	    # length of vector
-		length = stop - start
-		assert(length > 0)
-
-		vector = np.zeros(length)
-
-		# TODO inefficient
-		for i, row in filtered_bed_df.iterrows():
-			vector[row['start'] - start] = row['value']
-
-			return vector
 
 
 	def cell_generator(all_inputs, all_targets, cell, chr_, start, stop):
 		# Builds dicts of indicies of different features
 		dnase_dict, tf_dict = self.parse_feature_name(self._DEEPSEA_FEATURES_FILENAME)
-		
+
 		# builds the vector of locations for querying from matrix, and the mask
 		tf_locs, tf_mask = self.get_feature_indices()
 
@@ -292,7 +265,7 @@ class Epitome(ProteinBinding):
     			if fnmatch.fnmatch(file, ('*%s*' % cell)):
        				accessibility_filename = _DNASE_BED_DIRNAME  + "/" + file
 
-		if (len(accessibility_filename) > 0):	
+		if (len(accessibility_filename) > 0):
     			accessibility_df = pd.read_csv(accessibility_path, delimiter='\t', header=None)
 			accessibility_df.columns = ['chr', 'start', 'stop', 'strand', 'value']
 
@@ -306,14 +279,14 @@ class Epitome(ProteinBinding):
 
 			if accessibility_filename == '':
 				inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
-				
+
 			else:
-				inputs2 = np.array(getAccessibilityVector(chr_, start, stop, accessibility_df)
-				
+				inputs2 = np.array(get_accessibility_vector(chr_, start, stop, accessibility_df)
+
 			inputs3 = np.array([[0 if i < self.num_examples / 2 else 1]] * 1000)
 			inputs = np.concatenate([inputs1, inputs2, inputs3], 1)
 
-			# y is queried from the target matrix. We mask by whether we 
+			# y is queried from the target matrix. We mask by whether we
 			# actually have this TF for this cell type.
 			targets = np.array([all_targets[c, i] for c in tf_locs]) * tf_mask
 
@@ -327,7 +300,7 @@ class Epitome(ProteinBinding):
 	def parse_feature_name(self, path):
 		with open(path) as f:
 			for _ in f:
-					break
+				break
 
 			i = 0
 			dnase_dict = {}
@@ -359,4 +332,3 @@ class Epitome(ProteinBinding):
 		tf_locs = np.array([v[0] for v in tf_vec])
 		tf_mask = np.array([v[1] for v in tf_vec])
 		return tf_locs, tf_mask
-			

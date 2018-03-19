@@ -1,6 +1,6 @@
-USR_DIR=v2_tensor2tensor
-PROBLEM=deepsea
-DATA_DIR=tensor2tensor/t2t_data
+USR_DIR=/Users/Gunjan/Documents/BDG/epitome/epitome/t2t
+PROBLEM=deep_sea_problem
+DATA_DIR=/Users/Gunjan/Documents/BDG/epitome/epitome/t2t/data
 TMP_DIR=/Users/Gunjan/Documents/BDG/epitome
 mkdir -p $DATA_DIR $TMP_DIR
 

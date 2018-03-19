@@ -19,15 +19,6 @@ import tensorflow as tf
 class ProteinBindingConv(t2t_model.T2TModel):
   """Protein binding conv net.
 
-  Based on "Basenji" model from
-  http://www.biorxiv.org/content/early/2017/07/10/161851
-  Uses layer_norm instead of batch_norm.
-  Model expects that if targets are of length m, inputs are of length 32*m.  The
-  original data expected that inputs would be of length 128*m, but the data has
-  been preprocessed to chunk every 4 bases into 1 ID (see
-  data_generators/gene_expression.py).
-  The magnitude of the length reduction is controlled by the pooling sizes
-  (hparams.pooling_windows) at each conv layer (hparams.num_conv_layers).
   """
 
   def body(self, features):
