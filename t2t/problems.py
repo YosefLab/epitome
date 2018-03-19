@@ -2,8 +2,14 @@ import math
 import multiprocessing as mp
 import os
 import fnmatch
-from data.accessibility import get_accessibility_vector
+import sys
+
+# import local accessibility
+sys.path.insert(0, os.path.abspath('./data'))
+from accessibility import get_accessibility_vector
+
 import tarfile
+import numpy as np
 
 # Dependency imports
 
@@ -266,7 +272,7 @@ class EpitomeProblem(ProteinBindingProblem):
        				accessibility_filename = _DNASE_BED_DIRNAME  + "/" + file
 
 		if (len(accessibility_filename) > 0):
-    			accessibility_df = pd.read_csv(accessibility_path, delimiter='\t', header=None)
+			accessibility_df = pd.read_csv(accessibility_path, delimiter='\t', header=None)
 			accessibility_df.columns = ['chr', 'start', 'stop', 'strand', 'value']
 
 		for i in range(start, min(stop, num_samples)):
@@ -279,9 +285,8 @@ class EpitomeProblem(ProteinBindingProblem):
 
 			if accessibility_filename == '':
 				inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
-
 			else:
-				inputs2 = np.array(get_accessibility_vector(chr_, start, stop, accessibility_df)
+				inputs2 = np.array(get_accessibility_vector(chr_, start, stop, accessibility_df))
 
 			inputs3 = np.array([[0 if i < self.num_examples / 2 else 1]] * 1000)
 			inputs = np.concatenate([inputs1, inputs2, inputs3], 1)

@@ -113,6 +113,7 @@ prepare:
 	$(pip) install tensorflow==1.5.0
 	$(pip) install tensor2tensor
 	$(pip) install sklearn
+	$(pip) install numpy
 
 check_clean_working_copy:
 	@printf "$(green)Checking if your working copy is clean ...$(normal)"
