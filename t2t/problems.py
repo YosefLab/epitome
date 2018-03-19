@@ -1,13 +1,21 @@
 import math
 import multiprocessing as mp
 import os
+import fnmatch
+import sys
+
+# import local accessibility
+sys.path.insert(0, os.path.abspath('./data'))
+from accessibility import get_accessibility_vector
+
 import tarfile
+import numpy as np
 
 # Dependency imports
 
 import h5py
-import numpy as np
 from scipy.io import loadmat
+import fnmatch
 
 from tensor2tensor.data_generators import dna_encoder
 from tensor2tensor.data_generators import generator_utils
@@ -138,7 +146,7 @@ class DeepSeaProblem(ProteinBindingProblem):
 		# Parse the bytestring based on how you encoded it in common_generator
 		inputs = tf.reshape(tf.decode_raw(inputs, tf.bool), inputs_shape)
 		targets = tf.reshape(tf.decode_raw(targets, tf.bool), targets_shape)
-		
+
 		example["inputs"] = tf.to_float(inputs)
 		example["targets"] = tf.to_int32(targets)
 		return example
@@ -153,10 +161,15 @@ class EpitomeProblem(ProteinBindingProblem):
 	_DEEPSEA_TRAIN_FILENAME = "deepsea_train/train.mat"
 	_DEEPSEA_TEST_FILENAME = "deepsea_train/valid.mat"
 	_DEEPSEA_FEATURES_FILENAME = "../data/feature_name"
+	_DNASE_BED_DIRNAME = "/data/epitome/accessibility/dnase/hg19"
 
 	@property
 	def train_cells(self):
 		return ['HeLa-S3', 'GM12878', 'H1-hESC', 'HepG2', 'K562']
+
+	@property
+	def test_cells(self):
+		return ['A549']
 
 	@property
 	def train_proteins(self):
@@ -176,6 +189,7 @@ class EpitomeProblem(ProteinBindingProblem):
 	@property
 	def num_channels(self):
 		"""Input channels."""
+		""" Channel for sequence data (4), accessibility data (1) and strand. """
 		return 6
 
 	def _get_data(self, directory):
@@ -195,12 +209,12 @@ class EpitomeProblem(ProteinBindingProblem):
 
 		if is_training:
 			for cell in self.train_cells:
-				for example in cell_generator(all_inputs, all_targets, cell, 0, 
+				for example in cell_generator(all_inputs, all_targets, cell, 0,
 									self.num_examples * .9):
 					yield example
 		else:
-			for cell in self.train_cells:
-				for example in cell_generator(all_inputs, all_targets, cell, 
+			for cell in self.test_cells:
+				for example in cell_generator(all_inputs, all_targets, cell,
 									self.num_examples * .9, self.num_examples):
 					yield example
 
@@ -225,7 +239,7 @@ class EpitomeProblem(ProteinBindingProblem):
 		targets_shape = [self.num_output_predictions, 1]
 
 		# Parse the bytestring based on how you encoded it in common_generator
-		inputs = tf.reshape(tf.decode_raw(inputs, tf.bool), 
+		inputs = tf.reshape(tf.decode_raw(inputs, tf.bool),
 							tf.decode_raw(inputs_shape, tf.int32))
 		targets = tf.reshape(tf.decode_raw(targets, tf.bool), targets_shape)
 		mask = tf.reshape(tf.decode_raw(mask, tf.bool), targets_shape)
@@ -236,10 +250,12 @@ class EpitomeProblem(ProteinBindingProblem):
 
 		return example
 
-	def cell_generator(all_inputs, all_targets, cell, start, stop):
+
+
+	def cell_generator(all_inputs, all_targets, cell, chr_, start, stop):
 		# Builds dicts of indicies of different features
 		dnase_dict, tf_dict = self.parse_feature_name(self._DEEPSEA_FEATURES_FILENAME)
-		
+
 		# builds the vector of locations for querying from matrix, and the mask
 		tf_locs, tf_mask = self.get_feature_indices()
 
@@ -247,6 +263,18 @@ class EpitomeProblem(ProteinBindingProblem):
 		mask_feature = [tf_mask.astype(np.bool).tobytes()]
 
 		num_samples = all_inputs.shape[2]
+
+
+		# get accessibility path
+		accessibility_filename = ''
+		for file in os.listdir( _DNASE_BED_DIRNAME ):
+    			if fnmatch.fnmatch(file, ('*%s*' % cell)):
+       				accessibility_filename = _DNASE_BED_DIRNAME  + "/" + file
+
+		if (len(accessibility_filename) > 0):
+			accessibility_df = pd.read_csv(accessibility_path, delimiter='\t', header=None)
+			accessibility_df.columns = ['chr', 'start', 'stop', 'strand', 'value']
+
 		for i in range(start, min(stop, num_samples)):
 
 			# x is 1000 * 6:
@@ -254,11 +282,16 @@ class EpitomeProblem(ProteinBindingProblem):
 			# The fifth is DNAse (the same value for every base)
 			# The sixth is strand
 			inputs1 = all_inputs[:, :, i]
-			inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
+
+			if accessibility_filename == '':
+				inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
+			else:
+				inputs2 = np.array(get_accessibility_vector(chr_, start, stop, accessibility_df))
+
 			inputs3 = np.array([[0 if i < self.num_examples / 2 else 1]] * 1000)
 			inputs = np.concatenate([inputs1, inputs2, inputs3], 1)
 
-			# y is queried from the target matrix. We mask by whether we 
+			# y is queried from the target matrix. We mask by whether we
 			# actually have this TF for this cell type.
 			targets = np.array([all_targets[c, i] for c in tf_locs]) * tf_mask
 

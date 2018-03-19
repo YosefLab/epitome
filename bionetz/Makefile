@@ -45,11 +45,9 @@ help:
 # This Makefile uses bash features like printf and <()
 SHELL=bash
 python=python3.6
-pip=pip
+pip=pip3
 tests=epitome
 extras=
-adam_version:=$(shell $(python) version.py)
-sdist_name:=mango-$(adam_version).tar.gz
 current_commit:=$(shell git log --pretty=oneline -n 1 -- $(pwd) | cut -f1 -d " ")
 dirty:=$(shell (git diff --exit-code && git diff --cached --exit-code) > /dev/null || printf -- --DIRTY)
 
@@ -110,11 +108,12 @@ prepare:
 	$(pip) install pysam
 	$(pip) install h5py
 	$(pip) install ipykernel
-	$(pip) install bdgenomics.adam
 	$(pip) install scipy
 	$(pip) install pandas
-	$(pip) install tensorflow==1.3.0
+	$(pip) install tensorflow==1.5.0
+	$(pip) install tensor2tensor
 	$(pip) install sklearn
+	$(pip) install numpy
 
 check_clean_working_copy:
 	@printf "$(green)Checking if your working copy is clean ...$(normal)"
