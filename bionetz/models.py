@@ -100,6 +100,8 @@ def cnn(input_, n_classes, hp, training=False):
                      dilation=1, pooling_size=hp.pooling_sizes[i],
                      dropout=hp.drop_probs[i], activation=hp.activation,
                      training=training, gated=hp.gated, l2=hp.l2)
+        if hp.batch_norm:
+            net = tf.contrib.layers.batch_norm(net)
     for i in range(hp.n_dconv_layers):
         dilation= 2**(i + 1)
         tmp = conv1d(net, hp.dconv_h_size, hp.kernel_size, hp.stride,
@@ -398,6 +400,7 @@ def cnn_hp(**kwargs):
     hp.gated = False
     hp.l1 = 0.0
     hp.l2 = 0.0
+    hp.batch_norm = True
     hp.__dict__.update(kwargs)
     return hp
 

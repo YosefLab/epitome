@@ -89,9 +89,9 @@ def main():
 		                  num_logits=num_logits, hp=hps)
 
 	# This function contains the training and validation loops.
-	train_iterator=make_data_iterator(args.train, args.batch, args.DNAse, 
+	train_iterator=make_data_iterator(args.train, int(args.batch), args.DNAse, 
 		tfrecords=args.tfrecords) 
-	valid_iterator=make_data_iterator(args.valid, args.batch, args.DNAse, 
+	valid_iterator=make_data_iterator(args.valid, int(args.batch), args.DNAse, 
 		tfrecords=args.tfrecords) 
 
 	# Train the network.

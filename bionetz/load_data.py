@@ -87,7 +87,7 @@ def train_batches(batch_size, input_, target, seperate_dnase=False):
 
 
 def _parse_function(example_proto):
-    """ 
+    """
     A helper function for extracting data from an example_proto
 
     """
