@@ -7,6 +7,7 @@ import sys
 # import local accessibility
 sys.path.insert(0, os.path.abspath('./data'))
 from accessibility import get_accessibility_vector
+from accessibility import get_accessibility_vector_pybed
 
 import tarfile
 import numpy as np
@@ -14,6 +15,8 @@ import numpy as np
 # Dependency imports
 
 import h5py
+import pybedtools
+import numpy as np
 from scipy.io import loadmat
 import fnmatch
 
@@ -162,6 +165,7 @@ class EpitomeProblem(ProteinBindingProblem):
 	_DEEPSEA_TEST_FILENAME = "deepsea_train/valid.mat"
 	_DEEPSEA_FEATURES_FILENAME = "../data/feature_name"
 	_DNASE_BED_DIRNAME = "/data/epitome/accessibility/dnase/hg19"
+	_PY_BED_DIRNAME = "pybed"
 
 	@property
 	def train_cells(self):
@@ -250,9 +254,7 @@ class EpitomeProblem(ProteinBindingProblem):
 
 		return example
 
-
-
-	def cell_generator(all_inputs, all_targets, cell, chr_, start, stop):
+	def cell_generator(all_inputs, all_targets, cell, start, stop):
 		# Builds dicts of indicies of different features
 		dnase_dict, tf_dict = self.parse_feature_name(self._DEEPSEA_FEATURES_FILENAME)
 
@@ -266,13 +268,21 @@ class EpitomeProblem(ProteinBindingProblem):
 
 
 		# get accessibility path
+		using_pybed = False
 		accessibility_filename = ''
-		for file in os.listdir( _DNASE_BED_DIRNAME ):
-    			if fnmatch.fnmatch(file, ('*%s*' % cell)):
-       				accessibility_filename = _DNASE_BED_DIRNAME  + "/" + file
+		for file in os.listdir( _DNASE_BED_DIRNAME + "/" + _PY_BED_DIRNAME):
+			if fnmatch.fnmatch(file, ('*%s*' % cell)):
+       				accessibility_filename = _DNASE_BED_DIRNAME + "/" + + _PY_BED_DIRNAME + "/" + file
+       				using_pybed = True
+       	if not using_pybed:
+			for file in os.listdir( _DNASE_BED_DIRNAME ):		
+	   			if fnmatch.fnmatch(file, ('*%s*' % cell)):
+	   				accessibility_filename = _DNASE_BED_DIRNAME  + "/" + file
 
-		if (len(accessibility_filename) > 0):
-			accessibility_df = pd.read_csv(accessibility_path, delimiter='\t', header=None)
+       	if using_pybed:
+       		accessibility_data = pybedtools.BedTool(accessibility_filename)
+		elif (len(accessibility_filename) > 0):	
+    			accessibility_df = pd.read_csv(accessibility_path, delimiter='\t', header=None)
 			accessibility_df.columns = ['chr', 'start', 'stop', 'strand', 'value']
 
 		for i in range(start, min(stop, num_samples)):
@@ -283,11 +293,13 @@ class EpitomeProblem(ProteinBindingProblem):
 			# The sixth is strand
 			inputs1 = all_inputs[:, :, i]
 
-			if accessibility_filename == '':
+			if accessibility_filename == '' and not using_pybed:
 				inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
-			else:
+			elif not using_pybed:
 				inputs2 = np.array(get_accessibility_vector(chr_, start, stop, accessibility_df))
-
+			else:
+				inputs2 = get_accessibility_vector_pybed(i, accessibility_data)
+				
 			inputs3 = np.array([[0 if i < self.num_examples / 2 else 1]] * 1000)
 			inputs = np.concatenate([inputs1, inputs2, inputs3], 1)
 
