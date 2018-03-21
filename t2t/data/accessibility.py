@@ -12,6 +12,8 @@ def get_accessibility_vector(chr_, start, stop, accessibility_df):
 	:param accessibility_path path to bed file of DNase or ATAC seq data
 	as processed by seqOutBias. Example data in c66:/data/epitome/accessibility
 	'''
+    
+	length = stop - start
 
 	filtered_bed_df = accessibility_df[(accessibility_df['chr'] == chr_) & (accessibility_df['start'] < stop)& (accessibility_df['stop'] > start)]
 
@@ -21,4 +23,4 @@ def get_accessibility_vector(chr_, start, stop, accessibility_df):
 	for i, row in filtered_bed_df.iterrows():
 		vector[row['start'] - start] = row['value']
 
-	return vector
+	return np.transpose(np.matrix(vector))
