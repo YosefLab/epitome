@@ -28,13 +28,6 @@ from tensor2tensor.utils import registry
 import tensorflow as tf
 
 
-# converts string to tf byte list
-def _bytes_feature(value):
-	return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
-
-def _int64_feature(value):
-	return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
-
 @registry.register_problem
 class ProteinBindingProblem(problem.Problem):
 	"""Transcription factor binding site prediction."""
@@ -194,6 +187,10 @@ class EpitomeProblem(ProteinBindingProblem):
 		return ['p300', 'NRSF', 'CTCF', 'GABP', 'JunD', 'CEBPB', 'Pol2', 'EZH2',
 				'Mxi1', 'Max', 'RFX5', 'TAF1', 'Nrf1', 'Rad21', 'TBP', 'USF2',
 				'c-Myc','CHD2']
+    
+	@property
+	def input_shape(self):
+		return [1000, 6] # shape of each record
 
 	@property
 	def num_examples(self):
@@ -269,7 +266,6 @@ class EpitomeProblem(ProteinBindingProblem):
 			'start': tf.FixedLenFeature([], tf.string),
 			'stop': tf.FixedLenFeature([], tf.string),
 			"inputs/data": tf.FixedLenFeature([], tf.string),
-			"inputs/shape": tf.FixedLenFeature([], tf.string),
 			"targets": tf.FixedLenFeature([], tf.string),
 			"mask": tf.FixedLenFeature([], tf.string)
 		}
@@ -296,9 +292,9 @@ class EpitomeProblem(ProteinBindingProblem):
 		mask = tf.reshape(tf.decode_raw(mask, tf.bool), targets_shape)
         
 
-		example["chr"] = tf.decode_raw(chr_, tf.uint8)
-		example["start"] = tf.decode_raw(start, tf.int64)
-		example["stop"] = tf.decode_raw(stop, tf.int64)
+		example["chr"] = tf.decode_raw(chr_, tf.uint8)[0]
+		example["start"] = tf.decode_raw(start, tf.int64)[0]
+		example["stop"] = tf.decode_raw(stop, tf.int64)[0]
 		example["inputs"] = tf.to_float(inputs)
 		example["targets"] = tf.to_int32(targets)
 		example["mask"] = tf.to_int32(mask)
@@ -330,8 +326,8 @@ class EpitomeProblem(ProteinBindingProblem):
 		# get accessibility path
 		accessibility_filename = ''
 		for file in os.listdir(self._DNASE_BED_DIRNAME ):
-    			if fnmatch.fnmatch(file, ('*%s*' % cell)):
-       				accessibility_filename = self._DNASE_BED_DIRNAME  + "/" + file
+				if fnmatch.fnmatch(file, ('*%s*' % cell)):
+					accessibility_filename = self._DNASE_BED_DIRNAME  + "/" + file
 
 		if (len(accessibility_filename) > 0):
 			accessibility_df = pd.read_csv(accessibility_filename, delimiter='\t', header=None)
@@ -367,13 +363,12 @@ class EpitomeProblem(ProteinBindingProblem):
 			# y is queried from the target matrix. We mask by whether we
 			# actually have this TF for this cell type.
 			targets = np.array([all_targets[c, i] for c in tf_locs]) * tf_mask
-			tf.logging.info(targets)
+            
 			yield {
-				'chr':    _bytes_feature(bytes(region_chr, encoding='ascii')),
-				'start':  _int64_feature(region_start),
-				'stop':   _int64_feature(region_stop),
-				'inputs/data': [inputs.flatten().astype(np.int32).tobytes()],
-				'inputs/shape': [np.array(inputs.shape).astype(np.int32).tobytes()],
+				'chr':    [region_chr],
+				'start':  [region_start],
+				'stop':   [region_stop],
+				'inputs/data': [inputs.astype(np.int32).tobytes()],
 				'targets': [targets.astype(np.bool).tobytes()],
 				'mask': mask_feature
 			}
