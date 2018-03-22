@@ -176,11 +176,11 @@ class EpitomeProblem(ProteinBindingProblem):
     
 	@property
 	def train_cells(self):
-		return ['H1-hESC'] # , 'HeLa-S3', 'GM12878', , 'HepG2', 'K562']
+		return ['H1-hESC', 'HeLa-S3', 'GM12878',  'HepG2'] # 'K562', 'A549']
 
 	@property
 	def test_cells(self):
-		return [] #['A549']
+		return ['K562']
 
 	@property
 	def train_proteins(self):
@@ -373,11 +373,11 @@ class EpitomeProblem(ProteinBindingProblem):
 			}
 
 	def parse_feature_name(self, path):
-    ''' 
-    :param path filepath to file containing feature labels for targets array
-    :return dnase_dict dictionary of cell type and corresponding position in the targets array
-    :return tf_dict dictionary of all proteins for all cell types, and their corresponding position in the targets array
-    '''
+		''' 
+		:param path filepath to file containing feature labels for targets array
+		:return dnase_dict dictionary of cell type and corresponding position in the targets array
+		:return tf_dict dictionary of all proteins for all cell types, and their corresponding position in the targets array
+		'''
     
 		with open(path) as f:
 			for _ in f:
@@ -403,6 +403,14 @@ class EpitomeProblem(ProteinBindingProblem):
 		return dnase_dict, tf_dict
 
 	def get_feature_indices(self, tf_dict, cell):
+		'''
+		Builds a mask that masks proteins based on the current cell type. If the protein does not exist for this cell, mask it.
+		:param tf_dict dictionary of proteins and positions in target array for all cells
+		:param cell cell to mask
+		:return tf_locs
+		:return tf_mask 0/1 vector to mask proteins
+		'''
+        
 		tf_vec = []
 		i = 0
 		for train_protein in self.train_proteins:
