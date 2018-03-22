@@ -237,14 +237,11 @@ class EpitomeProblem(ProteinBindingProblem):
 	def _train_generator(self, tmp_dir):
 		tmp = h5py.File(os.path.join(tmp_dir, self._DEEPSEA_TRAIN_FILENAME))
 		all_inputs, all_targets = tmp['trainxdata'], tmp['traindata']
-
-		for i in range(all_inputs.shape[2]):
-			# inputs = all_inputs[:, :, i]
-			# targets = np.expand_dims(all_targets[:, i], -1)
-            
-			for cell in self.train_cells:
-				for example in self.cell_generator(tmp_dir, all_inputs, all_targets, cell, self._TRAIN_REGIONS):
-					yield example
+		tf.logging.info(all_inputs.shape) 
+		for cell in self.train_cells:
+			tf.logging.info("Generating training data for cell %s" % (cell))
+			for example in self.cell_generator(tmp_dir, all_inputs, all_targets, cell, self._TRAIN_REGIONS):
+				yield example
 
 
 	def _test_generator(self, tmp_dir):
