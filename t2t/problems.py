@@ -176,7 +176,8 @@ class EpitomeProblem(ProteinBindingProblem):
     
 	@property
 	def train_cells(self):
-		return ['H1-hESC', 'HeLa-S3', 'GM12878',  'HepG2'] # 'K562', 'A549']
+		# available cell types for hg19 on c66: ['H1-hESC', 'HeLa-S3', 'GM12878',  'HepG2',  'K562', 'A549']
+		return ['H1-hESC', 'HeLa-S3', 'GM12878',  'HepG2'] 
 
 	@property
 	def test_cells(self):
@@ -226,17 +227,19 @@ class EpitomeProblem(ProteinBindingProblem):
 
 	def generator(self, tmp_dir, is_training):
 		self._get_data(tmp_dir)
-
+		# TODO: training, validation and test
 		if is_training:
 			return self._train_generator(tmp_dir)
-
 		else:
-			return self._test_generator(tmp_dir)
+			return self._validation_generator(tmp_dir)
                     
                     
 	def _train_generator(self, tmp_dir):
 		tmp = h5py.File(os.path.join(tmp_dir, self._DEEPSEA_TRAIN_FILENAME))
 		all_inputs, all_targets = tmp['trainxdata'], tmp['traindata']
+		tf.logging.info(all_inputs.shape)
+		tf.logging.info(all_targets.shape)
+
 		tf.logging.info(all_inputs.shape) 
 		for cell in self.train_cells:
 			tf.logging.info("Generating training data for cell %s" % (cell))
@@ -244,18 +247,21 @@ class EpitomeProblem(ProteinBindingProblem):
 				yield example
 
 
-	def _test_generator(self, tmp_dir):
+	def _validation_generator(self, tmp_dir):
 		tmp = loadmat(os.path.join(tmp_dir, self._DEEPSEA_TEST_FILENAME))
 		all_inputs, all_targets = tmp['validxdata'], tmp['validdata']
+		inputs = all_inputs.transpose(2, 1, 0)
+		targets = all_targets.transpose()
+		tf.logging.info(inputs.shape)
+		tf.logging.info(targets.shape)
+		for cell in self.test_cells:
+			tf.logging.info("Generating testing data for cell %s" % (cell))	
+			for example in self.cell_generator(tmp_dir, inputs, targets, cell, self._VALID_REGIONS):
+				yield example
 
-		for i in range(all_inputs.shape[0]):
-			inputs = all_inputs[i].transpose([1, 0])
-			targets = np.expand_dims(all_targets[i], -1)
-            
-			for cell in self.test_cells:
-				for example in self.cell_generator(tmp_dir, inputs, targets, cell, self._VALID_REGIONS):
-					yield example
-
+	def _test_generator(self):
+		# TODO
+		raise NotImplementedError()		
                     
 	def example_reading_spec(self):
 		data_fields = {
@@ -349,6 +355,7 @@ class EpitomeProblem(ProteinBindingProblem):
 			inputs1 = all_inputs[:, :, i] # 1000 x 4
 
 			if accessibility_filename == '':
+				tf.logging.info("Warning: no accessibility data for cell type %s. Putting in DNase DeepSea labels as accessibility features..." % (cell))
 				inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
 			else:
 				inputs2 = np.array(get_accessibility_vector(region_chr, region_start, region_stop, accessibility_df))
