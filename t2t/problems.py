@@ -189,7 +189,7 @@ class EpitomeProblem(ProteinBindingProblem):
 				'c-Myc','CHD2']
     
 	@property
-	def input_shape(self):
+	def inputs_shape(self):
 		return [1000, 6] # shape of each record
 
 	@property
@@ -279,7 +279,6 @@ class EpitomeProblem(ProteinBindingProblem):
 		start = example["start"]
 		stop = example["stop"]
 		inputs = example["inputs/data"]
-		inputs_shape = example["inputs/shape"]
 		targets = example["targets"]
 		mask = example["mask"]
 
@@ -287,7 +286,7 @@ class EpitomeProblem(ProteinBindingProblem):
 
 		# Parse the bytestring based on how you encoded it in common_generator
 		inputs = tf.reshape(tf.decode_raw(inputs, tf.int32),
-							tf.decode_raw(inputs_shape, tf.int32))
+							tf.decode_raw(self.inputs_shape, tf.int32))
 		targets = tf.reshape(tf.decode_raw(targets, tf.bool), targets_shape)
 		mask = tf.reshape(tf.decode_raw(mask, tf.bool), targets_shape)
         
@@ -314,7 +313,7 @@ class EpitomeProblem(ProteinBindingProblem):
 		stop  = indices[1]
     
 		dnase_dict, tf_dict = self.parse_feature_name(self._DEEPSEA_FEATURES_FILENAME)
-
+        
 		# builds the vector of locations for querying from matrix, and the mask
 		tf_locs, tf_mask = self.get_feature_indices(tf_dict, cell)
 
@@ -374,6 +373,12 @@ class EpitomeProblem(ProteinBindingProblem):
 			}
 
 	def parse_feature_name(self, path):
+    ''' 
+    :param path filepath to file containing feature labels for targets array
+    :return dnase_dict dictionary of cell type and corresponding position in the targets array
+    :return tf_dict dictionary of all proteins for all cell types, and their corresponding position in the targets array
+    '''
+    
 		with open(path) as f:
 			for _ in f:
 				break
