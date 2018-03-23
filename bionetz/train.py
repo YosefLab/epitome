@@ -19,7 +19,8 @@ def train(ops,
           valid_size=1000//64,
           num_logits=815-125,
           tfrecords=False,
-          rate=1e-3
+          rate=1e-3,
+          memory_fraction=1.
           ):
     """"Main training loop.
 
@@ -37,7 +38,8 @@ def train(ops,
             divided by the batch size.
         num_logits: Int. Number of dimensions in the output logits.
     """
-    with tf.Session() as sess:
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=memory_fraction)
+    with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         # If a model exists, restore it. Otherwise, initialize a new one
         if glob.glob(save_path + '*'):
             ops["saver"].restore(sess, save_path)

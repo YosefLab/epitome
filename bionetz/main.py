@@ -53,6 +53,8 @@ def main():
 	 help='the random seed to be fed into tensorflow')
 	parser.add_argument('--tfrecords', action='store_true',
 	 help='read data in from tfrecords')
+	parser.add_argument('--memory_fraction', default=1.
+	 help='the fraction of gpu memory to be allocated')
 	args = parser.parse_args()
 
 	# Configure the logging and checkpointing directories.
@@ -98,7 +100,8 @@ def main():
 	train(ops, int(args.log_freq), int(args.save_freq), save_path, args.DNAse,
 	     int(args.iterations), train_iterator, valid_iterator, 
 	     num_logits=num_logits, tfrecords=args.tfrecords, rate=float(args.rate),
-	     valid_size=(int(args.valid_size)//int(args.batch)+1))
+	     valid_size=(int(args.valid_size)//int(args.batch)+1), 
+	     memory_fraction=float(args.memory_fraction))
 
 
 
