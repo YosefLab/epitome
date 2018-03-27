@@ -15,6 +15,7 @@ import tarfile
 import numpy as np
 import pandas as pd
 import linecache
+import time
 
 # Dependency imports
 
@@ -184,7 +185,7 @@ class EpitomeProblem(ProteinBindingProblem):
 	@property
 	def train_cells(self):
 		# available cell types for hg19 on c66: ['H1-hESC', 'HeLa-S3', 'GM12878',  'HepG2',  'K562', 'A549']
-		return ['H1-hESC', 'HeLa-S3', 'GM12878',  'HepG2'] 
+		return ['H1-hESC']#, 'HeLa-S3', 'GM12878',  'HepG2'] 
 
 	@property
 	def test_cells(self):
@@ -263,7 +264,7 @@ class EpitomeProblem(ProteinBindingProblem):
 
 	def _test_generator(self):
 		# TODO
-		raise NotImplementedError()		
+		raise NotImplementedError()
                     
 	def example_reading_spec(self):
 		data_fields = {
@@ -328,6 +329,7 @@ class EpitomeProblem(ProteinBindingProblem):
 
 		max_examples = all_inputs.shape[2]
 
+		t0 = time.time()
 		# get accessibility path
 		joined_accessibility_filename = ''
 		for file in os.listdir(self._DNASE_BED_DIRNAME):
@@ -351,10 +353,12 @@ class EpitomeProblem(ProteinBindingProblem):
 				tf.logging.info("Successfully joined and saved to %s..." % (joined_accessibility_filename))                               
 
 
+		t1 = time.time()
+		tf.logging.info("Loaded accessibility file in %d seconds" % (t1 - t0)) 
+        
 		for i, bed_row_i in enumerate(range(start, stop)):
 			if (i % 1000 == 0):
-				tf.logging.info("Completed %d records for cell type %s" % (i, cell))
-            
+				tf.logging.info("Generating %d out of %d records" % (i, stop-start)) 
 			if (i >= max_examples):
 				return
             

@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 import time
 import pybedtools
+>>>>>>> 698f7ec... continue data processing
 
 def save_merged_bedfile(all_tfs_pos_filepath, accessibility_filepath, joined_suffix):
 	'''
