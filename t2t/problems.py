@@ -6,10 +6,12 @@ import sys
 
 # import local accessibility
 sys.path.insert(0, os.path.abspath('./data'))
-from accessibility import get_accessibility_vector
 from accessibility import get_accessibility_vector_pybed
 from accessibility import save_merged_bedfile
 
+# parallel for loops
+from joblib import Parallel, delayed
+import multiprocessing
 
 import tarfile
 import numpy as np
@@ -234,7 +236,7 @@ class EpitomeProblem(ProteinBindingProblem):
 		tar.close()
 
 	def generator(self, tmp_dir, is_training):
-		self._get_data(tmp_dir)
+		#self._get_data(tmp_dir)
 		# TODO: training, validation and test
 		if is_training:
 			return self._train_generator(tmp_dir)
@@ -314,22 +316,30 @@ class EpitomeProblem(ProteinBindingProblem):
 		:param cell target cell
 		:param indices indices of line number in all positions file (_DEEPSEA_GENOME_REGIONS_FILENAME )
 		'''
+		# Start and end line numbers in all.pos.bed file    
 		start = indices[0]
 		stop  = indices[1]
-        
-        all_targets
     
 		dnase_dict, tf_dict = self.parse_feature_name(self._DEEPSEA_FEATURES_FILENAME)
         
 		# builds the vector of locations for querying from matrix, and the mask
 		tf_locs, tf_mask = self.get_feature_indices(tf_dict, cell)
-
 		# Pre-build these features
 		mask_feature = [tf_mask.astype(np.bool).tobytes()]
 
+		# Only read locations with non-zero entries for this cell
+		masked_cell_targets = all_targets[np.sort(tf_locs),:]
+		target_sums = masked_cell_targets.sum(axis = 0)
+		filtered = np.where(target_sums > 0)[0]
+
+		indices = np.where((filtered >= start) & (filtered <= stop))[0]
+		tf.logging.info("Found %d non-zero entries for cell type %s" % (len(indices), cell))
+        
 		max_examples = all_inputs.shape[2]
 
-		t0 = time.time()
+		# Initialize acessibility data so Parallel does not crash
+		accessibility_data = []
+
 		# get accessibility path
 		joined_accessibility_filename = ''
 		for file in os.listdir(self._DNASE_BED_DIRNAME):
@@ -351,52 +361,11 @@ class EpitomeProblem(ProteinBindingProblem):
 			if (accessibility_filename != ''):
 				joined_accessibility_filename, accessibility_data = save_merged_bedfile(tmp_dir + '/' + self._DEEPSEA_GENOME_REGIONS_FILENAME, accessibility_filename, self._JOINED_PY_BED_EXTENSION)
 				tf.logging.info("Successfully joined and saved to %s..." % (joined_accessibility_filename))                               
-
-
-		t1 = time.time()
-		tf.logging.info("Loaded accessibility file in %d seconds" % (t1 - t0)) 
         
-		for i, bed_row_i in enumerate(range(start, stop)):
-			if (i % 1000 == 0):
-				tf.logging.info("Generating %d out of %d records" % (i, stop-start)) 
-			if (i >= max_examples):
-				return
-            
-			# read bed file line to get chr, start and end. 
-			# Increment by one because first line of file is blank
-			bed_row = linecache.getline(os.path.join(tmp_dir, self._DEEPSEA_GENOME_REGIONS_FILENAME), bed_row_i+1).split('\t')
-			region_chr = bed_row[0]
-			region_start = int(bed_row[1]) - 400 # Get flanking base pairs. Deepsea only looks at middle 200 bp
-			region_stop = int(bed_row[2]) + 400  # Get flanking base pairs. Deepsea only looks at middle 200 bp
-
-            
-			# inputs is 1000 * 6:
-			# input1: The first four are one-hot bases,
-			# input2: The fifth is DNAse (the same value for every base) OR based on accessibility file, if present
-			# input3: The sixth is strand
-			inputs1 = all_inputs[:, :, i] # 1000 x 4
-
-			if joined_accessibility_filename == '':
-				tf.logging.info("Warning: no accessibility data for cell type %s. Putting in DNase DeepSea labels as accessibility features..." % (cell))
-				inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
-			else:
-				inputs2 = get_accessibility_vector_pybed(i, accessibility_data)
-                
-			inputs3 = np.array([[0 if i < self.num_examples / 2 else 1]] * 1000) # 1000 x 1
-			inputs = np.concatenate([inputs1, inputs2, inputs3], 1) # final result is 1000 * 6
-            
-			# y is queried from the target matrix. We mask by whether we
-			# actually have this TF for this cell type.
-			targets = np.array([all_targets[c, i] for c in tf_locs]) * tf_mask
-            
-			yield {
-				'chr':    [region_chr],
-				'start':  [region_start],
-				'stop':   [region_stop],
-				'inputs/data': [inputs.astype(np.int32).tobytes()],
-				'targets': [targets.astype(np.bool).tobytes()],
-				'mask': mask_feature
-			}
+		num_cores = multiprocessing.cpu_count()
+		tf.logging.info("Running on %i cores", (num_cores))
+        
+		return Parallel(n_jobs=num_cores)(delayed(computeRecordForCell)(i.item(), max_examples, tmp_dir, self._DEEPSEA_GENOME_REGIONS_FILENAME, all_inputs[:,:,i.item()], accessibility_data[i.item()] if joined_accessibility_filename !='' else None, all_targets[:, i.item()], dnase_dict, self.num_examples, cell, tf_mask, tf_locs, mask_feature) for i in indices)
 
 	def parse_feature_name(self, path):
 		''' 
@@ -447,3 +416,47 @@ class EpitomeProblem(ProteinBindingProblem):
 		tf_locs = np.array([v[0] for v in tf_vec])
 		tf_mask = np.array([v[1] for v in tf_vec])
 		return tf_locs, tf_mask
+
+def computeRecordForCell(i, max_examples, tmp_dir, _DEEPSEA_GENOME_REGIONS_FILENAME, deepsea_inputs, accessibility_record, all_targets, dnase_dict, num_examples, cell,tf_mask, tf_locs, mask_feature):    
+
+    
+	if (i % 1000 == 0):
+		tf.logging.info("Completed %d out of %d examples" % (i, num_examples))
+    
+	if (i >= max_examples):
+		return
+
+	# read bed file line to get chr, start and end. 
+	# Increment by one because first line of file is blank
+	bed_row = linecache.getline(os.path.join(tmp_dir, _DEEPSEA_GENOME_REGIONS_FILENAME), i+1).split('\t')
+	region_chr = bed_row[0]
+	region_start = int(bed_row[1]) - 400 # Get flanking base pairs. Deepsea only looks at middle 200 bp
+	region_stop = int(bed_row[2]) + 400  # Get flanking base pairs. Deepsea only looks at middle 200 bp
+
+	# inputs is 1000 * 6:
+	# input1: The first four are one-hot bases,
+	# input2: The fifth is DNAse (the same value for every base) OR based on accessibility file, if present
+	# input3: The sixth is strand
+
+	if accessibility_record:
+		inputs2 = get_accessibility_vector_pybed(accessibility_record)
+	else:
+		inputs2 = [[all_targets[dnase_dict[cell]]]] * 1000
+
+	inputs3 = np.array([[0 if i < num_examples / 2 else 1]] * 1000) # 1000 x 1
+
+	inputs = np.concatenate([deepsea_inputs, inputs2, inputs3], 1) # final result is 1000 * 6
+
+	# y is queried from the target matrix. We mask by whether we
+	# actually have this TF for this cell type.
+	targets = np.array([all_targets[c] for c in tf_locs]) * tf_mask
+
+	return {
+		'chr':    [region_chr],
+		'start':  [region_start],
+		'stop':   [region_stop],
+		'inputs/data': [inputs.astype(np.int32).tobytes()],
+		'targets': [targets.astype(np.bool).tobytes()],
+		'mask': mask_feature
+	}
+
