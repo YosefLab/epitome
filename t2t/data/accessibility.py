@@ -55,28 +55,3 @@ def get_accessibility_vector_pybed(i, accessibility_data):
 	t1 = time.time()
 
 	return np.transpose(np.matrix(vector))
-
-def get_accessibility_vector(chr_, start, stop, accessibility_df):
-	'''
-	Returns an cut vector of length start - stop
-	:param chr_ chr to access
-	:param start start of region to process
-	:param stop end of region to process
-	:param accessibility_path path to bed file of DNase or ATAC seq data
-	as processed by seqOutBias. Example data in c66:/data/epitome/accessibility
-	'''
-    
-	length = stop - start
-
-	t0 = time.time()
-	filtered_bed_df = accessibility_df[(accessibility_df['chr'] == chr_) & (accessibility_df['start'] < stop)& (accessibility_df['stop'] > start)]
-    
-	t1 = time.time()
-	tf.logging.info("get_accessibility_vector(): Time to filter dataframe in for region %s:%d-%d %f" % (chr_, start, stop, (t1-t0))) # TODO this is inefficent and takes 3-4 seconds
-
-	vector = np.zeros(length)
-
-	for i, row in filtered_bed_df.iterrows():
-		vector[row['start'] - start] = row['value']
-
-	return np.transpose(np.matrix(vector))
