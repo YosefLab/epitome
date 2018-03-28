@@ -1,0 +1,17 @@
+File order:
+
+1. Download DNase data
+download_dnase.sh  
+
+2. Write scripts to run on slurm. These remove chrEBV from the bams, run seqoutbias and remove temp files.
+write-slurm-scripts.sh
+
+3. Run scripts on slurm.
+zen-submit-seqoutbias.sh
+
+4. Write scripts for liftover.
+run-liftover-hg38-to-hg19.sh  
+
+5. Run liftover scripts on slurm.
+zen-liftover.sh  
+

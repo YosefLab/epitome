@@ -8,9 +8,13 @@ import sys
 sys.path.insert(0, os.path.abspath('./data'))
 from accessibility import get_accessibility_vector
 from accessibility import get_accessibility_vector_pybed
+from accessibility import save_merged_bedfile
+
 
 import tarfile
 import numpy as np
+import pandas as pd
+import linecache
 
 # Dependency imports
 
@@ -27,6 +31,7 @@ from tensor2tensor.utils import metrics
 from tensor2tensor.utils import registry
 
 import tensorflow as tf
+
 
 @registry.register_problem
 class ProteinBindingProblem(problem.Problem):
@@ -74,8 +79,8 @@ class ProteinBindingProblem(problem.Problem):
 		p.target_modality = (registry.Modalities.SYMBOL, self.num_classes)
 		p.input_space_id = problem.SpaceID.GENERIC
 		p.target_space_id = problem.SpaceID.GENERIC
-
-
+        
+        
 @registry.register_problem
 class DeepSeaProblem(ProteinBindingProblem):
 	"""Transcription factor binding site prediction."""
@@ -167,22 +172,37 @@ class EpitomeProblem(ProteinBindingProblem):
 	_DNASE_BED_DIRNAME = "/data/epitome/accessibility/dnase/hg19"
 	_JOINED_PY_BED_EXTENSION = "_joined_bedtools.bed"
 
+	_DEEPSEA_GENOME_REGIONS_URL = ("http://deepsea.princeton.edu/media/code/"
+							 "allTFs.pos.bed.tar.gz")
+	_DEEPSEA_GENOME_REGIONS_TAR_FILENAME = "allTFs.pos.bed.tar.gz"
+	_DEEPSEA_GENOME_REGIONS_FILENAME = "allTFs.pos.bed"
+	_TRAIN_REGIONS = [0, 2200000-1]
+	_VALID_REGIONS = [2200001-1, 2204000-1]
+	_TEST_REGIONS  = [2204001-1, 2608182-1]
+
+    
 	@property
 	def train_cells(self):
-		return ['HeLa-S3', 'GM12878', 'H1-hESC', 'HepG2', 'K562']
+		# available cell types for hg19 on c66: ['H1-hESC', 'HeLa-S3', 'GM12878',  'HepG2',  'K562', 'A549']
+		return ['H1-hESC', 'HeLa-S3', 'GM12878',  'HepG2'] 
 
 	@property
 	def test_cells(self):
-		return ['A549']
+		return ['K562']
 
 	@property
 	def train_proteins(self):
 		return ['p300', 'NRSF', 'CTCF', 'GABP', 'JunD', 'CEBPB', 'Pol2', 'EZH2',
 				'Mxi1', 'Max', 'RFX5', 'TAF1', 'Nrf1', 'Rad21', 'TBP', 'USF2',
 				'c-Myc','CHD2']
+    
+	@property
+	def inputs_shape(self):
+		return [1000, 6] # shape of each record
 
 	@property
 	def num_examples(self):
+		# there will be a separate example for each region of the genome for each cell type
 		return 4400000
 
 	@property
@@ -204,28 +224,53 @@ class EpitomeProblem(ProteinBindingProblem):
 		tar = tarfile.open(tar_name, "r:gz")
 		tar.extractall(directory)
 		tar.close()
+        
+		generator_utils.maybe_download(
+			directory, self._DEEPSEA_GENOME_REGIONS_TAR_FILENAME, self._DEEPSEA_GENOME_REGIONS_URL)
+		tar_name = os.path.join(directory, self._DEEPSEA_GENOME_REGIONS_TAR_FILENAME)
+		tar = tarfile.open(tar_name, "r:gz")
+		tar.extractall(directory)
+		tar.close()
 
 	def generator(self, tmp_dir, is_training):
 		self._get_data(tmp_dir)
-
-		tmp = h5py.File(args.data)
-		all_inputs, all_targets = tmp['trainxdata'], tmp['traindata']
-
+		# TODO: training, validation and test
 		if is_training:
-			for cell in self.train_cells:
-				for example in cell_generator(all_inputs, all_targets, cell, 0,
-									self.num_examples * .9):
-					yield example
+			return self._train_generator(tmp_dir)
 		else:
-			for cell in self.test_cells:
-				for example in cell_generator(all_inputs, all_targets, cell,
-									self.num_examples * .9, self.num_examples):
-					yield example
+			return self._validation_generator(tmp_dir)
+                    
+                    
+	def _train_generator(self, tmp_dir):
+		tmp = h5py.File(os.path.join(tmp_dir, self._DEEPSEA_TRAIN_FILENAME))
+		all_inputs, all_targets = tmp['trainxdata'], tmp['traindata']
+        
+		for cell in self.train_cells:
+			tf.logging.info("Generating training data for cell %s" % (cell))
+			for example in self.cell_generator(tmp_dir, all_inputs, all_targets, cell, self._TRAIN_REGIONS):
+				yield example
 
+
+	def _validation_generator(self, tmp_dir):
+		tmp = loadmat(os.path.join(tmp_dir, self._DEEPSEA_TEST_FILENAME))
+		all_inputs, all_targets = tmp['validxdata'], tmp['validdata']
+		inputs = all_inputs.transpose(2, 1, 0)
+		targets = all_targets.transpose()
+		for cell in self.test_cells:
+			tf.logging.info("Generating testing data for cell %s" % (cell))	
+			for example in self.cell_generator(tmp_dir, inputs, targets, cell, self._VALID_REGIONS):
+				yield example
+
+	def _test_generator(self):
+		# TODO
+		raise NotImplementedError()		
+                    
 	def example_reading_spec(self):
 		data_fields = {
+			'chr': tf.FixedLenFeature([], tf.string),
+			'start': tf.FixedLenFeature([], tf.string),
+			'stop': tf.FixedLenFeature([], tf.string),
 			"inputs/data": tf.FixedLenFeature([], tf.string),
-			"inputs/shape": tf.FixedLenFeature([], tf.string),
 			"targets": tf.FixedLenFeature([], tf.string),
 			"mask": tf.FixedLenFeature([], tf.string)
 		}
@@ -235,79 +280,127 @@ class EpitomeProblem(ProteinBindingProblem):
 	def preprocess_example(self, example, mode, unused_hparams):
 		del mode
 
+		chr_ = example["chr"]
+		start = example["start"]
+		stop = example["stop"]
 		inputs = example["inputs/data"]
-		inputs_shape = example["inputs/shape"]
 		targets = example["targets"]
 		mask = example["mask"]
 
 		targets_shape = [self.num_output_predictions, 1]
 
 		# Parse the bytestring based on how you encoded it in common_generator
-		inputs = tf.reshape(tf.decode_raw(inputs, tf.bool),
-							tf.decode_raw(inputs_shape, tf.int32))
+		inputs = tf.reshape(tf.decode_raw(inputs, tf.int32),
+							tf.decode_raw(self.inputs_shape, tf.int32))
 		targets = tf.reshape(tf.decode_raw(targets, tf.bool), targets_shape)
 		mask = tf.reshape(tf.decode_raw(mask, tf.bool), targets_shape)
+        
 
+		example["chr"] = tf.decode_raw(chr_, tf.uint8)[0]
+		example["start"] = tf.decode_raw(start, tf.int64)[0]
+		example["stop"] = tf.decode_raw(stop, tf.int64)[0]
 		example["inputs"] = tf.to_float(inputs)
 		example["targets"] = tf.to_int32(targets)
 		example["mask"] = tf.to_int32(mask)
 
 		return example
 
-	def cell_generator(all_inputs, all_targets, cell, start, stop):
-		# Builds dicts of indicies of different features
-		dnase_dict, tf_dict = self.parse_feature_name(self._DEEPSEA_FEATURES_FILENAME)
 
+	def cell_generator(self, tmp_dir, all_inputs, all_targets, cell, indices):
+		''' Builds dicts of indicies of different features
+		:param all_inputs inputs
+		:param all_targets targets
+		:param cell target cell
+		:param indices indices of line number in all positions file (_DEEPSEA_GENOME_REGIONS_FILENAME )
+		'''
+		start = indices[0]
+		stop  = indices[1]
+        
+        all_targets
+    
+		dnase_dict, tf_dict = self.parse_feature_name(self._DEEPSEA_FEATURES_FILENAME)
+        
 		# builds the vector of locations for querying from matrix, and the mask
-		tf_locs, tf_mask = self.get_feature_indices()
+		tf_locs, tf_mask = self.get_feature_indices(tf_dict, cell)
 
 		# Pre-build these features
 		mask_feature = [tf_mask.astype(np.bool).tobytes()]
 
-		num_samples = all_inputs.shape[2]
-
+		max_examples = all_inputs.shape[2]
 
 		# get accessibility path
-		# using_pybed = False
-		accessibility_filename = ''
-		for file in os.listdir( _DNASE_BED_DIRNAME):
-			if fnmatch.fnmatch(file, ('*%s*%s*' % (cell, _JOINED_PY_BED_EXTENSION)):
-					accessibility_filename = _DNASE_BED_DIRNAME + "/" + + _PY_BED_DIRNAME + "/" + file
-                    accessibility_data = pybedtools.BedTool(accessibility_filename)
+		joined_accessibility_filename = ''
+		for file in os.listdir(self._DNASE_BED_DIRNAME):
+			if fnmatch.fnmatch(file, ('*%s*%s*' % (cell, self._JOINED_PY_BED_EXTENSION))):
+					tf.logging.info("Found joined bed file for cell type %s" % (cell))
+					joined_accessibility_filename = self._DNASE_BED_DIRNAME + "/" + file
+					accessibility_data = pybedtools.BedTool(joined_accessibility_filename)
                                
                                
-       # if file DNE, create it
-       if (accessibility_filename == ''):
-           accessibility_filename, accessibility_data = save_merged_bedfile(all_tfs_pos_filepath, accessibility_filepath, accessibility_filename, joined_suffix)
+		# if file DNE, create it
+		if (joined_accessibility_filename == ''):
+			tf.logging.info("No joined accessibility data for cell type %s. Joining accessibility and positions..." % (cell))
+			# get accessibility path
+			accessibility_filename = ''
+			for file in os.listdir(self._DNASE_BED_DIRNAME ):
+					if fnmatch.fnmatch(file, ('*%s*' % cell)):
+						accessibility_filename = self._DNASE_BED_DIRNAME  + "/" + file
+			tf.logging.info("Joining with %s..." % (accessibility_filename))                               
+			if (accessibility_filename != ''):
+				joined_accessibility_filename, accessibility_data = save_merged_bedfile(tmp_dir + '/' + self._DEEPSEA_GENOME_REGIONS_FILENAME, accessibility_filename, self._JOINED_PY_BED_EXTENSION)
+				tf.logging.info("Successfully joined and saved to %s..." % (joined_accessibility_filename))                               
 
-		for i in range(start, min(stop, num_samples)):
 
-			# x is 1000 * 6:
-			# The first four are one-hot bases,
-			# The fifth is DNAse (the same value for every base)
-			# The sixth is strand
-			inputs1 = all_inputs[:, :, i]
+		for i, bed_row_i in enumerate(range(start, stop)):
+			if (i % 1000 == 0):
+				tf.logging.info("Completed %d records for cell type %s" % (i, cell))
+            
+			if (i >= max_examples):
+				return
+            
+			# read bed file line to get chr, start and end. 
+			# Increment by one because first line of file is blank
+			bed_row = linecache.getline(os.path.join(tmp_dir, self._DEEPSEA_GENOME_REGIONS_FILENAME), bed_row_i+1).split('\t')
+			region_chr = bed_row[0]
+			region_start = int(bed_row[1]) - 400 # Get flanking base pairs. Deepsea only looks at middle 200 bp
+			region_stop = int(bed_row[2]) + 400  # Get flanking base pairs. Deepsea only looks at middle 200 bp
 
-			if accessibility_filename == '':
+            
+			# inputs is 1000 * 6:
+			# input1: The first four are one-hot bases,
+			# input2: The fifth is DNAse (the same value for every base) OR based on accessibility file, if present
+			# input3: The sixth is strand
+			inputs1 = all_inputs[:, :, i] # 1000 x 4
+
+			if joined_accessibility_filename == '':
+				tf.logging.info("Warning: no accessibility data for cell type %s. Putting in DNase DeepSea labels as accessibility features..." % (cell))
 				inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
 			else:
 				inputs2 = get_accessibility_vector_pybed(i, accessibility_data)
-				
-			inputs3 = np.array([[0 if i < self.num_examples / 2 else 1]] * 1000)
-			inputs = np.concatenate([inputs1, inputs2, inputs3], 1)
-
+                
+			inputs3 = np.array([[0 if i < self.num_examples / 2 else 1]] * 1000) # 1000 x 1
+			inputs = np.concatenate([inputs1, inputs2, inputs3], 1) # final result is 1000 * 6
+            
 			# y is queried from the target matrix. We mask by whether we
 			# actually have this TF for this cell type.
 			targets = np.array([all_targets[c, i] for c in tf_locs]) * tf_mask
-
+            
 			yield {
-				'inputs/data': [inputs.flatten().astype(np.bool).tobytes()],
-				'inputs/shape': [inputs.shape.astype(np.int32).tobytes()],
+				'chr':    [region_chr],
+				'start':  [region_start],
+				'stop':   [region_stop],
+				'inputs/data': [inputs.astype(np.int32).tobytes()],
 				'targets': [targets.astype(np.bool).tobytes()],
 				'mask': mask_feature
 			}
 
 	def parse_feature_name(self, path):
+		''' 
+		:param path filepath to file containing feature labels for targets array
+		:return dnase_dict dictionary of cell type and corresponding position in the targets array
+		:return tf_dict dictionary of all proteins for all cell types, and their corresponding position in the targets array
+		'''
+    
 		with open(path) as f:
 			for _ in f:
 				break
@@ -331,12 +424,20 @@ class EpitomeProblem(ProteinBindingProblem):
 				i += 1
 		return dnase_dict, tf_dict
 
-	def get_feature_indices(self):
+	def get_feature_indices(self, tf_dict, cell):
+		'''
+		Builds a mask that masks proteins based on the current cell type. If the protein does not exist for this cell, mask it.
+		:param tf_dict dictionary of proteins and positions in target array for all cells
+		:param cell cell to mask
+		:return tf_locs
+		:return tf_mask 0/1 vector to mask proteins
+		'''
+        
 		tf_vec = []
 		i = 0
-		for tf in tfs:
-			if tf in tf_dict[cell]:
-				tf_vec += [(tf_dict[cell][tf], 1)]
+		for train_protein in self.train_proteins:
+			if train_protein in tf_dict[cell]:
+				tf_vec += [(tf_dict[cell][train_protein], 1)]
 			else:
 				tf_vec += [(0, 0)]
 		tf_locs = np.array([v[0] for v in tf_vec])
