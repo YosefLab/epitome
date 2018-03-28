@@ -5,7 +5,6 @@ import numpy as np
 import tensorflow as tf
 import time
 import pybedtools
->>>>>>> 698f7ec... continue data processing
 
 def save_merged_bedfile(all_tfs_pos_filepath, accessibility_filepath, joined_suffix):
 	'''
@@ -44,12 +43,12 @@ def get_accessibility_vector_pybed(fields):
 	'''
 	chr_, start, stop, positions, accessibility = fields[0], int(fields[1]), int(fields[1]), fields[9], fields[11]
 	if positions == '.':
-		return np.transpose(np.matrix(np.zeros(1000)))
+            return np.transpose(np.matrix(np.zeros(1000)))
 	start = start - 400
 	positions = np.array(list(map(int, positions.split(','))))
 	accessibility = list(map(float, accessibility.split(',')))
 	vector = np.zeros(1000)
 	positions = positions - start
 	vector[positions] = accessibility
-	return np.transpose(np.matrix(vector))
 
+	return np.transpose(np.matrix(vector))

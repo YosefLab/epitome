@@ -187,7 +187,7 @@ class EpitomeProblem(ProteinBindingProblem):
 	@property
 	def train_cells(self):
 		# available cell types for hg19 on c66: ['H1-hESC', 'HeLa-S3', 'GM12878',  'HepG2',  'K562', 'A549']
-		return ['H1-hESC']#, 'HeLa-S3', 'GM12878',  'HepG2'] 
+		return ['H1-hESC', 'HeLa-S3', 'GM12878',  'HepG2'] 
 
 	@property
 	def test_cells(self):
@@ -236,7 +236,7 @@ class EpitomeProblem(ProteinBindingProblem):
 		tar.close()
 
 	def generator(self, tmp_dir, is_training):
-		#self._get_data(tmp_dir)
+		self._get_data(tmp_dir)
 		# TODO: training, validation and test
 		if is_training:
 			return self._train_generator(tmp_dir)
