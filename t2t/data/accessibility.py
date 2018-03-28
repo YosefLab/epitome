@@ -35,14 +35,12 @@ def save_merged_bedfile(all_tfs_pos_filepath, accessibility_filepath, joined_suf
 	result = data.saveas(joined_filepath)
 	return (joined_filepath, result)
 
-def get_accessibility_vector_pybed(i, accessibility_data):
+def get_accessibility_vector_pybed(fields):
 	'''
 	Returns the cut vector corresponding to ith row
 	:param i index of the current row
 	:param accessibility_data the pybedtool that reads the peak data
 	'''
-	t0 = time.time()
-	fields = accessibility_data[i].fields
 	chr_, start, stop, positions, accessibility = fields[0], int(fields[1]), int(fields[1]), fields[9], fields[11]
 	if positions == '.':
             return np.transpose(np.matrix(np.zeros(1000)))
@@ -52,6 +50,5 @@ def get_accessibility_vector_pybed(i, accessibility_data):
 	vector = np.zeros(1000)
 	positions = positions - start
 	vector[positions] = accessibility
-	t1 = time.time()
 
 	return np.transpose(np.matrix(vector))

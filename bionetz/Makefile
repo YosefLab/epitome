@@ -114,6 +114,7 @@ prepare:
 	$(pip) install tensor2tensor
 	$(pip) install sklearn
 	$(pip) install numpy
+	$(pip) install joblib
 
 check_clean_working_copy:
 	@printf "$(green)Checking if your working copy is clean ...$(normal)"
