@@ -7,6 +7,9 @@ import sys
 # import local accessibility
 sys.path.insert(0, os.path.abspath('./data'))
 from accessibility import get_accessibility_vector
+from accessibility import get_accessibility_vector_pybed
+from accessibility import save_merged_bedfile
+
 
 import tarfile
 import numpy as np
@@ -16,6 +19,8 @@ import linecache
 # Dependency imports
 
 import h5py
+import pybedtools
+import numpy as np
 from scipy.io import loadmat
 import fnmatch
 
@@ -165,6 +170,8 @@ class EpitomeProblem(ProteinBindingProblem):
 	_DEEPSEA_TEST_FILENAME = "deepsea_train/valid.mat"
 	_DEEPSEA_FEATURES_FILENAME = "../data/feature_name"
 	_DNASE_BED_DIRNAME = "/data/epitome/accessibility/dnase/hg19"
+	_JOINED_PY_BED_EXTENSION = "_joined_bedtools.bed"
+
 	_DEEPSEA_GENOME_REGIONS_URL = ("http://deepsea.princeton.edu/media/code/"
 							 "allTFs.pos.bed.tar.gz")
 	_DEEPSEA_GENOME_REGIONS_TAR_FILENAME = "allTFs.pos.bed.tar.gz"
@@ -237,10 +244,7 @@ class EpitomeProblem(ProteinBindingProblem):
 	def _train_generator(self, tmp_dir):
 		tmp = h5py.File(os.path.join(tmp_dir, self._DEEPSEA_TRAIN_FILENAME))
 		all_inputs, all_targets = tmp['trainxdata'], tmp['traindata']
-		tf.logging.info(all_inputs.shape)
-		tf.logging.info(all_targets.shape)
-
-		tf.logging.info(all_inputs.shape) 
+        
 		for cell in self.train_cells:
 			tf.logging.info("Generating training data for cell %s" % (cell))
 			for example in self.cell_generator(tmp_dir, all_inputs, all_targets, cell, self._TRAIN_REGIONS):
@@ -252,8 +256,6 @@ class EpitomeProblem(ProteinBindingProblem):
 		all_inputs, all_targets = tmp['validxdata'], tmp['validdata']
 		inputs = all_inputs.transpose(2, 1, 0)
 		targets = all_targets.transpose()
-		tf.logging.info(inputs.shape)
-		tf.logging.info(targets.shape)
 		for cell in self.test_cells:
 			tf.logging.info("Generating testing data for cell %s" % (cell))	
 			for example in self.cell_generator(tmp_dir, inputs, targets, cell, self._VALID_REGIONS):
@@ -304,7 +306,6 @@ class EpitomeProblem(ProteinBindingProblem):
 		return example
 
 
-
 	def cell_generator(self, tmp_dir, all_inputs, all_targets, cell, indices):
 		''' Builds dicts of indicies of different features
 		:param all_inputs inputs
@@ -314,6 +315,8 @@ class EpitomeProblem(ProteinBindingProblem):
 		'''
 		start = indices[0]
 		stop  = indices[1]
+        
+        all_targets
     
 		dnase_dict, tf_dict = self.parse_feature_name(self._DEEPSEA_FEATURES_FILENAME)
         
@@ -326,16 +329,31 @@ class EpitomeProblem(ProteinBindingProblem):
 		max_examples = all_inputs.shape[2]
 
 		# get accessibility path
-		accessibility_filename = ''
-		for file in os.listdir(self._DNASE_BED_DIRNAME ):
-				if fnmatch.fnmatch(file, ('*%s*' % cell)):
-					accessibility_filename = self._DNASE_BED_DIRNAME  + "/" + file
+		joined_accessibility_filename = ''
+		for file in os.listdir(self._DNASE_BED_DIRNAME):
+			if fnmatch.fnmatch(file, ('*%s*%s*' % (cell, self._JOINED_PY_BED_EXTENSION))):
+					tf.logging.info("Found joined bed file for cell type %s" % (cell))
+					joined_accessibility_filename = self._DNASE_BED_DIRNAME + "/" + file
+					accessibility_data = pybedtools.BedTool(joined_accessibility_filename)
+                               
+                               
+		# if file DNE, create it
+		if (joined_accessibility_filename == ''):
+			tf.logging.info("No joined accessibility data for cell type %s. Joining accessibility and positions..." % (cell))
+			# get accessibility path
+			accessibility_filename = ''
+			for file in os.listdir(self._DNASE_BED_DIRNAME ):
+					if fnmatch.fnmatch(file, ('*%s*' % cell)):
+						accessibility_filename = self._DNASE_BED_DIRNAME  + "/" + file
+			tf.logging.info("Joining with %s..." % (accessibility_filename))                               
+			if (accessibility_filename != ''):
+				joined_accessibility_filename, accessibility_data = save_merged_bedfile(tmp_dir + '/' + self._DEEPSEA_GENOME_REGIONS_FILENAME, accessibility_filename, self._JOINED_PY_BED_EXTENSION)
+				tf.logging.info("Successfully joined and saved to %s..." % (joined_accessibility_filename))                               
 
-		if (len(accessibility_filename) > 0):
-			accessibility_df = pd.read_csv(accessibility_filename, delimiter='\t', header=None)
-			accessibility_df.columns = ['chr', 'start', 'stop', 'strand', 'value']
 
 		for i, bed_row_i in enumerate(range(start, stop)):
+			if (i % 1000 == 0):
+				tf.logging.info("Completed %d records for cell type %s" % (i, cell))
             
 			if (i >= max_examples):
 				return
@@ -354,12 +372,12 @@ class EpitomeProblem(ProteinBindingProblem):
 			# input3: The sixth is strand
 			inputs1 = all_inputs[:, :, i] # 1000 x 4
 
-			if accessibility_filename == '':
+			if joined_accessibility_filename == '':
 				tf.logging.info("Warning: no accessibility data for cell type %s. Putting in DNase DeepSea labels as accessibility features..." % (cell))
 				inputs2 = np.array([[all_targets[dnase_dict[cell], i]]] * 1000)
 			else:
-				inputs2 = np.array(get_accessibility_vector(region_chr, region_start, region_stop, accessibility_df))
-
+				inputs2 = get_accessibility_vector_pybed(i, accessibility_data)
+                
 			inputs3 = np.array([[0 if i < self.num_examples / 2 else 1]] * 1000) # 1000 x 1
 			inputs = np.concatenate([inputs1, inputs2, inputs3], 1) # final result is 1000 * 6
             
