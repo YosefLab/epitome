@@ -70,7 +70,8 @@ def train_batches(batch_size, input_, target, seperate_dnase=False):
     """
     num_samples = input_.shape[2]
     num_batches = num_samples / batch_size
-    batch_order = np.random.permutation(int(num_batches))
+    # batch_order = np.random.permutation(int(num_batches))
+    batch_order = range(int(num_batches))
     for i in batch_order:
         # if seperate_dnase:
         #     yield (input_[0:1000,:,i*batch_size:(i+1)*batch_size
