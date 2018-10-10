@@ -1,73 +1,40 @@
+#!/bin/bash
+
 # Downloads ENCODE DNase data for 12 cell types
 # # Requirements
 # - IGVTools: (used for indexing bam files)
 # -- https://software.broadinstitute.org/software/igv/download
 # -- then add as alias to bash (alias igvtools=<path_to_igvtools>
 
-# A549 hg19 https://www.encodeproject.org/files/ENCFF566SPI/
-wget https://www.encodeproject.org/files/ENCFF414MBW/@@download/ENCFF414MBW.bam
-FILE=ENCFF414MBW_A549.bam
-mv ENCFF414MBW.bam $FILE
-igvtools index $FILE
+# Define ENCODE ID and celltype name, separated by "_"
+PREFIXES=( "ENCFF414MBW_A549" "ENCFF441RET_K562" "ENCFF571SSA_H1heSC" "ENCFF775ZJX_GM12878" "ENCFF224FMI_HepG2"  "ENCFF783TMX_HeLaS3" "ENCFF757PTA_HUVEC" "ENCFF070BAN_GM12891" "ENCFF441RET_MCF7" "ENCFF260LKE_GM12892" "ENCFF291HHS_HCT116" )
 
-# K562 https://www.encodeproject.org/files/ENCFF441RET/
-wget https://www.encodeproject.org/files/ENCFF441RET/@@download/ENCFF441RET.bam
-FILE=ENCFF441RET_K562.bam
-mv ENCFF441RET.bam ENCFF441RET_K562.bam
-igvtools index $FILE
+for F in "${PREFIXES[@]}"
+do
+    PREFIX=`echo $F | cut -d \_ -f 1`
+    CELLTYPE=`echo $F | cut -d \_ -f 2`
+
+    FILE="${PREFIX}_${CELLTYPE}.bam"
+    SORTEDFILE="${PREFIX}_sorted_${CELLTYPE}.bam"
+    
+    # Download file
+    DOWNLOAD_URL=https://www.encodeproject.org/files/$PREFIX/@@download/$PREFIX.bam
+    echo "Downloading ${DOWNLOAD_URL}"
+    wget $DOWNLOAD_URL
+    
+    # Add celltype prefix so we know which celltype it is
+    mv $PREFIX.bam $FILE
+    
+    # Sort bam
+    echo "igvtools sorting $FILE"
+    igvtools sort $FILE $SORTEDFILE
+    
+    # Index sorted bam
+    echo "igvtools indexing $SORTEDFILE"
+    igvtools index $SORTEDFILE
 
 
-# H1-hESC
-wget https://www.encodeproject.org/files/ENCFF571SSA/@@download/ENCFF571SSA.bam
-FILE=ENCFF571SSA_H1heSC.bam
-mv ENCFF571SSA.bam ENCFF571SSA_H1heSC.bam
-igvtools index $FILE
+    echo "" # newline
+done
 
-# GM12878
-wget https://www.encodeproject.org/files/ENCFF775ZJX/@@download/ENCFF775ZJX.bam
-FILE=ENCFF775ZJX_GM12878.bam
-mv ENCFF775ZJX.bam ENCFF775ZJX_GM12878.bam
-igvtools index $FILE
-
-# HepG2
-wget https://www.encodeproject.org/files/ENCFF224FMI/@@download/ENCFF224FMI.bam
-FILE=ENCFF224FMI_HepG2.bam
-mv ENCFF224FMI.bam ENCFF224FMI_HepG2.bam
-igvtools index $FILE
-
-# HeLa-S3 
-wget https://www.encodeproject.org/files/ENCFF783TMX/@@download/ENCFF783TMX.bam
-FILE=ENCFF783TMX_HeLaS3.bam
-mv ENCFF783TMX.bam ENCFF783TMX_HeLaS3.bam
-igvtools index $FILE
-
-#HUVEC 
-wget https://www.encodeproject.org/files/ENCFF757PTA/@@download/ENCFF757PTA.bam
-FILE=ENCFF757PTA_HUVEC.bam
-mv ENCFF757PTA.bam ENCFF757PTA_HUVEC.bam
-igvtools index $FILE
-
-# GM12891 
-wget https://www.encodeproject.org/files/ENCFF070BAN/@@download/ENCFF070BAN.bam
-FILE=ENCFF070BAN_GM12891.bam
-mv ENCFF070BAN.bam ENCFF070BAN_GM12891.bam
-igvtools index $FILE
-
-# MCF-7
-wget https://www.encodeproject.org/files/ENCFF441RET/@@download/ENCFF441RET.bam
-FILE=ENCFF441RET_MCF7.bam
-mv ENCFF441RET.bam ENCFF441RET_MCF7.bam
-igvtools index $FILE
-
-# GM12892 
-wget https://www.encodeproject.org/files/ENCFF260LKE/@@download/ENCFF260LKE.bam
-FILE=ENCFF260LKE_GM12892.bam
-mv ENCFF260LKE.bam ENCFF260LKE_GM12892.bam
-igvtools index $FILE
-
-#HCT-116
-wget https://www.encodeproject.org/files/ENCFF291HHS/@@download/ENCFF291HHS.bam
-FILE=ENCFF291HHS_HCT116.bam
-mv ENCFF291HHS.bam ENCFF291HHS_HCT116.bam
-igvtools index $FILE
-
+echo "done processing DNase files"
