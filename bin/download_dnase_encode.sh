@@ -1,4 +1,5 @@
 #!/bin/bash
+set +ex
 
 # Downloads ENCODE DNase data for 12 cell types
 # # Requirements
@@ -6,8 +7,11 @@
 # -- https://software.broadinstitute.org/software/igv/download
 # -- then add as alias to bash (alias igvtools=<path_to_igvtools>
 
+# Requires argument of PATH to IGVTOOLS
+IGVTOOLS_PATH="$1"
+
 # Define ENCODE ID and celltype name, separated by "_"
-PREFIXES=( "ENCFF414MBW_A549" "ENCFF441RET_K562" "ENCFF571SSA_H1heSC" "ENCFF775ZJX_GM12878" "ENCFF224FMI_HepG2"  "ENCFF783TMX_HeLaS3" "ENCFF757PTA_HUVEC" "ENCFF070BAN_GM12891" "ENCFF441RET_MCF7" "ENCFF260LKE_GM12892" "ENCFF291HHS_HCT116" )
+PREFIXES=( "ENCFF414MBW_A549" "ENCFF678VYF_K562" "ENCFF571SSA_H1heSC" "ENCFF775ZJX_GM12878" "ENCFF224FMI_HepG2"  "ENCFF783TMX_HeLaS3" "ENCFF757PTA_HUVEC" "ENCFF070BAN_GM12891" "ENCFF322PZC_MCF7" "ENCFF260LKE_GM12892" "ENCFF291HHS_HCT116" )
 
 for F in "${PREFIXES[@]}"
 do
@@ -19,20 +23,19 @@ do
     
     # Download file
     DOWNLOAD_URL=https://www.encodeproject.org/files/$PREFIX/@@download/$PREFIX.bam
-    echo "Downloading ${DOWNLOAD_URL}"
     wget $DOWNLOAD_URL
     
     # Add celltype prefix so we know which celltype it is
     mv $PREFIX.bam $FILE
     
     # Sort bam
-    echo "igvtools sorting $FILE"
-    igvtools sort $FILE $SORTEDFILE
+    $IGVTOOLS_PATH sort $FILE $SORTEDFILE
+    
+    # rm unsorted file
+    rm $FILE
     
     # Index sorted bam
-    echo "igvtools indexing $SORTEDFILE"
-    igvtools index $SORTEDFILE
-
+    $IGVTOOLS_PATH index $SORTEDFILE
 
     echo "" # newline
 done
