@@ -219,7 +219,7 @@ def toSparseDictionary(dnase_h5): # takes 3 seconds and 56 bytes for train
     return {x[0]:x[1] for x in m}
 
 
-def toSparseIndexedDictionary(dnase_train, dnase_valid_dnase_test, DATA_LABEL):
+def toSparseIndexedDictionary(dnase_train, dnase_valid,dnase_test, DATA_LABEL):
     ''' Converts h5 file to dictionary of sparse matrices, indexed by cell type.
     Corrects for indices when we moved some of train into the validation set.
     
