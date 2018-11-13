@@ -26,33 +26,12 @@ import numpy as np
 from scipy.io import loadmat
 import scipy.sparse as ss
 import h5sparse
+# for multiprocessing
+import concurrent.futures
+from functools import partial
 
-
-# ## Define Constants
-
-# DNase filepath dictionary
-
-# DNase filepath dictionary
-dnase_file_dict = {
-  "A549": _ENCODE_DATA_PREFIX + "ENCFF414MBW_sorted_A549.bam",
-  "HepG2": _ENCODE_DATA_PREFIX + "ENCFF224FMI_sorted_HepG2.bam",
-  "K562": _ENCODE_DATA_PREFIX + "ENCFF678VYF_sorted_K562.bam",
-  'GM12878':_ENCODE_DATA_PREFIX + "ENCFF775ZJX_sorted_GM12878.bam",
-  'H1-hESC':_ENCODE_DATA_PREFIX + "ENCFF571SSA_sorted_H1heSC.bam",
-  'HeLa-S3':_ENCODE_DATA_PREFIX + "ENCFF783TMX_sorted_HeLaS3.bam",
-  'HUVEC':_ENCODE_DATA_PREFIX + "ENCFF757PTA_sorted_HUVEC.bam",
-  'GM12891':_ENCODE_DATA_PREFIX + "ENCFF070BAN_sorted_GM12891.bam",
-  'MCF-7':_ENCODE_DATA_PREFIX + "ENCFF322PZC_sorted_MCF7.bam",
-  'GM12892': _ENCODE_DATA_PREFIX + "ENCFF260LKE_sorted_GM12892.bam",
-  'HCT-116': _ENCODE_DATA_PREFIX + "ENCFF291HHS_sorted_HCT116.bam"
-}
-
-
-_TRAIN_REGIONS = [0, 2200000-1]
-_VALID_REGIONS = [2200000, 2204000-1]
-# 227512 for test (chr8 and chr9) for 227512 total rows
-_TEST_REGIONS  = [2204000, 2204000 + 227512-1] # only up to chrs 8 and 9
-
+exec(open("../dnase/constants.py").read())
+exec(open("../dnase/functions.py").read())
 
 # ## Functions
 # 
@@ -114,16 +93,15 @@ def getRegionByIndex(i, strand = "+"):
 
 # ### Functions for getting DNase cut sites and saving results
 
-def saveDNaseCellTypes(data, TFPOS_REGIONS, hf):
-    
-    # stores dictionary of celltype: np array of dnase
-    for cell in dnase_file_dict.keys(): # for all cells
-        
+def procedure(TFPOS_REGIONS, cell):
         print("processing cell %s from file %s..." % (cell, dnase_file_dict[cell]))
         
         # read in DNase bam file
         reads = pyDNase.BAMHandler(dnase_file_dict[cell])
+        
+        # initialize matrix
         cell_dnase = ss.lil_matrix((data["x"].shape[0], 1000), dtype=np.int8)
+        
         
         # for all rows in dataset, read DNase cut sites for that region
         for row_i in range(data['x'].shape[0]): # for all rows in dataset
@@ -145,6 +123,17 @@ def saveDNaseCellTypes(data, TFPOS_REGIONS, hf):
         # write to h5 file
         hf.create_dataset(cell,data=ss.csr_matrix(cell_dnase))
         
+
+def saveDNaseCellTypes(data, hf, TFPOS_REGIONS):
+        
+    output = list()
+    celltypes = list(dnase_file_dict.keys())
+    func = partial(procedure, TFPOS_REGIONS)
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        for out in executor.map(func, celltypes):
+            output.append(out)
+        
+        
 # ## Process data
 
 # ### Process validation data and save as .mat file
@@ -157,20 +146,20 @@ data = {
     "y": tmp['validdata'].T
 }
 
-with h5sparse.File( _PROCESSED_DATA_PATH + "processed_dnase_valid_sparse.h5", 'w') as h5valid:
+with h5sparse.File( _PROCESSED_DATA_PATH + "processed_dnase_valid_sparse_TEST_DELETE_ME.h5", 'w') as hf:
 
-     saveDNaseCellTypes(data, _VALID_REGIONS, h5valid)
+     saveDNaseCellTypes(data, _VALID_REGIONS, hf)
 
 
-### Process test data and save as .mat file
+## Process test data and save as .mat file
 
 tmp = loadmat(os.path.join(deepsea_path, "test.mat"))
 data = {
      "x": tmp['testxdata'],
      "y": tmp['testdata'].T
 }
-with h5sparse.File( _PROCESSED_DATA_PATH + "processed_dnase_test_sparse.h5", 'w') as h5test:
-     saveDNaseCellTypes(data, _TEST_REGIONS, h5test)
+with h5sparse.File( _PROCESSED_DATA_PATH + "processed_dnase_test_sparse.h5", 'w') as hf:
+     saveDNaseCellTypes(data, _TEST_REGIONS, hf)
 
 
 # ### Process train data and save as .mat file
@@ -180,6 +169,6 @@ data = {
     "x": tmp["trainxdata"][()].transpose([2,1,0]),
     "y": tmp["traindata"][()]
 }
-with h5sparse.File( _PROCESSED_DATA_PATH + "processed_dnase_train_sparse.h5", 'w') as h5train:
-    saveDNaseCellTypes(data, _TRAIN_REGIONS, h5train)
+with h5sparse.File( _PROCESSED_DATA_PATH + "processed_dnase_train_sparse.h5", 'w') as hf:
+    saveDNaseCellTypes(data, _TRAIN_REGIONS, hf)
 
