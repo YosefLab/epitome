@@ -83,49 +83,6 @@ def get_dnase_array_from_modified(dnase_train, dnase_valid, dnase_test, index_i,
         return dnase_test[celltype][index_i:index_i+num_records].toarray()
     
 
-    
-def get_dnase_array_from_modified_dict(dnase_train, dnase_valid, dnase_test, index_i, celltype, DATA_LABEL="train", num_records = 1):
-    ''' This function pull respective validation and training data corresponding to
-    the points chosen above.
-    Args:
-        :param dnase_train: dict of 1000 by n for each celltype
-        :param dnase_valid: dict of 1000 by n for each celltype 
-        :param dnase_test: dict of 1000 by n for each celltype 
-        :param index_i: what row to index to in dataset
-        :param cell_type: string of cell typex
-        :param DATA_LABEL: should be train, valid or test
-        :param num_records: number of records to fetch, starting at index_i
-    '''
-    if (DATA_LABEL == "train"):
-        # from above, we concatenated [train_data["x"][0:2200000,:,:]
-        # and train_data["x"][2400000:4200000,:,:]]
-        if (index_i >= 0 and index_i < 2200000):
-            return dnase_train[celltype][index_i:index_i+num_records].toarray()
-        else:
-            new_index = index_i + (2400000 - 2200000) # increment distance we removed from train set
-            return dnase_train[celltype][new_index:new_index+num_records].toarray()
-        
-    elif (DATA_LABEL == "valid"):
-        
-        # from above, we concatenated [train_data["x"][2200000:2400000,:,:],
-        #    train_data["x"][4200000:4400000,:,:] 
-        #    valid_data["x"]], axis=0),
-        if (index_i >= 0 and index_i < 2400000-2200000):
-            new_index = 2200000 + index_i
-            return dnase_train[celltype][new_index:new_index+num_records].toarray()
-        elif (index_i >= (2400000-2200000) and index_i < (2400000-2200000) + (4400000-4200000)):
-            new_index = 4200000 + index_i
-            return dnase_train[celltype][new_index:new_index+num_records].toarray()
-        else:
-            new_index = index_i - ((2400000-2200000) + (4400000-4200000)) # between 0 to 8000
-            return dnase_valid[celltype][new_index:new_index+num_records].toarray()
-            
-    else:
-        return dnase_test[celltype][index_i:index_i+num_records].toarray()
-    
-   
-    
-    
 def get_assays_from_feature_file(feature_path='../data/feature_name'):
     ''' Parses a feature name fil from DeepSea. File can be found in repo at ../data/feature_name.
     Returns at matrix of cell type/assays which exist for a subset of cell types.
