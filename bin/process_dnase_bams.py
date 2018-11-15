@@ -22,9 +22,12 @@ from pyDNase import GenomicInterval
 import h5py
 import os
 import linecache
+import scipy.sparse as ss
+import h5sparse
 import numpy as np
 from scipy.io import loadmat
 import scipy.sparse as ss
+from scipy import sparse
 import h5sparse
 # for multiprocessing
 import concurrent.futures
@@ -88,23 +91,22 @@ def getRegionByIndex(i, strand = "+"):
     
     return GenomicInterval( region_chr, region_start, region_stop, strand=strand)
 
+def getTmpPathForCell(cell):
+    return "%s%s.npz" % (_PROCESSED_DATA_PATH, cell)
 
 # ### Functions for getting DNase cut sites and saving results
 
-# ### Functions for getting DNase cut sites and saving results
-
-def procedure(TFPOS_REGIONS, cell):
+def procedure(TFPOS_REGIONS, num_samples, cell):
         print("processing cell %s from file %s..." % (cell, dnase_file_dict[cell]))
         
         # read in DNase bam file
         reads = pyDNase.BAMHandler(dnase_file_dict[cell])
         
         # initialize matrix
-        cell_dnase = ss.lil_matrix((data["x"].shape[0], 1000), dtype=np.int8)
-        
+        cell_dnase = ss.lil_matrix((num_samples, 1000), dtype=np.int8)
         
         # for all rows in dataset, read DNase cut sites for that region
-        for row_i in range(data['x'].shape[0]): # for all rows in dataset
+        for row_i in range(num_samples): # for all rows in dataset
 
                 # index into allTFpos.bed file to get the genomic region
                 # for reading DNase
@@ -120,55 +122,54 @@ def procedure(TFPOS_REGIONS, cell):
                 if (row_i % 100000 == 0):
                     print("cell %s on iteration %i" % (cell, row_i))
                 
-        # write to h5 file
-        hf.create_dataset(cell,data=ss.csr_matrix(cell_dnase))
+        # save temporary values for this cell type
+        sparse.save_npz(getTmpPathForCell(cell), ss.csr_matrix(cell_dnase))
         
 
-def saveDNaseCellTypes(data, hf, TFPOS_REGIONS):
+def saveDNaseCellTypes(TFPOS_REGIONS, num_samples, h5_filepath):
         
     output = list()
     celltypes = list(dnase_file_dict.keys())
-    func = partial(procedure, TFPOS_REGIONS)
+    func = partial(procedure, TFPOS_REGIONS, num_samples)
     with concurrent.futures.ProcessPoolExecutor() as executor:
         for out in executor.map(func, celltypes):
             output.append(out)
+            
+    print("processing complete. Saving cell files to single h5 file...")
+    
+    with h5sparse.File(h5_filepath, 'w') as hf:
+        for cell in celltypes:
+            print("saving data for cell %s from path %s" % (cell, getTmpPathForCell(cell)))
+            cell_dnase = sparse.load_npz(getTmpPathForCell(cell))
+            hf.create_dataset(cell,data=ss.csr_matrix(cell_dnase))
         
         
 # ## Process data
 
-# ### Process validation data and save as .mat file
-
-# filepath for all data
+# ### Process validation data and save as h5 file
 
 tmp = loadmat(os.path.join(deepsea_path, "valid.mat"))
-data = {
-    "x": tmp['validxdata'],
-    "y": tmp['validdata'].T
-}
+num_samples = tmp['validdata'].shape[0]
 
-with h5sparse.File( _PROCESSED_DATA_PATH + "processed_dnase_valid_sparse_TEST_DELETE_ME.h5", 'w') as hf:
+h5_valid_path = os.path.join(_PROCESSED_DATA_PATH, "processed_dnase_valid_sparse_DELETEME.h5")
+saveDNaseCellTypes(_VALID_REGIONS, num_samples, h5_valid_path)
 
-     saveDNaseCellTypes(data, _VALID_REGIONS, hf)
-
-
-## Process test data and save as .mat file
+## Process test data and save as h5 file
 
 tmp = loadmat(os.path.join(deepsea_path, "test.mat"))
-data = {
-     "x": tmp['testxdata'],
-     "y": tmp['testdata'].T
-}
-with h5sparse.File( _PROCESSED_DATA_PATH + "processed_dnase_test_sparse.h5", 'w') as hf:
-     saveDNaseCellTypes(data, _TEST_REGIONS, hf)
+num_samples = tmp['testdata'].shape[0]
+
+h5_test_path = os.path.join(_PROCESSED_DATA_PATH, "processed_dnase_test_sparse_DELETEME.h5")
+saveDNaseCellTypes( _TEST_REGIONS, num_samples, h5_test_path)
 
 
-# ### Process train data and save as .mat file
-
+# ### Process train data and save as h5 file
 tmp = h5py.File(os.path.join(deepsea_path, "train.mat"), "r")
-data = {
-    "x": tmp["trainxdata"][()].transpose([2,1,0]),
-    "y": tmp["traindata"][()]
-}
-with h5sparse.File( _PROCESSED_DATA_PATH + "processed_dnase_train_sparse.h5", 'w') as hf:
-    saveDNaseCellTypes(data, _TRAIN_REGIONS, hf)
+num_samples = tmp["traindata"].shape[1]
+
+h5_train_path = os.path.join(_PROCESSED_DATA_PATH, "processed_dnase_train_sparse_DELETEME.h5")
+saveDNaseCellTypes(_TRAIN_REGIONS, num_samples, h5_train_path)
+
+# TODO remove temporary npz files
+
 

@@ -162,21 +162,24 @@ def get_assays_from_feature_file(feature_path='../data/feature_name'):
 ###############################################################################
 ################### Processing h5sparse files for DNase #######################
 
-def toSparseDictionary(dnase_h5): # takes 3 seconds and 56 bytes for train
+def toSparseDictionary(sparse_map, normalize): 
     ''' Converts h5 file to dictionary of sparse matrices, indexed by cell type.
     
     Args:
-        :param dnase_h5: h5sparse file
+        :param sparse_map: map of (cell type, sparse matrix)
+        :param normalize: boolean specifying whether or not to normalize the data
         
     Returns:
         dictionary of (celltype, sparsematrix)
     
     '''
-    m = map(lambda x: (x[0], dnase_h5[x[0]][:]), dnase_file_dict.items())
-    return {x[0]:x[1] for x in m}
+    if (normalize):
+        return {x[0]:x[1]/x[1].max() for x in sparse_map}
+    else:
+        return {x[0]:x[1] for x in sparse_map}
 
 
-def toSparseIndexedDictionary(dnase_train, dnase_valid,dnase_test, DATA_LABEL):
+def toSparseIndexedDictionary(dnase_train, dnase_valid,dnase_test, DATA_LABEL, normalize = True):
     ''' Converts h5 file to dictionary of sparse matrices, indexed by cell type.
     Corrects for indices when we moved some of train into the validation set.
     
@@ -185,6 +188,7 @@ def toSparseIndexedDictionary(dnase_train, dnase_valid,dnase_test, DATA_LABEL):
         :param dnase_valid: h5sparse file for valid
         :param dnase_test: h5sparse file for test
         :param DATA_LABEL: specifies Dataset.TRAIN, valid or TEST
+        :param normalize: boolean specifying whether or not to normalize the data
         
     Returns:
         dictionary of (celltype, sparsematrix)
@@ -194,7 +198,7 @@ def toSparseIndexedDictionary(dnase_train, dnase_valid,dnase_test, DATA_LABEL):
         # from above, we concatenated [train_data["x"][0:2200000,:,:]
         # and train_data["x"][2400000:4200000,:,:]] 
         m = map(lambda x: (x[0], dnase_train[x[0]].value[np.r_[0:2200000,2400000:4200000]]), dnase_file_dict.items())
-        return {x[0]:x[1] for x in m}
+        return toSparseDictionary(m, normalize)
     
     elif (DATA_LABEL == Dataset.VALID):
         
@@ -204,12 +208,13 @@ def toSparseIndexedDictionary(dnase_train, dnase_valid,dnase_test, DATA_LABEL):
         m = map(lambda x: (x[0], 
                            vstack([dnase_train[x[0]].value[np.r_[2200000:2400000,4200000:4400000]],
                                    dnase_valid[x[0]].value])), dnase_file_dict.items())
-        return {x[0]:x[1] for x in m}      
+        
+        return toSparseDictionary(m, normalize) 
     elif (DATA_LABEL == Dataset.TEST): # test
-        return toSparseDictionary(dnase_test)
+        m = map(lambda x: (x[0], dnase_test[x[0]][:]), dnase_file_dict.items())
+        return toSparseDictionary(m, normalize)
     else:
         raise
-            
             
 def get_dnase_array_from_modified_dict(dnase_train, dnase_valid, dnase_test, range_i, celltype, DATA_LABEL="train"):
     ''' This function pulls respective validation and training data corresponding to
