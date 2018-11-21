@@ -1,13 +1,46 @@
 # imports 
 import h5py
 
+
 ######################################################
 ################### FUNCTIONS ########################
 ######################################################
 
 
-
 ################## LOADING DATA ######################
+
+def load_deepsea_data_single(deepsea_path):
+    """
+    Loads deepsea data into 1 single data structure, 
+    ordered by deepsea allpos file.
+    """
+    
+    tmp = h5py.File(os.path.join(deepsea_path, "train.mat"))
+    train_data = {
+        "x": tmp["trainxdata"][()].transpose([2,1,0]),
+        "y": tmp["traindata"][()]
+    }
+
+    tmp = loadmat(os.path.join(deepsea_path, "valid.mat"))
+    valid_data = {
+        "x": tmp['validxdata'],
+        "y": tmp['validdata'].T
+    }
+
+    tmp = loadmat(os.path.join(deepsea_path, "test.mat"))
+    test_data = {
+        "x": tmp['testxdata'],
+        "y": tmp['testdata'].T
+    }
+    
+    data = {
+        "x": np.concatenate([train_data["x"],valid_data["x"],test_data["x"]], axis=0),
+        "y": np.concatenate([train_data["y"],valid_data["y"],test_data["y"]], axis=1),
+    }
+    return data
+
+    
+    
 def load_deepsea_data(deepsea_path):
     tmp = h5py.File(os.path.join(deepsea_path, "train.mat"))
     train_data = {
@@ -239,5 +272,56 @@ def get_dnase_array_from_modified_dict(dnase_train, dnase_valid, dnase_test, ran
     else:
         raise
     
+    
+################### Parsing data from bed file ########################
+
+def bedFile2Vector(bed_file, all_pos_file):
+    """
+    This function takes in a bed file of peaks and converts it to a vector or 0/1s that can be 
+    uses as input into a model. Each 0/1 represents a region in the train/test/validation set from DeepSEA.
+    
+    Most likely, the bed file will be the output of the IDR function, which detects peaks based on the
+    reproducibility of multiple samples.
+    
+    :param: bed_file: bed file containing peaks
+    :param: all_pos_file: file from DeepSEA that specified  genomic region ordering
+    
+    :return: vector containing the concatenated 4.4 million train, validation, and test data in the order
+    that WE have parsed train/test.
+    
+    """
+    
+    # load in bed file and tf pos file
+    positions = BedTool(all_pos_file)
+    idr_peaks = BedTool(bed_file)
+
+    # get overlaps, with overlap size 0
+    c = positions.window(idr_peaks, w=0).overlap(cols=[2,3,8,9])
+    df = c.to_dataframe()
+
+    # only consider records that have >100bp overlap
+    filtered = df[df[26] > 100]
+
+    # get positions dataframe
+    positions_df = positions.to_dataframe()
+
+    # merge positions and regions
+    regions = filtered[[0,1,2]].drop_duplicates()
+    merged_df = pd.merge(positions_df, regions,  how='left', left_on=['chrom','start', 'end'], right_on = [0,1,2])
+
+    # convery array to np array of 0/1s
+    peak_vector=np.array(list(map(lambda x: float.is_integer(x), merged_df[1]))).astype(int)
+    
+    # filter out rows that were not used for training (defined in constants.py)
+    # also, add in fake negative strands that just duplicate the sets 
+    # TODO: does deepsea peak call on negative and positive strands!?!?
+    ATAC_train = peak_vector[_TRAIN_REGIONS[0]:_TRAIN_REGIONS[1]+1]
+    ATAC_valid = peak_vector[_VALID_REGIONS[0]:_VALID_REGIONS[1]+1]
+    ATAC_test =  peak_vector[_TEST_REGIONS[0]:_TEST_REGIONS[1]+1]
+
+    # need to duplicate results for forward/reverse strand
+    vector_dup = np.concatenate([ATAC_train, ATAC_train, ATAC_valid, ATAC_valid, ATAC_test, ATAC_test], axis=0)
+    
+    return vector_dup
    
         
