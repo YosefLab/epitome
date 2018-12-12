@@ -108,9 +108,6 @@ def make_dataset(data,
                  matrix,
                  assaymap,
                  cellmap,
-                 batch_size,
-                 shuffle_size,
-                 prefetch_size,
                  label_assays = None,
                  radii=[1,3,10,30],
                 **kwargs):
@@ -126,8 +123,6 @@ def make_dataset(data,
     :param matrix: celltype by assay matrix holding positions of labels
     :param assaymap: map of (str assay, iloc col in matrix)
     :param cellmap: map of  (str cellname, iloc row in matrix)
-    :param shuffle_size: shuffle data parameter
-    :param prefetch_size: blocking fetch parameter
     :param label_assays: assays to evaluate in the label space. If None, set to the input space. If not None, should always  include  DNase.
     :param radii: where to calculate DNase similarity to.
     
@@ -135,7 +130,11 @@ def make_dataset(data,
     """
     
     # used in some generators for shuffling batches
-    kwargs["batch_size"] = batch_size
+    # batch sized is used for metalearning
+    
+    # AM TODO TRANSFER TO METALEARNING CODE
+    batch_size = kwargs.get('batch_size',1)
+    
     kwargs["matrix"] = matrix
     kwargs["all_eval_cell_types"] = all_eval_cell_types
     
@@ -170,7 +169,23 @@ def make_dataset(data,
         # results is a list of arrays, each row conatains assay indices for a unique cell type
         assay_indices = np.array(list(map(lambda assay: get_y_indices_for_assay(y_index_vectors, assaymap, assay), label_assays))).T.tolist()
         g = generator(data, y_index_vectors, assay_indices, dnase_indices, indices, radii, **kwargs)
+        
+    return g
 
+
+def generator_to_one_shot_iterator(g, batch_size, shuffle_size, prefetch_size):
+    """
+    Generates a one shot iterator from a data generator.
+    
+    :param g: data generator
+    :param batch_size: number of elements in generator to combine into a single batch
+    :param shuffle_size: number of elements from the  generator fromw which the new dataset will shuffle
+    :param prefetch_size: maximum number of elements that will be buffered  when prefetching
+    :param radii: where to calculate DNase similarity to.
+    
+    :returns: tuple of (label shape, one shot iterator)
+    """
+    
     for x, y in g():
         break
     
@@ -184,5 +199,9 @@ def make_dataset(data,
     dataset = dataset.repeat()
     dataset = dataset.prefetch(prefetch_size)
     return y.shape, dataset.make_one_shot_iterator()
+
+    
+    
+    
 
 

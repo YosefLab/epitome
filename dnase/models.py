@@ -27,8 +27,9 @@ class PeakModel():
                  radii=[1,3,10,30]):
         
         self.graph = tf.Graph()
-        
+    
         with self.graph.as_default() as graph:
+            
             tf.logging.set_verbosity(tf.logging.INFO)
             
             if (all_eval_cell_types == None):
@@ -48,42 +49,33 @@ class PeakModel():
             
                 
             # make datasets
-            output_shape, train_iter = make_dataset(train_data,  
+            output_shape, train_iter = generator_to_one_shot_iterator(make_dataset(train_data,  
                                                     validation_celltypes, 
                                                     self.all_eval_cell_types,
                                                     generator, 
                                                     matrix,
                                                     assaymap,
                                                     cellmap,
-                                                    batch_size, 
-                                                    shuffle_size, 
-                                                    prefetch_size, 
                                                     label_assays = self.label_assays,
-                                                    radii = radii)
-            shape,            valid_iter = make_dataset(valid_data, 
+                                                    radii = radii), batch_size, shuffle_size, prefetch_size)
+            shape,            valid_iter = generator_to_one_shot_iterator(make_dataset(valid_data, 
                                                         validation_celltypes, 
                                                         self.all_eval_cell_types,
                                                         generator, 
                                                         matrix,
                                                         assaymap,
                                                         cellmap,
-                                                        batch_size, 
-                                                        1           , 
-                                                        prefetch_size, 
                                                         label_assays = self.label_assays,
-                                                        radii = radii)
-            _,            test_iter = make_dataset(test_data, 
+                                                        radii = radii), batch_size, 1, prefetch_size)
+            _,            test_iter = generator_to_one_shot_iterator(make_dataset(test_data, 
                                                    test_celltypes, 
                                                    self.all_eval_cell_types,
                                                    generator, 
                                                    matrix,
                                                    assaymap,
                                                    cellmap,
-                                                   batch_size, 
-                                                   1           , 
-                                                   prefetch_size, 
                                                    label_assays = self.label_assays,
-                                                   radii = radii)
+                                                   radii = radii), batch_size, 1, prefetch_size)
 
             self.train_handle = train_iter.string_handle()
             self.valid_handle = valid_iter.string_handle()
@@ -127,7 +119,18 @@ class PeakModel():
             self.min = self.minimizer_fn()
             
             self.closed = False
-                
+        
+            
+    def save(self, checkpoint_path):
+        save_path = self.saver.save(self.sess, checkpoint_path)
+        tf.logging.info("Model saved in path: %s" % save_path)
+        
+        
+    def restore(self, checkpoint_path):
+        # need to kickstart train to create saver variable
+        self.train(0)
+        self.train(0, checkpoint_path = checkpoint_path)
+        
     def body_fn(self):
         raise NotImplementedError()
     
@@ -143,16 +146,20 @@ class PeakModel():
             self.sess.close()
         self.closed = True
         
-    def train(self, num_steps, lr=None):
+    def train(self, num_steps, lr=None, checkpoint_path = None):
         assert not self.closed
         with self.graph.as_default():
             if lr == None:
                 lr = self.default_lr
             try:
-                self.sess.run(self.global_step)
+                if (checkpoint_path != None):
+                    self.saver.restore(self.sess, checkpoint_path)
+                else:
+                    self.sess.run(self.global_step)
             except:
                 tf.logging.info("Initializing variables")
                 self.sess.run(tf.global_variables_initializer())
+                self.saver = tf.train.Saver()  # define a saver for saving and restoring
                 self.train_handle = self.sess.run(self.train_handle)
                 self.valid_handle = self.sess.run(self.valid_handle)
                 self.test_handle = self.sess.run(self.test_handle)
@@ -230,7 +237,7 @@ class PeakModel():
         """
         Runs test given a specified data generator 
         :param num_samples: number of samples to test
-        :param iter_: output of make_dataset, iterator of records
+        :param iter_: output of generator_to_one_shot_iterator(), one shot  iterator of records
         :param cell_type: cell type to test on. Used to generate holdout indices.
         
         :return predictions
