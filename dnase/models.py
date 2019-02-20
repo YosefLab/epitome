@@ -2,6 +2,8 @@
 Functions and classes for model specifications.
 """
 
+# Calculating PR scores
+from sklearn.metrics import average_precision_score
 
 ################### Simple DNase peak based distance model ############
 
@@ -24,7 +26,7 @@ class PeakModel():
                  l1=0.,
                  l2=0.,
                  lr=1e-3,
-                 radii=[1,3,10,30]):
+                 radii=[1,3,10,30], train_record_indices = None, valid_record_indices = None):
         
         self.graph = tf.Graph()
     
@@ -57,16 +59,20 @@ class PeakModel():
                                                     assaymap,
                                                     cellmap,
                                                     label_assays = self.label_assays,
-                                                    radii = radii), batch_size, shuffle_size, prefetch_size)
+                                                    radii = radii, mode = Dataset.TRAIN, train_record_indices=train_record_indices),
+                                                    batch_size, shuffle_size, prefetch_size)
+                                                                      
             shape,            valid_iter = generator_to_one_shot_iterator(make_dataset(valid_data, 
-                                                        validation_celltypes, 
-                                                        self.all_eval_cell_types,
-                                                        generator, 
-                                                        matrix,
-                                                        assaymap,
-                                                        cellmap,
-                                                        label_assays = self.label_assays,
-                                                        radii = radii), batch_size, 1, prefetch_size)
+                                                    validation_celltypes, 
+                                                    self.all_eval_cell_types,
+                                                    generator, 
+                                                    matrix,
+                                                    assaymap,
+                                                    cellmap,
+                                                    label_assays = self.label_assays,
+                                                    radii = radii, mode = Dataset.VALID, valid_record_indices=valid_record_indices), 
+                                                      batch_size, 1, prefetch_size)
+            
             _,            test_iter = generator_to_one_shot_iterator(make_dataset(test_data, 
                                                    test_celltypes, 
                                                    self.all_eval_cell_types,
@@ -75,8 +81,9 @@ class PeakModel():
                                                    assaymap,
                                                    cellmap,
                                                    label_assays = self.label_assays,
-                                                   radii = radii), batch_size, 1, prefetch_size)
-
+                                                   radii = radii, mode = Dataset.TEST),
+                                                       batch_size, 1, prefetch_size)
+            
             self.train_handle = train_iter.string_handle()
             self.valid_handle = valid_iter.string_handle()
             self.test_handle = test_iter.string_handle()
@@ -126,6 +133,20 @@ class PeakModel():
         tf.logging.info("Model saved in path: %s" % save_path)
         
         
+    def gini(self, actual, pred):                                                 
+        df = sorted(zip(actual, pred), key=lambda x : (x[1], x[0]),  reverse=True)
+        random = [float(i+1)/float(len(df)) for i in range(len(df))]                
+        totalPos = np.sum([x[0] for x in df])           
+        cumPosFound = np.cumsum([x[0] for x in df])                                     
+        Lorentz = [float(x)/totalPos for x in cumPosFound]                          
+        Gini = [l - r for l, r in zip(Lorentz, random)]   
+        return np.sum(Gini)                                                         
+
+
+    def gini_normalized(self, actual, pred):                                      
+        normalized_gini = self.gini(actual, pred)/self.gini(actual, actual)      
+        return normalized_gini      
+
     def restore(self, checkpoint_path):
         # need to kickstart train to create saver variable
         self.train(0)
@@ -135,7 +156,7 @@ class PeakModel():
         raise NotImplementedError()
     
     def loss_fn(self):
-        return tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits, 50))
+        return tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits, 1))
     
     def minimizer_fn(self):
         self.opt = tf.train.AdamOptimizer(self.lr)
@@ -246,7 +267,7 @@ class PeakModel():
         iter_handle = self.sess.run(handle)        
         return self.run_predictions(num_samples, iter_handle, validation_holdout_indices, log)
     
-    # TODO am TEST
+    # TODO AM TEST
     def test_vector(self, WHICH_DATASET, dnase_vector, cell_type, log=False):
 
         # make dataset from DNase vector
@@ -295,10 +316,11 @@ class PeakModel():
                 )
             preds = np.concatenate([v[0] for v in vals])            
             truth = np.concatenate([v[2] for v in vals])
-
+            
             # remove missing indices for computing macro/micro AUC
             preds_r = np.delete(preds, validation_holdout_indices, axis=1)
             truth_r = np.delete(truth, validation_holdout_indices, axis=1)
+            
             
             try:
                 macroAUC = sklearn.metrics.roc_auc_score(truth_r, preds_r, average='macro')
@@ -319,7 +341,11 @@ class PeakModel():
 
                     if (i not in validation_holdout_indices+1 and i != 0):
                         try:
-                            str_ = "%s: %i, %s, %f" % (str(datetime.datetime.now()), i, assay, sklearn.metrics.roc_auc_score(truth_r[:,j], preds_r[:,j], average='macro'))
+                            auc_score =  sklearn.metrics.roc_auc_score(truth_r[:,j], preds_r[:,j], average='macro')
+                            pr_score  =  average_precision_score(truth_r[:,j], preds_r[:,j])
+                            gini_score = self.gini_normalized(truth_r[:,j], preds_r[:,j])
+                            
+                            str_ = "%s:\tAUC:%.3f\tavPR:%.3f\tGINI:%.3f" % (assay, auc_score, pr_score, gini_score)
                         except ValueError:
                             str_ = "%s: %i, %s, CANT CALCULATE" % (str(datetime.datetime.now()), i, assay)
                         j = j + 1
@@ -344,7 +370,7 @@ class MLP(PeakModel):
         self.num_units = num_units
         self.activation = activation
         self.radii = kwargs["radii"]
-        
+
         PeakModel.__init__(self, *args, **kwargs)
             
     def body_fn(self):

@@ -20,8 +20,20 @@ def gen_from_peaks(data, y_index_vectors, assay_indices, dnase_indices, indices,
     
     :returns: generator of data
     """
+    
     # y indices for x and assay indices for y should have the same length
     assert len(y_index_vectors) == len(assay_indices), "Length of y_index_vectors and assay_indices must be the same (# cells evaluatated)"
+    
+    mode = kwargs["mode"]
+    
+    # indices that we want to use in the generator
+    # If none, then  will use the whole dataset for the generator
+    record_indices = None
+    if (mode == Dataset.TRAIN):
+        record_indices = kwargs.get("train_record_indices")
+    elif (mode == Dataset.VALID):
+        record_indices = kwargs.get("valid_record_indices")
+    ## shouldn't subset for test!
     
     def g():
                     
@@ -29,8 +41,13 @@ def gen_from_peaks(data, y_index_vectors, assay_indices, dnase_indices, indices,
             range_ = range(max(radii), data["y"].shape[-1]-max(radii))
         else: 
             range_ = range(0, data["y"].shape[-1])
- 
+            
         for i in range_: # for all records
+            
+            # check if you you actually want to add this record to the generator
+            if (hasattr(record_indices, 'shape')):
+                if (i not in record_indices): 
+                    continue
             
             for (y_index, assay_index) in zip(y_index_vectors, assay_indices):
                 dnases = [] 
@@ -50,7 +67,11 @@ def gen_from_peaks(data, y_index_vectors, assay_indices, dnase_indices, indices,
                 # Remove DNase from prediction indices. 
                 # You should not predict on assays you use to calculate the distance metric.
                 assay_index_no_dnase = np.delete(assay_index, [0])
-                yield np.concatenate([data["y"][indices,i],dnases]), data["y"][assay_index_no_dnase,i] 
+                if (mode == Dataset.TRAIN) & (len(assay_index_no_dnase) > 1): # only sample for learning
+                    if (data["y"][indices,i].sum() != 0) | (data["y"][assay_index_no_dnase,i].sum() != 0):
+                        yield np.concatenate([data["y"][indices,i],dnases]), data["y"][assay_index_no_dnase,i] 
+                else: 
+                    yield np.concatenate([data["y"][indices,i],dnases]), data["y"][assay_index_no_dnase,i] 
     return g
 
 
@@ -132,7 +153,7 @@ def make_dataset(data,
     # used in some generators for shuffling batches
     # batch sized is used for metalearning
     
-    # AM TODO TRANSFER TO METALEARNING CODE
+    # AM TODO TRANSFER TO METALEARNING CODE    
     batch_size = kwargs.get('batch_size',1)
     
     kwargs["matrix"] = matrix
