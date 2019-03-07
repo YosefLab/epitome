@@ -4,43 +4,45 @@ Functions for data generators.
 
 ######################### Original Data Generator: Only peak based #####################
 def gen_from_peaks(data, 
-                    label_cell_indices, 
-                    assay_indices, 
-                    dnase_indices, 
-                    feature_assay_indices, 
-                    radii, 
-                    **kwargs):
+                 label_cell_types,  # used for labels. Should be all for train/eval and subset for test
+                 eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                 matrix,
+                 assaymap,
+                 cellmap,
+                 radii,
+                 **kwargs):
+
     """
     Takes Deepsea data and calculates distance metrics from cell types whose locations
     are specified by label_cell_indices, and the other cell types in the set. Label space is only one assay.
-    
+     TODO AM 3/7/2019
     :param data: dictionary of matrices. Should have keys x and y. x contains n by 1000 rows. y contains n y 919 labels.
-    :param label_cell_indices: list of vectors which are the indices in the labels that should be used for each eval cell type.
-    :param assay_indices: list of assays that should be used in the label space. 1 per test/eval cell type.
-    :param dnase_indices: indices for DNase for celltypes
-    :param feature_assay_indices: indices of assays for train cell types for the feature space (does not include cell types for eval/test)
-    :param radii: where to calculate DNase similarity to.
-    
+    :param label_cell_types: list of cell types to be rotated through and used as labels (subset of eval_cell_types)
+    :param eval_cell_types: list of cell types to be used in evaluation (includes label_cell_types)
+    :param matrix: matrix of celltype, assay positions
+    :param assaymap: map of column assay positions in matrix
+    :param cellmap: map of row cell type positions in matrix
+    :param radii: radii to compute dnase distances from
+    :param kwargs: kargs
+
     :returns: generator of data with three elements:
         1. record features
         2. record labels for a given cell type
         3. 0/1 mask of labels that have validation data. For example, if this record is for celltype A549,
         and A549 does not have data for ATF3, there will be a 0 in the position corresponding to the label space.
     """
+
+    mode = kwargs.get("mode")
     
-    # y indices for x and assay indices for y should have the same length
-    assert len(label_cell_indices) == len(assay_indices), "Length of label_cell_indices and assay_indices must be the same (# cells evaluatated)"
+    if (not isinstance(mode, Dataset)):
+        raise ValueError("mode is not a Dataset enum")
     
-    mode = kwargs["mode"]
+    print("using %s as labels for mode %s" % (label_cell_types, mode))
     
-    # indices that we want to use in the generator
-    # If none, then  will use the whole dataset for the generator
-    record_indices = None
-    if (mode == Dataset.TRAIN):
-        record_indices = kwargs.get("train_record_indices")
-    elif (mode == Dataset.VALID):
-        record_indices = kwargs.get("valid_record_indices")
-    ## shouldn't subset for test!
+    if (mode == Dataset.TEST):
+        # TODO AM 3/7/2019 drop cell types using DNase distance metric for better accuracy
+        eval_cell_types = eval_cell_types.copy()
+        [eval_cell_types.pop() for i in range(len(label_cell_types))]
     
     def g():
                     
@@ -50,45 +52,59 @@ def gen_from_peaks(data,
             range_ = range(0, data["y"].shape[-1])
             
         for i in range_: # for all records
-            # check if you you actually want to add this record to the generator
-            if (hasattr(record_indices, 'shape')):
-                if (i not in record_indices): 
-                    continue
             
-            # label_cell_index and assay_index are the same unless sometimes?
-            for (label_cell_index, assay_index) in zip(label_cell_indices, assay_indices):
+            for (cell) in label_cell_types: # for all cell types to be used in labels
                 dnases = [] 
+                
+                # cells to be featurized
+                feature_cells = eval_cell_types.copy()
+                
+                # try to remove cell if it is in the possible list of feature cell types
+                try:
+                    feature_cells.remove(cell) 
+                except ValueError:
+                    pass  # do nothing!
+                
+                
+                feature_cell_indices_list = list(map(lambda cell: get_y_indices_for_cell(matrix, cellmap, cell), feature_cells))
+                feature_cell_indices = np.array(feature_cell_indices_list).flatten()
+                
+                label_cell_indices = get_y_indices_for_cell(matrix, cellmap, cell)
+                label_cell_indices_no_dnase = np.delete(label_cell_indices, [0])
+
+                # Copy assay_index_no_dnase and turn into mask of 0/1 for whether data for this cell type for
+                # a given label is available.
+                assay_mask = np.copy(label_cell_indices_no_dnase)
+                assay_mask[assay_mask == -1] = 0
+                assay_mask[assay_mask > 0] = 1
+                
+                # get dnase indices for cell types that are going to be features
+                dnase_indices = [x[0] for x in feature_cell_indices_list]
             
                 for radius in radii:
                     # within the radius, fraction of places where they are both 1
                     # label_cell_index[0] == DNase location for specific cell type
                     dnase_double_positive = np.average(data["y"][dnase_indices,i-radius:i+radius+1]*
-                                             data["y"][label_cell_index[0],i-radius:i+radius+1], axis=1)
+                                             data["y"][label_cell_indices[0],i-radius:i+radius+1], axis=1)
                     
                     # within the radius, fraction of places where they are both equal (0 or 1)
                     dnase_agreement = np.average(data["y"][dnase_indices,i-radius:i+radius+1]==
-                                             data["y"][label_cell_index[0],i-radius:i+radius+1], axis=1)
+                                             data["y"][label_cell_indices[0],i-radius:i+radius+1], axis=1)
                     dnases.extend(dnase_double_positive)
                     dnases.extend(dnase_agreement)
-                
-                # Remove DNase from prediction indices. 
-                # You should not predict on assays you use to calculate the distance metric.
-                assay_index_no_dnase = np.delete(assay_index, [0])
-                
-                # Copy assay_index_no_dnase and turn into mask of 0/1 for whether data for this cell type for
-                # a given label is available.
-                assay_mask = np.copy(assay_index_no_dnase)
-                assay_mask[assay_mask == -1] = 0
-                assay_mask[assay_mask > 0] = 1
-                
-                # AM 3/6/2019 subsampling was hurting accuracy?
-                if (mode == Dataset.TRAIN) & (len(assay_index_no_dnase) > 1): # only sample for learning
-                    if (data["y"][feature_assay_indices,i].sum() != 0) | (data["y"][assay_index_no_dnase,i].sum() != 0):
-                        yield np.concatenate([data["y"][feature_assay_indices,i],dnases]), data["y"][assay_index_no_dnase,i], assay_mask
-      
-                else: 
-                    yield np.concatenate([data["y"][feature_assay_indices,i],dnases]), data["y"][assay_index_no_dnase,i], assay_mask
+
+                # Handle missing values 
+                # Set missing values to -1. Should be handled later.
+                features = data["y"][feature_cell_indices,i]
+                features = features.astype(int)
+                features[np.where(feature_cell_indices == -1)[0]] = -1
+
+                yield np.concatenate([features,dnases]), \
+                                        data["y"][label_cell_indices_no_dnase,i], \
+                                        assay_mask
     return g
+
+
 
 
 def gen_from_chromatin_vector(data, y_index_vectors, dnase_indices, indices, radii, **kwargs):
@@ -137,14 +153,14 @@ def gen_from_chromatin_vector(data, y_index_vectors, dnase_indices, indices, rad
 ######################## Functions for running data generators #############################
 ############################################################################################
 
+# TODO AM 3/7/2019 remove this function, not really being used
 def make_dataset(data,
                  label_cell_types,
-                 all_eval_cell_types,
+                 eval_cell_types,
                  generator,
                  matrix,
                  assaymap,
                  cellmap,
-                 label_assays = None,
                  radii=[1,3,10,30],
                 **kwargs):
     
@@ -153,62 +169,24 @@ def make_dataset(data,
     are specified by y_index_vector, and the other cell types in the set.
     
     :param data: dictionary of matrices. Should have keys x and y. x contains n by 1000 rows. y contains n y 919 labels.
-    :param label_cell_types: list of string of cell types to used for labels
-    :param all_eval_cell_types: list of string of all cell types to be evaluated/tested.
+    :param test_cell_types: list of string of all cell types to used for test.
     :param generator: which generator to use. 
     :param matrix: celltype by assay matrix holding positions of labels
     :param assaymap: map of (str assay, iloc col in matrix)
     :param cellmap: map of  (str cellname, iloc row in matrix)
-    :param label_assays: assays to evaluate in the label space. If None, set to the input space. If not None, should always  include  DNase.
     :param radii: where to calculate DNase similarity to.
     
     :returns: generator of data
     """
-    
-    # used in some generators for shuffling batches
-    # batch sized is used for metalearning
-    
-    # AM TODO TRANSFER TO METALEARNING CODE    
-    batch_size = kwargs.get('batch_size',1)
-    
-    kwargs["matrix"] = matrix
-    kwargs["all_eval_cell_types"] = all_eval_cell_types
-    
-    # Make sure label_cell_types is a subset of all_eval_cell_types
-    assert set(label_cell_types) < set(all_eval_cell_types), \
-        "label_cell_types %s must be subset of all_eval_cell_types %s" % (label_cell_types, all_eval_cell_types)
-   
-    
-    # indices_mat is used to pull the remaining indices from cell types not used for prediction.
-    # delete all eval cell types from the matrix so we are not using them in the feature space.
-    all_eval_cell_type_indices = list(map(lambda c: cellmap[c], all_eval_cell_types))
-    indices_mat = np.delete(matrix, all_eval_cell_type_indices, axis=0)
+    g = generator(data, 
+                 label_cell_types,  # used for labels. Should be all for train/eval and subset for test
+                 eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                 matrix,
+                 assaymap,
+                 cellmap,
+                 radii,
+                 **kwargs)
 
-    # get all feature locations for DNase for remaining cell types (just the first column in matrix)
-    dnase_indices = indices_mat[:,0] # for all of the cell types (including the cell type we are evaluating)
-    feature_assay_indices = indices_mat[indices_mat!=-1] # remaining indices for cell types not in evaluation or test
-
-
-    if (type(label_cell_types) != list):
-        label_cell_types = [label_cell_types]
-        
-    # list of indices for each label cell type
-    label_cell_indices = list(map(lambda cell: get_y_indices_for_cell(matrix, cellmap, cell), label_cell_types))
-
-    if (label_assays == None):
-        print("no label assays")
-        g = generator(data, label_cell_indices, label_cell_indices, dnase_indices, feature_assay_indices, radii, **kwargs)
-    else:
-        # if assays are specified, extract their indices to be used as labels
-        assert  label_assays[0] == "DNase", "Dnase not first item in label_assays."
-        
-        # list of arrays.  Each array is for an assay
-        # need to first invert the matrix so cells are row matrix, then flatten with tolist()
-        # results is a list of arrays, each row conatains assay indices for a unique cell type
-        assay_indices = np.array(list(map(lambda assay: get_y_indices_for_assay(label_cell_indices, assaymap, assay), label_assays))).T.tolist()
-        
-        g = generator(data, label_cell_indices, assay_indices, dnase_indices, feature_assay_indices, radii, **kwargs)
-        
     return g
 
 

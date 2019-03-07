@@ -1,6 +1,10 @@
 """
 Functions and classes for model specifications.
 """
+# TODOS
+# - AM 3/7/2019: Currently, there are -1's in the feature vectors from the generator
+# that indicating missing labels. We are not doing anything smart here. Is there something better 
+# we can do?
 
 # Calculating PR scores
 from sklearn.metrics import average_precision_score
@@ -21,7 +25,6 @@ class PeakModel():
                  train_data,
                  valid_data,
                  test_data,
-                 validation_celltypes,
                  test_celltypes,
                  generator,
                  matrix,
@@ -34,14 +37,13 @@ class PeakModel():
                  l1=0.,
                  l2=0.,
                  lr=1e-3,
-                 radii=[1,3,10,30], train_record_indices = None, valid_record_indices = None):
+                 radii=[1,3,10,30]):
         
         """
         Peak Model
 
         :param train_data
         :param valid_data
-        :param validation_celltypes
         :param test_celltypes
         :param generator
         :param matrix
@@ -64,53 +66,45 @@ class PeakModel():
             
             tf.logging.set_verbosity(tf.logging.INFO)
             
-            if (all_eval_cell_types == None):
-               self.all_eval_cell_types = validation_celltypes + test_celltypes
-            else:
-                self.all_eval_cell_types = all_eval_cell_types
                 
-            assert (set(validation_celltypes) < set(self.all_eval_cell_types)) & (set(test_celltypes) < set(self.all_eval_cell_types)), \
-                    "%s and %s must be subsets of the specified eval cell types (%s)" % (validation_celltypes, test_celltypes, all_eval_cell_types)
+            assert (set(test_celltypes) < set(list(cellmap))), \
+                    "test_celltypes %s must be subsets of available cell types" % (test_celltypes, list(celltypes))
+                
+                
+            # get evaluation cell types by removing any cell types that would be used in test
+            self.eval_cell_types = list(cellmap).copy()
+            [self.eval_cell_types.remove(test_cell) for test_cell in test_celltypes]
+            print("eval cell types", self.eval_cell_types)
 
-            self.label_assays = list(assaymap) # TODO what is this for?
-            
-                
             # make datasets
             output_shape, train_iter = generator_to_one_shot_iterator(make_dataset(train_data,  
-                                                    validation_celltypes, 
-                                                    self.all_eval_cell_types,
+                                                    self.eval_cell_types,
+                                                    self.eval_cell_types,
                                                     generator, 
                                                     matrix,
                                                     assaymap,
                                                     cellmap,
-                                                    label_assays = self.label_assays,
-                                                    radii = radii, mode = Dataset.TRAIN, 
-                                                    train_record_indices=train_record_indices, 
-                                                    batch_size = batch_size),
+                                                    radii = radii, mode = Dataset.TRAIN),
                                                     batch_size, shuffle_size, prefetch_size)
                                                                       
             _,            valid_iter = generator_to_one_shot_iterator(make_dataset(valid_data, 
-                                                    validation_celltypes, 
-                                                    self.all_eval_cell_types,
+                                                    self.eval_cell_types,
+                                                    self.eval_cell_types,
                                                     generator, 
                                                     matrix,
                                                     assaymap,
                                                     cellmap,
-                                                    label_assays = self.label_assays,
-                                                    radii = radii, mode = Dataset.VALID, 
-                                                    valid_record_indices=valid_record_indices, 
-                                                    batch_size = batch_size), 
+                                                    radii = radii, mode = Dataset.VALID), 
                                                     batch_size, 1, prefetch_size)
             
             _,            test_iter = generator_to_one_shot_iterator(make_dataset(test_data, 
                                                    test_celltypes, 
-                                                   self.all_eval_cell_types,
+                                                   self.eval_cell_types,
                                                    generator, 
                                                    matrix,
                                                    assaymap,
                                                    cellmap,
-                                                   label_assays = self.label_assays,
-                                                   radii = radii, mode = Dataset.TEST, batch_size = batch_size),
+                                                   radii = radii, mode = Dataset.TEST),
                                                        batch_size, 1, prefetch_size)
             
             self.train_handle = train_iter.string_handle()
@@ -238,7 +232,6 @@ class PeakModel():
                                        self.batch_size, 
                                        1           , 
                                        self.prefetch_size, 
-                                       label_assays = self.label_assays,
                                        radii = radii,
                                        dnase_vector = vector)
 
@@ -303,7 +296,6 @@ class PeakModel():
                                self.batch_size, 
                                1           , 
                                self.prefetch_size, 
-                               label_assays = self.label_assays,
                                radii = radii,
                                dnase_vector = vector)
 
@@ -338,19 +330,33 @@ class PeakModel():
                 # Mean results because sample_weight mask can only work on 1 row at a time.
                 # If a given assay is not available for evaluation, sample_weights will all be 0 
                 # and the resulting roc_auc_score will be NaN.
-                macroAUC = np.nanmean([sklearn.metrics.roc_auc_score(truth[:,k], preds[:,k], 
+                macroAUC_vec = []
+                microAUC_vec = []
+                
+                # try/accept for cases with only one class (throws ValueError)
+                for k in range(preds.shape[1]):
+                    try:
+                        macroAUC_vec.append(sklearn.metrics.roc_auc_score(truth[:,k], preds[:,k], 
                                                           average='macro', 
-                                                          sample_weight = sample_weight[:,k])
-                            for k in range(preds.shape[1])])
-                                   
-                microAUC = np.nanmean([sklearn.metrics.roc_auc_score(truth[:,k], preds[:,k], 
-                                                          average='macro', 
-                                                          sample_weight = sample_weight[:,k])
-                            for k in range(preds.shape[1])])
+                                                          sample_weight = sample_weight[:,k]))
+                    except ValueError:
+                        pass
+                    
+                    try:
+                        microAUC_vec.append(sklearn.metrics.roc_auc_score(truth[:,k], preds[:,k], 
+                                                          average='micro', 
+                                                          sample_weight = sample_weight[:,k]))
+                    except ValueError:
+                        pass
+
+                
+                macroAUC = np.nanmean(macroAUC_vec)
+                microAUC = np.nanmean(microAUC_vec)
 
                 tf.logging.info("Our macro AUC:     " + str(macroAUC))
                 tf.logging.info("Our micro AUC:     " + str(microAUC))
-            except ValueError:
+            except ValueError as v:
+                print(v.args)
                 macroAUC = None
                 microAUC = None
                 tf.logging.info("Failed to calculate macro AUC")

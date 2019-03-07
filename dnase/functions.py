@@ -2,6 +2,8 @@
 import h5py
 
 from pybedtools import BedTool
+from scipy.io import savemat
+
 import pandas as pd
 import collections
 import numpy as np
@@ -93,6 +95,70 @@ def load_deepsea_data_allpos_file(deepsea_path):
 
     return data
 
+def save_deepsea_label_data(deepsea_path, label_output_path):
+    """
+    Saves just deepsea labels, easier to access and much smaller dataset that can be loaded quicker.
+    
+    Args:
+        :param deepsea_path: path to .mat data, downloaded from script ./bin/download_deepsea_data
+        :param label_output_path: new output path to save labels
+
+    """
+    if not os.path.exists(label_output_path):
+        os.mkdir(label_output_path)
+        print("%s Created " % label_output_path)
+    
+    
+    tmp = h5py.File(os.path.join(deepsea_path, "train.mat"))
+    train_data = {
+        "y": tmp["traindata"][()]
+    }
+
+
+    tmp = loadmat(os.path.join(deepsea_path, "valid.mat"))
+    valid_data = {
+        "y": tmp['validdata'].T
+    }
+
+    tmp = loadmat(os.path.join(deepsea_path, "test.mat"))
+    test_data = {
+        "y": tmp['testdata'].T
+    }
+
+    valid_data = {
+        "y": np.concatenate([train_data["y"][:,2200000:2400000],train_data["y"][:,4200000:4400000],valid_data["y"]], axis=1),
+    }
+
+    train_data = {
+        "y": np.concatenate([train_data["y"][:,0:2200000],train_data["y"][:,2400000:4200000], test_data["y"]], axis=1),
+    } 
+    # save files
+    
+    print("saving train.mat, valid.mat and test.mat to %s" % label_output_path)
+    savemat(os.path.join(label_output_path, "train.mat"), train_data)
+    savemat(os.path.join(label_output_path, "valid.mat"), valid_data)
+    savemat(os.path.join(label_output_path, "test.mat"), test_data)
+    
+def load_deepsea_label_data(deepsea_path):
+        """
+    Loads just deepsea labels, saved from save_deepsea_label_data function
+    
+    Args:
+        :param deepsea_path: path to .mat data, saved by save_deepsea_label_data function
+        
+    :returns: train_data, valid_data, and test_data
+        3 dictionaries for train, valid and test containing a 'y' matrix of labels
+    """
+    
+    train_data = loadmat(os.path.join(deepsea_path, "train.mat"))
+
+
+    valid_data = loadmat(os.path.join(deepsea_path, "valid.mat"))
+
+
+    test_data = loadmat(os.path.join(deepsea_path, "test.mat"))
+
+    return train_data, valid_data, test_data
 
 
 def load_deepsea_data(deepsea_path):
