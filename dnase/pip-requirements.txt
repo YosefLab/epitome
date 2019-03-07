@@ -1,5 +1,6 @@
+numpy
 HTSeq==0.9.1 # for genomicIntervals
-matplotlib=3.0.0
+matplotlib==3.0.0
 pyfaidx
 pybedtools
 pyDNase==0.3.0
@@ -7,4 +8,4 @@ tensor2tensor
 sklearn
 kipoi==0.4.0
 torch
-h5sparse=0.0.5
+h5sparse==0.0.5

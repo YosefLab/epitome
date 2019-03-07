@@ -7,6 +7,15 @@ from sklearn.metrics import average_precision_score
 
 ################### Simple DNase peak based distance model ############
 
+"""
+Functions and classes for model specifications.
+"""
+
+# Calculating PR scores
+from sklearn.metrics import average_precision_score
+
+################### Simple DNase peak based distance model ############
+
 class PeakModel():
     def __init__(self,
                  train_data,
@@ -17,8 +26,7 @@ class PeakModel():
                  generator,
                  matrix,
                  assaymap,
-                 cellmap,
-                 label_assays = None, # what assays are you trying to predict in the label space?  If none, then all!  
+                 cellmap,  
                  batch_size=64,
                  shuffle_size=10000,
                  prefetch_size=10,
@@ -28,6 +36,28 @@ class PeakModel():
                  lr=1e-3,
                  radii=[1,3,10,30], train_record_indices = None, valid_record_indices = None):
         
+        """
+        Peak Model
+
+        :param train_data
+        :param valid_data
+        :param validation_celltypes
+        :param test_celltypes
+        :param generator
+        :param matrix
+        :param assaymap
+        :param cellmap
+        :param batch_size
+        :param shuffle_size
+        :param prefetch_size
+        :param all_eval_cell_types
+        :param l1
+        :param l2
+        :param lr
+        :param radii
+
+        """
+        
         self.graph = tf.Graph()
     
         with self.graph.as_default() as graph:
@@ -35,19 +65,14 @@ class PeakModel():
             tf.logging.set_verbosity(tf.logging.INFO)
             
             if (all_eval_cell_types == None):
-                self.all_eval_cell_types = validation_celltypes + test_celltypes
+               self.all_eval_cell_types = validation_celltypes + test_celltypes
             else:
                 self.all_eval_cell_types = all_eval_cell_types
                 
             assert (set(validation_celltypes) < set(self.all_eval_cell_types)) & (set(test_celltypes) < set(self.all_eval_cell_types)), \
                     "%s and %s must be subsets of the specified eval cell types (%s)" % (validation_celltypes, test_celltypes, all_eval_cell_types)
-            
-            self.label_assays = label_assays
-            
-            # if label_assays is not specified, set it to the 
-            # assays in the training set
-            if (self.label_assays == None):
-                self.label_assays = list(assaymap)
+
+            self.label_assays = list(assaymap) # TODO what is this for?
             
                 
             # make datasets
@@ -59,10 +84,12 @@ class PeakModel():
                                                     assaymap,
                                                     cellmap,
                                                     label_assays = self.label_assays,
-                                                    radii = radii, mode = Dataset.TRAIN, train_record_indices=train_record_indices),
+                                                    radii = radii, mode = Dataset.TRAIN, 
+                                                    train_record_indices=train_record_indices, 
+                                                    batch_size = batch_size),
                                                     batch_size, shuffle_size, prefetch_size)
                                                                       
-            shape,            valid_iter = generator_to_one_shot_iterator(make_dataset(valid_data, 
+            _,            valid_iter = generator_to_one_shot_iterator(make_dataset(valid_data, 
                                                     validation_celltypes, 
                                                     self.all_eval_cell_types,
                                                     generator, 
@@ -70,8 +97,10 @@ class PeakModel():
                                                     assaymap,
                                                     cellmap,
                                                     label_assays = self.label_assays,
-                                                    radii = radii, mode = Dataset.VALID, valid_record_indices=valid_record_indices), 
-                                                      batch_size, 1, prefetch_size)
+                                                    radii = radii, mode = Dataset.VALID, 
+                                                    valid_record_indices=valid_record_indices, 
+                                                    batch_size = batch_size), 
+                                                    batch_size, 1, prefetch_size)
             
             _,            test_iter = generator_to_one_shot_iterator(make_dataset(test_data, 
                                                    test_celltypes, 
@@ -81,7 +110,7 @@ class PeakModel():
                                                    assaymap,
                                                    cellmap,
                                                    label_assays = self.label_assays,
-                                                   radii = radii, mode = Dataset.TEST),
+                                                   radii = radii, mode = Dataset.TEST, batch_size = batch_size),
                                                        batch_size, 1, prefetch_size)
             
             self.train_handle = train_iter.string_handle()
@@ -91,7 +120,9 @@ class PeakModel():
             self.handle = tf.placeholder(tf.string, shape=[])
             iterator = tf.data.Iterator.from_string_handle(
                 self.handle, train_iter.output_types, train_iter.output_shapes)
-            self.x, self.y = iterator.get_next()
+            
+            # self.x = predictions, self.y=labels, self.z = missing labels for this record (cell type specific)
+            self.x, self.y, self.z = iterator.get_next()
             
             self.sess = tf.InteractiveSession(graph=graph)
 
@@ -111,14 +142,6 @@ class PeakModel():
             self.matrix = matrix
             self.assaymap= assaymap 
             self.cellmap = cellmap
-
-            self.label_matrix, self.label_cellmap, self.label_assaymap = get_assays_from_feature_file(feature_path='../data/feature_name', 
-                                 eligible_assays = self.label_assays, 
-                                 eligible_cells = list(cellmap), min_assays = 0)
-            
-            assert self.label_cellmap == self.cellmap, "cellmaps for label space and feature space are not the same"
-        
-        
             self.global_step = tf.Variable(0, name='global_step', trainable=False)
             self.logits = self.body_fn()
             self.predictions = tf.sigmoid(self.logits)
@@ -133,19 +156,20 @@ class PeakModel():
         tf.logging.info("Model saved in path: %s" % save_path)
         
         
-    def gini(self, actual, pred):                                                 
+    def gini(self, actual, pred, sample_weight):                                                 
         df = sorted(zip(actual, pred), key=lambda x : (x[1], x[0]),  reverse=True)
         random = [float(i+1)/float(len(df)) for i in range(len(df))]                
         totalPos = np.sum([x[0] for x in df])           
         cumPosFound = np.cumsum([x[0] for x in df])                                     
         Lorentz = [float(x)/totalPos for x in cumPosFound]                          
-        Gini = [l - r for l, r in zip(Lorentz, random)]   
-        return np.sum(Gini)                                                         
+        Gini = np.array([l - r for l, r in zip(Lorentz, random)])
+        # mask Gini with weights
+        Gini[np.where(sample_weight == 0)[0]] = 0
+        return np.sum(Gini)    
 
-
-    def gini_normalized(self, actual, pred):                                      
-        normalized_gini = self.gini(actual, pred)/self.gini(actual, actual)      
-        return normalized_gini      
+    def gini_normalized(self, actual, pred, sample_weight = None):              
+        normalized_gini = self.gini(actual, pred, sample_weight)/self.gini(actual, actual, sample_weight)      
+        return normalized_gini       
 
     def restore(self, checkpoint_path):
         # need to kickstart train to create saver variable
@@ -156,7 +180,9 @@ class PeakModel():
         raise NotImplementedError()
     
     def loss_fn(self):
-        return tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits, 1))
+        cross_entropy = tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits, 1)
+        # mask cross entropy by weights z and take mean
+        return tf.reduce_mean(tf.boolean_mask(cross_entropy, self.z) )
     
     def minimizer_fn(self):
         self.opt = tf.train.AdamOptimizer(self.lr)
@@ -233,39 +259,28 @@ class PeakModel():
         
         if (mode == Dataset.VALID):
             handle = self.valid_handle # for standard validation of validation cell types
-            validation_holdout_indices = get_missing_indices_for_cell(self.label_matrix, 
-                                                                      self.cellmap, 
-                                                                      self.validation_celltypes[0]) - 1
-            if (len(self.validation_celltypes) > 1):
-                assert len(validation_holdout_indices) == 0, \
-                    """
-                    Error: validation_holdout_indices has > 0 elements, and there are multiple validation_celltypes.
-                    This will cause incorrect accuracy reportings.
-                    """
             
         elif (mode == Dataset.TEST):
-            handle = self.test_handle # for standard validation of validation cell types
-            validation_holdout_indices = get_missing_indices_for_cell(self.label_matrix, 
-                                                                      self.cellmap, 
-                                                                      self.test_celltypes[0]) - 1 # shift b/c dnase was removed
+            handle = self.test_handle # for standard validation of validation cell types        
+            
         else:
             raise Exception("No data handler exists for %s. Use function test_from_generator() if you want to create a new iterator." % (mode))
             
-        return self.run_predictions(num_samples, handle, validation_holdout_indices, log)             
+        return self.run_predictions(num_samples, handle, log)             
 
         
-    def test_from_generator(self, num_samples, iter_, validation_holdout_indices, log=False):
+    def test_from_generator(self, num_samples, iter_, log=False):
         """
         Runs test given a specified data generator 
         :param num_samples: number of samples to test
-        :param iter_: output of generator_to_one_shot_iterator(), one shot  iterator of records
+        :param iter_: output of generator_to_one_shot_iterator(), one shot iterator of records
         :param cell_type: cell type to test on. Used to generate holdout indices.
         
         :return predictions
         """
         handle = iter_.string_handle()
         iter_handle = self.sess.run(handle)        
-        return self.run_predictions(num_samples, iter_handle, validation_holdout_indices, log)
+        return self.run_predictions(num_samples, iter_handle, log)
     
     # TODO AM TEST
     def test_vector(self, WHICH_DATASET, dnase_vector, cell_type, log=False):
@@ -295,36 +310,44 @@ class PeakModel():
         
         handle = iter_.string_handle()
         iter_handle = self.sess.run(handle)
-        validation_holdout_indices = get_missing_indices_for_cell(self.label_matrix, 
-                                                                  self.cellmap, cell_type) - 1 # shift b/c dnase was removed
 
         num_samples = data['x'].shape[1]
         
-        return self.run_predictions(num_samples, iter_handle, validation_holdout_indices, log)
+        return self.run_predictions(num_samples, iter_handle, log)
         
-    def run_predictions(self, num_samples, iter_handle, validation_holdout_indices, log):
+    def run_predictions(self, num_samples, iter_handle, log):
         
-        inv_assaymap = {v: k for k, v in self.label_assaymap.items()}
+        inv_assaymap = {v: k for k, v in self.assaymap.items()}
         
         assert not self.closed
         with self.graph.as_default():
             vals = []
             for i in range(int(num_samples / self.batch_size)):
                 vals.append(
-                    self.sess.run([self.predictions, self.x, self.y],
+                    self.sess.run([self.predictions, self.x, self.y, self.z],
                              {self.handle: iter_handle})
                 )
             preds = np.concatenate([v[0] for v in vals])            
             truth = np.concatenate([v[2] for v in vals])
+            sample_weight  = np.concatenate([v[3] for v in vals])
+
+            assert(preds.shape == sample_weight.shape)
             
-            # remove missing indices for computing macro/micro AUC
-            preds_r = np.delete(preds, validation_holdout_indices, axis=1)
-            truth_r = np.delete(truth, validation_holdout_indices, axis=1)
-            
-            
+            # TODO AM 3/6/2019 shrink down accuracy calculations
             try:
-                macroAUC = sklearn.metrics.roc_auc_score(truth_r, preds_r, average='macro')
-                microAUC = sklearn.metrics.roc_auc_score(truth_r, preds_r, average='micro')
+                # Mean results because sample_weight mask can only work on 1 row at a time.
+                # If a given assay is not available for evaluation, sample_weights will all be 0 
+                # and the resulting roc_auc_score will be NaN.
+                macroAUC = np.nanmean([sklearn.metrics.roc_auc_score(truth[:,k], preds[:,k], 
+                                                          average='macro', 
+                                                          sample_weight = sample_weight[:,k])
+                            for k in range(preds.shape[1])])
+                                   
+                microAUC = np.nanmean([sklearn.metrics.roc_auc_score(truth[:,k], preds[:,k], 
+                                                          average='macro', 
+                                                          sample_weight = sample_weight[:,k])
+                            for k in range(preds.shape[1])])
+
                 tf.logging.info("Our macro AUC:     " + str(macroAUC))
                 tf.logging.info("Our micro AUC:     " + str(microAUC))
             except ValueError:
@@ -335,23 +358,27 @@ class PeakModel():
                 
             if log:
                 j=0
+                
 
-                for i in range(self.label_matrix.shape[1]): # eval on all assays except DNase and assays that are missing 
-                    assay = inv_assaymap[i]
+                for j in range(truth.shape[1]): # eval on all assays except DNase and assays that are missing 
+                    assay = inv_assaymap[j+1]
 
-                    if (i not in validation_holdout_indices+1 and i != 0):
-                        try:
-                            auc_score =  sklearn.metrics.roc_auc_score(truth_r[:,j], preds_r[:,j], average='macro')
-                            pr_score  =  average_precision_score(truth_r[:,j], preds_r[:,j])
-                            gini_score = self.gini_normalized(truth_r[:,j], preds_r[:,j])
-                            
-                            str_ = "%s:\tAUC:%.3f\tavPR:%.3f\tGINI:%.3f" % (assay, auc_score, pr_score, gini_score)
-                        except ValueError:
-                            str_ = "%s: %i, %s, CANT CALCULATE" % (str(datetime.datetime.now()), i, assay)
-                        j = j + 1
-                    else:
-                        print(str(datetime.datetime.now()), i, assay)
-                        str_ = "%s: %i, %s, NaN" % (str(datetime.datetime.now()), i, assay)
+                    try:
+                        auc_score =  sklearn.metrics.roc_auc_score(truth[:,j], preds[:,j], 
+                                                                   sample_weight = sample_weight[:, j], 
+                                                                   average='macro')
+                        
+                        pr_score  =  average_precision_score(truth[:,j], preds[:,j], 
+                                                             sample_weight = sample_weight[:, j])
+                        
+                        gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
+                                                          sample_weight = sample_weight[:, j])
+
+                        str_ = "%s:\tAUC:%.3f\tavPR:%.3f\tGINI:%.3f" % (assay, auc_score, pr_score, gini_score)
+                    except ValueError:
+                        tf.logging.warn("unable to calculate metrics for assay %s" % assay)
+                        str_ = "%s:\tAUC:NaN\tavPR:NaN\tGINI:NaN" % (assay)
+                    j = j + 1
 
                     tf.logging.info(str_)
 

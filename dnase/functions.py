@@ -4,6 +4,10 @@ import h5py
 from pybedtools import BedTool
 import pandas as pd
 import collections
+import numpy as np
+import os
+
+from scipy.io import loadmat
 
 ######################################################
 ################### FUNCTIONS ########################
@@ -42,7 +46,6 @@ def get_y_indices_for_assay(arrays, assaymap, assay):
     matrix = output = np.array(arrays)
     return np.copy(matrix[:,assaymap[assay]])
 
-
 def get_missing_indices_for_cell(matrix, cellmap, cell):
     """
     Gets indices of missing factors for a given cell type.
@@ -58,7 +61,6 @@ def get_missing_indices_for_cell(matrix, cellmap, cell):
     indices = get_y_indices_for_cell(matrix, cellmap, cell)
     return np.where(indices == -1)[0]
     
-
 
 ################## LOADING DATA ######################
 
