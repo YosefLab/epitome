@@ -33,6 +33,12 @@ def gen_from_peaks(data,
     """
 
     mode = kwargs.get("mode")
+    debug = kwargs.get("debug")
+    
+    
+    if (not isinstance(debug, bool)):
+        debug = False # if not defined, do not run in debug mode
+    
     
     if (not isinstance(mode, Dataset)):
         raise ValueError("mode is not a Dataset enum")
@@ -45,11 +51,18 @@ def gen_from_peaks(data,
         [eval_cell_types.pop() for i in range(len(label_cell_types))]
     
     def g():
-                    
-        if (len(radii) > 0):
-            range_ = range(max(radii), data["y"].shape[-1]-max(radii))
-        else: 
-            range_ = range(0, data["y"].shape[-1])
+        
+        if (debug): # if in debug mode, only run for 10 records.
+            if (len(radii) > 0):
+                range_ = range(max(radii), max(radii)+10)
+            else: 
+                range_ = range(0, 10)
+        else:
+            if (len(radii) > 0):
+                range_ = range(max(radii), data["y"].shape[-1]-max(radii))
+            else: 
+                range_ = range(0, data["y"].shape[-1])
+
             
         for i in range_: # for all records
             
@@ -94,59 +107,68 @@ def gen_from_peaks(data,
                     dnases.extend(dnase_agreement)
 
                 # Handle missing values 
-                # Set missing values to -1. Should be handled later.
+                # Set missing values to 0. Should be handled later.
                 features = data["y"][feature_cell_indices,i]
-                features = features.astype(int)
-                features[np.where(feature_cell_indices == -1)[0]] = -1
 
-                yield np.concatenate([features,dnases]), \
-                                        data["y"][label_cell_indices_no_dnase,i], \
-                                        assay_mask
+                # one hot encoding (ish). First row is 1/0 for known/unknown. second row is value.
+                binding_features_n  = len(features)
+                feature_n = binding_features_n + len(dnases)
+                tmp = np.ones([2, feature_n])
+                tmp[0,np.where(feature_cell_indices == -1)[0]] = 0 # assign UNKs to missing features
+                
+                tmp[1,0:binding_features_n] = features
+                tmp[1,binding_features_n:]  = dnases
+                
+                yield tmp, \
+                         data["y"][label_cell_indices_no_dnase,i], \
+                         assay_mask
+
     return g
 
 
 
 
-def gen_from_chromatin_vector(data, y_index_vectors, dnase_indices, indices, radii, **kwargs):
-    """
-    data generator for DNase. 
+# as of 3/27/2019, this function is no longer being used
+# def gen_from_chromatin_vector(data, y_index_vectors, dnase_indices, indices, radii, **kwargs):
+#     """
+#     data generator for DNase. 
     
-    :param data: dictionary of matrices. Should have keys x and y. x contains n by 1000 rows. y contains n y 919 labels.
-    :param y_index_vectors: list of vectors which the indices in the y labels that should be used. 
-    :param radii: where to calculate DNase similarity to.
+#     :param data: dictionary of matrices. Should have keys x and y. x contains n by 1000 rows. y contains n y 919 labels.
+#     :param y_index_vectors: list of vectors which the indices in the y labels that should be used. 
+#     :param radii: where to calculate DNase similarity to.
     
-    :returns: generator of data
-    """
-    def g():
-        dnase_vector = kwargs["dnase_vector"]
+#     :returns: generator of data
+#     """
+#     def g():
+#         dnase_vector = kwargs["dnase_vector"]
                     
-        if (len(radii) > 0):
-            range_ = range(max(radii), data["y"].shape[-1]-max(radii))
-        else: 
-            range_ = range(0, data["y"].shape[-1])
+#         if (len(radii) > 0):
+#             range_ = range(max(radii), data["y"].shape[-1]-max(radii))
+#         else: 
+#             range_ = range(0, data["y"].shape[-1])
  
-        for i in range_: # for all records
-            for y_index in y_index_vectors:
-                dnases = [] 
-                for radius in radii:
+#         for i in range_: # for all records
+#             for y_index in y_index_vectors:
+#                 dnases = [] 
+#                 for radius in radii:
                         
-                    # within the radius, fraction of places where they are both 1
-                    dnase_double_positive = np.average(data["y"][dnase_indices,i-radius:i+radius+1]*
-                                             dnase_vector[i-radius:i+radius+1], axis=1)
+#                     # within the radius, fraction of places where they are both 1
+#                     dnase_double_positive = np.average(data["y"][dnase_indices,i-radius:i+radius+1]*
+#                                              dnase_vector[i-radius:i+radius+1], axis=1)
 
-                    # within the radius, fraction of places where they are both equal (0 or 1)
-                    dnase_agreement = np.average(data["y"][dnase_indices,i-radius:i+radius+1]==
-                                             dnase_vector[i-radius:i+radius+1], axis=1)
+#                     # within the radius, fraction of places where they are both equal (0 or 1)
+#                     dnase_agreement = np.average(data["y"][dnase_indices,i-radius:i+radius+1]==
+#                                              dnase_vector[i-radius:i+radius+1], axis=1)
 
 
-                    dnases.extend(dnase_double_positive)
-                    dnases.extend(dnase_agreement)
+#                     dnases.extend(dnase_double_positive)
+#                     dnases.extend(dnase_agreement)
                     
-                # Remove DNase from prediction indices. 
-                # You should not predict on assays you use to calculate the distance metric.
-                y_index_no_dnase = np.delete(y_index, [0])
-                yield np.concatenate([data["y"][indices,i],dnases]), data["y"][y_index_no_dnase,i] 
-    return g
+#                 # Remove DNase from prediction indices. 
+#                 # You should not predict on assays you use to calculate the distance metric.
+#                 y_index_no_dnase = np.delete(y_index, [0])
+#                 yield np.concatenate([data["y"][indices,i],dnases]), data["y"][y_index_no_dnase,i] 
+#     return g
 
 
 ############################################################################################
@@ -180,7 +202,7 @@ def make_dataset(data,
     """
     g = generator(data, 
                  label_cell_types,  # used for labels. Should be all for train/eval and subset for test
-                 eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                 eval_cell_types,   # used for rotating features. Should be all cell types minus test for train/eval
                  matrix,
                  assaymap,
                  cellmap,
@@ -205,11 +227,10 @@ def generator_to_one_shot_iterator(g, batch_size, shuffle_size, prefetch_size):
 
     for x, y, z in g():
         break
-    
     dataset = tf.data.Dataset.from_generator(
         g,
         output_types=(tf.float32,)*3, # 3 = features, labels, and missing indices
-        output_shapes=(x.shape, y.shape,z.shape,)
+        output_shapes=(x.shape, y.shape, z.shape,)
     )
     dataset = dataset.batch(batch_size)
     dataset = dataset.shuffle(shuffle_size)

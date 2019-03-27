@@ -33,7 +33,6 @@ class PeakModel():
                  batch_size=64,
                  shuffle_size=10000,
                  prefetch_size=10,
-                 all_eval_cell_types=None, # Here, you can specify extra cell types you do not want in the train set (metalearn)
                  l1=0.,
                  l2=0.,
                  lr=1e-3,
@@ -52,7 +51,6 @@ class PeakModel():
         :param batch_size
         :param shuffle_size
         :param prefetch_size
-        :param all_eval_cell_types
         :param l1
         :param l2
         :param lr
@@ -129,8 +127,6 @@ class PeakModel():
 
             # set self
             self.assaymap = assaymap
-            self.all_eval_cell_types = validation_celltypes + test_celltypes
-            self.validation_celltypes = validation_celltypes
             self.test_celltypes = test_celltypes
             self.generator = generator
             self.matrix = matrix
@@ -174,7 +170,7 @@ class PeakModel():
         raise NotImplementedError()
     
     def loss_fn(self):
-        cross_entropy = tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits, 1)
+        cross_entropy = tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits[:, 1, :], 1)
         # mask cross entropy by weights z and take mean
         return tf.reduce_mean(tf.boolean_mask(cross_entropy, self.z) )
     
@@ -215,7 +211,7 @@ class PeakModel():
                 if step % 1000 == 0:
                     tf.logging.info(str(step) + " " + str(loss))
                     tf.logging.info("On validation")
-                    _, _, _, _, stop = self.test(40000, log=True)
+                    _, _, _, _, _, stop = self.test(40000, log=False)
                     if stop: break
                     tf.logging.info("")
              
@@ -249,7 +245,7 @@ class PeakModel():
         """
         Tests model on valid and test dataset handlers.
         """
-        
+
         if (mode == Dataset.VALID):
             handle = self.valid_handle # for standard validation of validation cell types
             
@@ -322,7 +318,8 @@ class PeakModel():
             preds = np.concatenate([v[0] for v in vals])            
             truth = np.concatenate([v[2] for v in vals])
             sample_weight  = np.concatenate([v[3] for v in vals])
-
+            
+            preds = preds[:,1,:] # get second row. First row is mask
             assert(preds.shape == sample_weight.shape)
             
             # TODO AM 3/6/2019 shrink down accuracy calculations
@@ -332,6 +329,7 @@ class PeakModel():
                 # and the resulting roc_auc_score will be NaN.
                 macroAUC_vec = []
                 microAUC_vec = []
+                
                 
                 # try/accept for cases with only one class (throws ValueError)
                 for k in range(preds.shape[1]):
@@ -356,18 +354,17 @@ class PeakModel():
                 tf.logging.info("Our macro AUC:     " + str(macroAUC))
                 tf.logging.info("Our micro AUC:     " + str(microAUC))
             except ValueError as v:
-                print(v.args)
                 macroAUC = None
                 microAUC = None
                 tf.logging.info("Failed to calculate macro AUC")
                 tf.logging.info("Failed to calculate micro AUC")
                 
             if log:
-                j=0
                 
-
+                assay_dict = {}
+                
                 for j in range(truth.shape[1]): # eval on all assays except DNase and assays that are missing 
-                    assay = inv_assaymap[j+1]
+                    assay = inv_assaymap[j+1] 
 
                     try:
                         auc_score =  sklearn.metrics.roc_auc_score(truth[:,j], preds[:,j], 
@@ -379,17 +376,15 @@ class PeakModel():
                         
                         gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
                                                           sample_weight = sample_weight[:, j])
+                        
+                        assay_dict[assay]= {"AUC": auc_score, "auPRC": pr_score, "GINI": gini_score }
+                    except ValueError as x:
+                        tf.logging.warn("%s: %s" % (assay, x))
+                        assay_dict[assay] = {"AUC": np.NaN, "auPRC": np.NaN, "GINI": np.NaN }
 
-                        str_ = "%s:\tAUC:%.3f\tavPR:%.3f\tGINI:%.3f" % (assay, auc_score, pr_score, gini_score)
-                    except ValueError:
-                        tf.logging.warn("unable to calculate metrics for assay %s" % assay)
-                        str_ = "%s:\tAUC:NaN\tavPR:NaN\tGINI:NaN" % (assay)
-                    j = j + 1
-
-                    tf.logging.info(str_)
-
-            return preds, truth, microAUC, macroAUC, False
-
+                return preds, truth, assay_dict, microAUC, macroAUC, False
+            
+            return preds, truth, _, microAUC, macroAUC, False
 
 class MLP(PeakModel):
     def __init__(self,

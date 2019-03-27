@@ -8,6 +8,7 @@ import pandas as pd
 import collections
 import numpy as np
 import os
+from collections import Counter
 
 from scipy.io import loadmat
 
@@ -140,7 +141,7 @@ def save_deepsea_label_data(deepsea_path, label_output_path):
     savemat(os.path.join(label_output_path, "test.mat"), test_data)
     
 def load_deepsea_label_data(deepsea_path):
-        """
+    """
     Loads just deepsea labels, saved from save_deepsea_label_data function
     
     Args:
@@ -151,7 +152,6 @@ def load_deepsea_label_data(deepsea_path):
     """
     
     train_data = loadmat(os.path.join(deepsea_path, "train.mat"))
-
 
     valid_data = loadmat(os.path.join(deepsea_path, "valid.mat"))
 
@@ -236,44 +236,60 @@ def get_dnase_array_from_modified(dnase_train, dnase_valid, dnase_test, index_i,
         return dnase_test[celltype][index_i:index_i+num_records].toarray()
     
 
+
+
 def get_assays_from_feature_file(feature_path, 
-                                 eligible_assays = DEFAULT_ASSAYS, 
-                                 eligible_cells = DEFAULT_CELLS,
-                                 min_assays = 3):
+                                 eligible_assays = None, 
+                                 eligible_cells = None,
+                                 min_cells_per_assay= 3, 
+                                 min_assays_per_cell = 2):
     ''' Parses a feature name file from DeepSea. File can be found in repo at ../data/feature_name.
     Returns at matrix of cell type/assays which exist for a subset of cell types.
     NOTE: this changes the ordering from the previous function. Dnase is not first.
 
     Args:
         :param feature_path: location of feature_path
-        :param factors: list of assays to filter by (ie ["CTCF", "EZH2", ..]). If None, then returns all assays.
+        :param eligible_assays: list of assays to filter by (ie ["CTCF", "EZH2", ..]). If None, then returns all assays.
         Note that DNase will always be included in the factors, as it is required by the method.
-        :param cells: list of cells to filter by (ie ["HepG2", "GM12878", ..]). If None, then returns all cell types.
-        :param min_assays: number of assays a cell type must have to be considered
+        :param eligible_cells: list of cells to filter by (ie ["HepG2", "GM12878", ..]). If None, then returns all cell types.
+        :param min_cells_per_assay: number of cell types an assay must have to be considered
+        :param min_assays_per_cell: number of assays a cell type must have to be considered. Includes DNase.
     Returns
         matrix: cell type by assay matrix
         cellmap: index of cells
         assaymap: index of assays
     '''
-    # if eligible_cells is specified, set min_assays to 0. We want to use all eligible_cells, no matter what.
-    if (min_assays != None and eligible_cells != None):
-        print("Warning: min_assays = %i and elegible_cells != None, setting min_assays to 0 to use all specified eligible cells" % (min_assays))
-        min_assays = 0
-    
-    if (eligible_assays != None):     
-        if (len(eligible_assays) + 1 < min_assays):
-            raise Exception("""%s is less than the minimum assays required (%i). 
-            Lower min_assays to (%i) if you plan to use only %i eligible assays""" \
-                            % (eligible_assays, min_assays, len(eligible_assays)+1, len(eligible_assays)))
 
+    # check argument validity
+    if (min_assays_per_cell < 2):     
+         print("Warning: min_assays_per_cell should not be < 2 (this means it only has DNase) but was set to %i" % min_assays_per_cell)
+         
+    
+    if (min_cells_per_assay < 2):     
+         print("Warning: min_cells_per_assay should not be < 2 (this means you may only see it in test) but was set to %i" % min_cells_per_assay)
+         
+    if (eligible_assays != None):     
+        if (len(eligible_assays) + 1 < min_assays_per_cell):
+            raise Exception("""%s is less than the minimum assays required (%i). 
+            Lower min_assays_per_cell to (%i) if you plan to use only %i eligible assays""" \
+                            % (eligible_assays, min_assays_per_cell, len(eligible_assays)+1, len(eligible_assays)))
+
+    if (eligible_cells != None):     
+        if (len(eligible_cells) + 1 < min_cells_per_assay):
+            raise Exception("""%s is less than the minimum cells required (%i). 
+            Lower min_cells_per_assay to (%i) if you plan to use only %i eligible cells""" \
+                            % (eligible_cells, min_cells_per_assay, len(eligible_cells)+1, len(eligible_cells)))
+            
     # TFs are 126 to 816 and DNase is 1 to 126, TFs are 126 to 816
     # We don't want to include histone information.
     elegible_assay_indices  = np.linspace(1,815, num=815).astype(int)
 
+    # TODO want a dictionary of assay: {list of cells}
+    # then filter out assays with less than min_cells_per_assay cells
+    # after this, there may be some unused cells so remove those as well
     with open(feature_path) as f:
 
-        assays = {}          # dict of (cell: assay names)
-        indexed_assays={}    # dict of (cell: dict of indexed assays)
+        indexed_assays={}    # dict of {cell: {dict of indexed assays} }
         for i,l in enumerate(f):
             if i not in elegible_assay_indices: 
                 continue # skip first rows and non-transcription factors
@@ -287,46 +303,38 @@ def get_assays_from_feature_file(feature_path,
 
             # if cell and assay is valid, add it in
             if valid_cell and valid_assay:
-                if cell not in assays:
-                    assays[cell] = set([assay]) # add name of assay
+                if cell not in indexed_assays:
                     indexed_assays[cell] = {assay: i-1} # add index of assay
                 else:
-                    assays[cell].add(assay)
                     indexed_assays[cell][assay] = i-1
 
 
 
-    cells = []
+    # finally filter out cell types with < min_assays_per_cell and have DNase
+    indexed_assays = {k: v for k, v in indexed_assays.items() if 'DNase' in v.keys() and len(v) >= min_assays_per_cell}
 
-    # list of assays
-    all_assays = []
-    for lst in assays.values():
-        all_assays.extend(lst)
+    # make flatten list of assays from cells
+    tmp = [list(v) for k, v in indexed_assays.items()]
+    tmp = [item for sublist in tmp for item in sublist]
 
-    all_assays = collections.Counter(all_assays)
-    all_assays = [(all_assays[k], k) for k in all_assays]
-    sorted(all_assays, reverse=True)
-
-
-    all_cells = [(len(assays[cell]), cell) for cell in assays]
-    sorted(all_cells, reverse=True)
-
-    potential_assays = []
-    cells = []
-
-    for a in assays: # where a is {cell type: [list of assays]
-        if 'DNase' in assays[a] and len(assays[a]) >= min_assays:
-            potential_assays.extend(assays[a])
-            cells += [(len(assays[a]), a)]
+    # list of assays that meet min_cell criteria
+    valid_assays = {k:v for k, v in Counter(tmp).items() if v >= min_cells_per_assay}
+    
+    # remove invalid assays from indexed_assays
+    for key, values in indexed_assays.items():
+        
+        # remove assays that do not mean min_cell criteria
+        new_v = {k: v for k, v in values.items() if k in valid_assays.keys()}
+        indexed_assays[key] = new_v 
+    
+    potential_assays = valid_assays.keys()
+    cells = indexed_assays.keys()
 
     # sort cells alphabetical
-    cells = sorted(cells, reverse=True, key=lambda x: x[1])
-    cells = [i[1] for i in cells]
-    potential_assays = collections.Counter(potential_assays)
+    cells = sorted(cells, reverse=True)
     
     # sort assays alphabetically
-    potential_assays = sorted([(potential_assays[k], k) for k in potential_assays], reverse=True, key=lambda x: x[1])
-    potential_assays = [i[1] for i in potential_assays]
+    potential_assays = sorted(potential_assays, reverse=True)
     
     # make sure DNase is first assay. This is because the model
     # assumes the first column specifies DNase 
@@ -338,7 +346,7 @@ def get_assays_from_feature_file(feature_path,
 
     matrix = np.zeros((len(cellmap), len(assaymap))) - 1
     for cell in cells:
-        for assay in assays[cell].intersection(potential_assays):
+        for assay, _ in indexed_assays[cell].items():
             matrix[cellmap[cell], assaymap[assay]] = indexed_assays[cell][assay]
 
     matrix = matrix.astype(int) 
