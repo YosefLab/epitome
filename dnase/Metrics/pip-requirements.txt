@@ -1,0 +1,4 @@
+kipoi>=0.6.9
+DAStk==0.2.0
+seaborn
+keras

@@ -14,9 +14,9 @@ def gen_from_peaks(data,
 
     """
     Takes Deepsea data and calculates distance metrics from cell types whose locations
-    are specified by label_cell_indices, and the other cell types in the set. Label space is only one assay.
+    are specified by label_cell_indices, and the other cell types in the set. Label space is only one cell type.
      TODO AM 3/7/2019
-    :param data: dictionary of matrices. Should have keys x and y. x contains n by 1000 rows. y contains n y 919 labels.
+    :param data: dictionary of matrices. Should have keys x and y. x contains n by 1000 rows. y contains n by 919 labels.
     :param label_cell_types: list of cell types to be rotated through and used as labels (subset of eval_cell_types)
     :param eval_cell_types: list of cell types to be used in evaluation (includes label_cell_types)
     :param matrix: matrix of celltype, assay positions
@@ -44,11 +44,23 @@ def gen_from_peaks(data,
         raise ValueError("mode is not a Dataset enum")
     
     print("using %s as labels for mode %s" % (label_cell_types, mode))
-    
+
     if (mode == Dataset.TEST):
-        # TODO AM 3/7/2019 drop cell types using DNase distance metric for better accuracy
-        eval_cell_types = eval_cell_types.copy()
-        [eval_cell_types.pop() for i in range(len(label_cell_types))]
+        # Drop cell types with the least information (TODO AM 4/1/2019 this could do something smarter)
+        
+        # make dictionary of eval_cell_type: assay count and sort in decreasing order
+        tmp = matrix.copy()
+        tmp[tmp>= 0] = 1
+        tmp[tmp== -1] = 0
+        sums = np.sum(tmp, axis = 1)
+        cell_assay_counts = zip(list(cellmap), sums)
+        cell_assay_counts = sorted(cell_assay_counts, key = lambda x: x[1])
+        # filter by eval_cell_types
+        cell_assay_counts = list(filter(lambda x: x[0] in eval_cell_types, cell_assay_counts))
+        
+        # remove cell types with smallest number of factors
+        [eval_cell_types.remove(i[0]) for i in cell_assay_counts[0:len(label_cell_types)]]
+        del tmp
     
     def g():
         
@@ -224,23 +236,31 @@ def generator_to_one_shot_iterator(g, batch_size, shuffle_size, prefetch_size):
     
     :returns: tuple of (label shape, one shot iterator)
     """
-
+    
     for x, y, z in g():
         break
-    dataset = tf.data.Dataset.from_generator(
-        g,
-        output_types=(tf.float32,)*3, # 3 = features, labels, and missing indices
-        output_shapes=(x.shape, y.shape, z.shape,)
-    )
+
+    # only set output_shapes if g() has data
+    try: 
+        dataset = tf.data.Dataset.from_generator(
+            g,
+            output_types=(tf.float32,)*3, # 3 = features, labels, and missing indices
+            output_shapes=(x.shape, y.shape, z.shape,)
+        )
+    except NameError as e:
+        print("Error: no data, %s" % e)
+        dataset = tf.data.Dataset.from_generator(
+            g,
+            output_types=(tf.float32,)*3 # 3 = features, labels, and missing indices
+        )
+        
     dataset = dataset.batch(batch_size)
     dataset = dataset.shuffle(shuffle_size)
     dataset = dataset.repeat()
     dataset = dataset.prefetch(prefetch_size)
 
-    return y.shape, dataset.make_one_shot_iterator()
-
-    
-    
-    
-
-
+    try: 
+        y
+        return y.shape, dataset.make_one_shot_iterator()
+    except NameError as e:
+        return None, dataset.make_one_shot_iterator()

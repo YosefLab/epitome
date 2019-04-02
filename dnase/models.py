@@ -11,14 +11,6 @@ from sklearn.metrics import average_precision_score
 
 ################### Simple DNase peak based distance model ############
 
-"""
-Functions and classes for model specifications.
-"""
-
-# Calculating PR scores
-from sklearn.metrics import average_precision_score
-
-################### Simple DNase peak based distance model ############
 
 class PeakModel():
     def __init__(self,
@@ -71,7 +63,9 @@ class PeakModel():
                 
             # get evaluation cell types by removing any cell types that would be used in test
             self.eval_cell_types = list(cellmap).copy()
-            [self.eval_cell_types.remove(test_cell) for test_cell in test_celltypes]
+            self.test_celltypes = test_celltypes
+            
+            [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
             print("eval cell types", self.eval_cell_types)
 
             # make datasets
@@ -95,8 +89,9 @@ class PeakModel():
                                                     radii = radii, mode = Dataset.VALID), 
                                                     batch_size, 1, prefetch_size)
             
+            # can be empty if len(test_celltypes) == 0
             _,            test_iter = generator_to_one_shot_iterator(make_dataset(test_data, 
-                                                   test_celltypes, 
+                                                   self.test_celltypes, 
                                                    self.eval_cell_types,
                                                    generator, 
                                                    matrix,
@@ -104,7 +99,7 @@ class PeakModel():
                                                    cellmap,
                                                    radii = radii, mode = Dataset.TEST),
                                                        batch_size, 1, prefetch_size)
-            
+                
             self.train_handle = train_iter.string_handle()
             self.valid_handle = valid_iter.string_handle()
             self.test_handle = test_iter.string_handle()
@@ -215,6 +210,35 @@ class PeakModel():
                     if stop: break
                     tf.logging.info("")
              
+    def test(self, num_samples, mode = Dataset.VALID, log=False, iterator_handle=None):
+        """
+        Tests model on valid and test dataset handlers.
+        """
+
+        if (mode == Dataset.VALID):
+            handle = self.valid_handle # for standard validation of validation cell types
+            
+        elif (mode == Dataset.TEST and len(self.test_celltypes) > 0):
+            handle = self.test_handle # for standard validation of validation cell types        
+        else:
+            raise Exception("No data exists for %s. Use function test_from_generator() if you want to create a new iterator." % (mode))
+            
+        return self.run_predictions(num_samples, handle, log)             
+
+        
+    def test_from_generator(self, num_samples, iter_, log=False):
+        """
+        Runs test given a specified data generator 
+        :param num_samples: number of samples to test
+        :param iter_: output of generator_to_one_shot_iterator(), one shot iterator of records
+        :param cell_type: cell type to test on. Used to generate holdout indices.
+        
+        :return predictions
+        """
+        handle = iter_.string_handle()
+        iter_handle = self.sess.run(handle)        
+        return self.run_predictions(num_samples, iter_handle, log)
+    
     # TODO TEST
     def eval_vector(self, data, vector, log=False):
         
@@ -241,35 +265,6 @@ class PeakModel():
         predictions, _, _, _, _ = self.run_predictions(num_samples, iter_handle, validation_holdout_indices, log)
         return predictions                       
                                
-    def test(self, num_samples, mode = Dataset.VALID, log=False, iterator_handle=None):
-        """
-        Tests model on valid and test dataset handlers.
-        """
-
-        if (mode == Dataset.VALID):
-            handle = self.valid_handle # for standard validation of validation cell types
-            
-        elif (mode == Dataset.TEST):
-            handle = self.test_handle # for standard validation of validation cell types        
-            
-        else:
-            raise Exception("No data handler exists for %s. Use function test_from_generator() if you want to create a new iterator." % (mode))
-            
-        return self.run_predictions(num_samples, handle, log)             
-
-        
-    def test_from_generator(self, num_samples, iter_, log=False):
-        """
-        Runs test given a specified data generator 
-        :param num_samples: number of samples to test
-        :param iter_: output of generator_to_one_shot_iterator(), one shot iterator of records
-        :param cell_type: cell type to test on. Used to generate holdout indices.
-        
-        :return predictions
-        """
-        handle = iter_.string_handle()
-        iter_handle = self.sess.run(handle)        
-        return self.run_predictions(num_samples, iter_handle, log)
     
     # TODO AM TEST
     def test_vector(self, WHICH_DATASET, dnase_vector, cell_type, log=False):
@@ -303,7 +298,24 @@ class PeakModel():
         
         return self.run_predictions(num_samples, iter_handle, log)
         
+        
+        
+        
+        
     def run_predictions(self, num_samples, iter_handle, log):
+        """
+        Runs predictions on num_samples records
+        :param num_samples: number of samples to test
+        :param iter_: output of self.sess.run(generator_to_one_shot_iterator()), handle to one shot iterator of records
+        :param log: if true, logs individual factor accuracies
+        
+        :return preds, truth, assay_dict, microAUC, macroAUC, False
+            preds = predictions, 
+            truth = actual values, 
+            assay_dict = if log=True, holds predictions for individual factors
+            microAUC = average micro AUC for all factors with truth values
+            macroAUC = average macro AUC for all factors with truth values
+        """
         
         inv_assaymap = {v: k for k, v in self.assaymap.items()}
         
