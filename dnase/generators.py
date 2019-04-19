@@ -32,20 +32,29 @@ def gen_from_peaks(data,
         and A549 does not have data for ATF3, there will be a 0 in the position corresponding to the label space.
     """
 
+    # Running in TRAIN, VALID, or TEST?    
     mode = kwargs.get("mode")
-    debug = kwargs.get("debug")
+    # specifies the indices to generate records.
+    # can be used for debug purposes, or to evaluate
+    # only specific regions in a vector
+    # TODO AM 4/17/2019: move this to an actual parameter
+    indices = kwargs.get("indices")
     
-    
-    if (not isinstance(debug, bool)):
-        debug = False # if not defined, do not run in debug mode
-    
+    if (not isinstance(indices, np.ndarray)):
+        indices = range(0, data["y"].shape[-1]) # if not defined, set to all points
     
     if (not isinstance(mode, Dataset)):
         raise ValueError("mode is not a Dataset enum")
-    
+        
+    if (mode == Dataset.RUNTIME):
+        label_cell_types = ["PLACEHOLDER_CELL"]
+        dnase_vector = kwargs.get("dnase_vector")
+        random_cell = list(cellmap)[0] # placeholder to get label vector length
+        
     print("using %s as labels for mode %s" % (label_cell_types, mode))
-
-    if (mode == Dataset.TEST):
+        
+        
+    if (mode == Dataset.TEST or mode == Dataset.RUNTIME):
         # Drop cell types with the least information (TODO AM 4/1/2019 this could do something smarter)
         
         # make dictionary of eval_cell_type: assay count and sort in decreasing order
@@ -59,24 +68,14 @@ def gen_from_peaks(data,
         cell_assay_counts = list(filter(lambda x: x[0] in eval_cell_types, cell_assay_counts))
         
         # remove cell types with smallest number of factors
+        eval_cell_types = eval_cell_types.copy()
         [eval_cell_types.remove(i[0]) for i in cell_assay_counts[0:len(label_cell_types)]]
         del tmp
-    
-    def g():
+        del cell_assay_counts
         
-        if (debug): # if in debug mode, only run for 10 records.
-            if (len(radii) > 0):
-                range_ = range(max(radii), max(radii)+10)
-            else: 
-                range_ = range(0, 10)
-        else:
-            if (len(radii) > 0):
-                range_ = range(max(radii), data["y"].shape[-1]-max(radii))
-            else: 
-                range_ = range(0, data["y"].shape[-1])
-
-            
-        for i in range_: # for all records
+    def g():
+                
+        for i in indices: # for all records specified
             
             for (cell) in label_cell_types: # for all cell types to be used in labels
                 dnases = [] 
@@ -90,33 +89,60 @@ def gen_from_peaks(data,
                 except ValueError:
                     pass  # do nothing!
                 
-                
-                feature_cell_indices_list = list(map(lambda cell: get_y_indices_for_cell(matrix, cellmap, cell), feature_cells))
+                # features from all remaining cells not in label set
+                feature_cell_indices_list = list(map(lambda c: get_y_indices_for_cell(matrix, cellmap, c), feature_cells))
                 feature_cell_indices = np.array(feature_cell_indices_list).flatten()
                 
-                label_cell_indices = get_y_indices_for_cell(matrix, cellmap, cell)
-                label_cell_indices_no_dnase = np.delete(label_cell_indices, [0])
+                # labels for this cell
+                if (mode != Dataset.RUNTIME):
+                    label_cell_indices = get_y_indices_for_cell(matrix, cellmap, cell)
+                    label_cell_indices_no_dnase = np.delete(label_cell_indices, [0])
 
-                # Copy assay_index_no_dnase and turn into mask of 0/1 for whether data for this cell type for
-                # a given label is available.
-                assay_mask = np.copy(label_cell_indices_no_dnase)
-                assay_mask[assay_mask == -1] = 0
-                assay_mask[assay_mask > 0] = 1
-                
+                    # Copy assay_index_no_dnase and turn into mask of 0/1 for whether data for this cell type for
+                    # a given label is available.
+                    assay_mask = np.copy(label_cell_indices_no_dnase)
+                    assay_mask[assay_mask == -1] = 0
+                    assay_mask[assay_mask > 0] = 1
+                    
+                else:
+                    label_count = len(get_y_indices_for_cell(matrix, cellmap, random_cell))-1
+                    
+                    # Mask and labels are all 0's because labels are missing during runtime
+                    garbage_labels = assay_mask = np.zeros(label_count)
+
                 # get dnase indices for cell types that are going to be features
                 dnase_indices = [x[0] for x in feature_cell_indices_list]
             
                 for radius in radii:
-                    # within the radius, fraction of places where they are both 1
-                    # label_cell_index[0] == DNase location for specific cell type
-                    dnase_double_positive = np.average(data["y"][dnase_indices,i-radius:i+radius+1]*
-                                             data["y"][label_cell_indices[0],i-radius:i+radius+1], axis=1)
+                    min_radius = max(0, i - radius)
+                    max_radius = i+radius+1
                     
-                    # within the radius, fraction of places where they are both equal (0 or 1)
-                    dnase_agreement = np.average(data["y"][dnase_indices,i-radius:i+radius+1]==
-                                             data["y"][label_cell_indices[0],i-radius:i+radius+1], axis=1)
+                    # use DNase vector, if it is provided
+                    if (mode == Dataset.RUNTIME):
+
+                        # within the radius, fraction of places where they are both 1
+                        dnase_double_positive = np.average(data["y"][dnase_indices,min_radius:max_radius]*
+                                                 dnase_vector[min_radius:max_radius], axis=1)
+
+                        # within the radius, fraction of places where they are both equal (0 or 1)
+                        dnase_agreement = np.average(data["y"][dnase_indices,min_radius:max_radius]==
+                                                 dnase_vector[min_radius:max_radius], axis=1)
+
+                    else:
+                        # within the radius, fraction of places where they are both 1
+                        # label_cell_index[0] == DNase location for specific cell type
+                        dnase_double_positive = np.average(data["y"][dnase_indices,min_radius:max_radius]*
+                                                 data["y"][label_cell_indices[0],min_radius:max_radius], axis=1)
+
+                        # within the radius, fraction of places where they are both equal (0 or 1)
+                        dnase_agreement = np.average(data["y"][dnase_indices,min_radius:max_radius]==
+                                                 data["y"][label_cell_indices[0],min_radius:max_radius], axis=1)
+                        
+                        
                     dnases.extend(dnase_double_positive)
                     dnases.extend(dnase_agreement)
+                    
+                    
 
                 # Handle missing values 
                 # Set missing values to 0. Should be handled later.
@@ -124,105 +150,35 @@ def gen_from_peaks(data,
 
                 # one hot encoding (ish). First row is 1/0 for known/unknown. second row is value.
                 binding_features_n  = len(features)
+                
+                
                 feature_n = binding_features_n + len(dnases)
                 tmp = np.ones([2, feature_n])
                 tmp[0,np.where(feature_cell_indices == -1)[0]] = 0 # assign UNKs to missing features
-                
+
                 tmp[1,0:binding_features_n] = features
                 tmp[1,binding_features_n:]  = dnases
+
+                # There can be NaNs in the DNases for edge cases (when the radii extends past the end of the chr).
+                # Mask these values in the first row of tmp
+                tmp[0,np.where(np.isnan(tmp[1,:]))[0]] = 0 # assign UNKs to missing DNase values
+                tmp[1,np.where(np.isnan(tmp[1,:]))[0]] = 0 # set NaNs to 0
                 
-                yield tmp, \
-                         data["y"][label_cell_indices_no_dnase,i], \
-                         assay_mask
+                if (mode != Dataset.RUNTIME):
+                    # yield features, labels, label mask
+                    yield tmp, \
+                             data["y"][label_cell_indices_no_dnase,i], \
+                             assay_mask
+
+                else:
+                    yield tmp, garbage_labels, assay_mask
 
     return g
-
-
-
-
-# as of 3/27/2019, this function is no longer being used
-# def gen_from_chromatin_vector(data, y_index_vectors, dnase_indices, indices, radii, **kwargs):
-#     """
-#     data generator for DNase. 
-    
-#     :param data: dictionary of matrices. Should have keys x and y. x contains n by 1000 rows. y contains n y 919 labels.
-#     :param y_index_vectors: list of vectors which the indices in the y labels that should be used. 
-#     :param radii: where to calculate DNase similarity to.
-    
-#     :returns: generator of data
-#     """
-#     def g():
-#         dnase_vector = kwargs["dnase_vector"]
-                    
-#         if (len(radii) > 0):
-#             range_ = range(max(radii), data["y"].shape[-1]-max(radii))
-#         else: 
-#             range_ = range(0, data["y"].shape[-1])
- 
-#         for i in range_: # for all records
-#             for y_index in y_index_vectors:
-#                 dnases = [] 
-#                 for radius in radii:
-                        
-#                     # within the radius, fraction of places where they are both 1
-#                     dnase_double_positive = np.average(data["y"][dnase_indices,i-radius:i+radius+1]*
-#                                              dnase_vector[i-radius:i+radius+1], axis=1)
-
-#                     # within the radius, fraction of places where they are both equal (0 or 1)
-#                     dnase_agreement = np.average(data["y"][dnase_indices,i-radius:i+radius+1]==
-#                                              dnase_vector[i-radius:i+radius+1], axis=1)
-
-
-#                     dnases.extend(dnase_double_positive)
-#                     dnases.extend(dnase_agreement)
-                    
-#                 # Remove DNase from prediction indices. 
-#                 # You should not predict on assays you use to calculate the distance metric.
-#                 y_index_no_dnase = np.delete(y_index, [0])
-#                 yield np.concatenate([data["y"][indices,i],dnases]), data["y"][y_index_no_dnase,i] 
-#     return g
 
 
 ############################################################################################
 ######################## Functions for running data generators #############################
 ############################################################################################
-
-# TODO AM 3/7/2019 remove this function, not really being used
-def make_dataset(data,
-                 label_cell_types,
-                 eval_cell_types,
-                 generator,
-                 matrix,
-                 assaymap,
-                 cellmap,
-                 radii=[1,3,10,30],
-                **kwargs):
-    
-    """
-    Original data generator for DNase. Takes Deepsea data and calculates distance metrics from cell types whose locations
-    are specified by y_index_vector, and the other cell types in the set.
-    
-    :param data: dictionary of matrices. Should have keys x and y. x contains n by 1000 rows. y contains n y 919 labels.
-    :param test_cell_types: list of string of all cell types to used for test.
-    :param generator: which generator to use. 
-    :param matrix: celltype by assay matrix holding positions of labels
-    :param assaymap: map of (str assay, iloc col in matrix)
-    :param cellmap: map of  (str cellname, iloc row in matrix)
-    :param radii: where to calculate DNase similarity to.
-    
-    :returns: generator of data
-    """
-    g = generator(data, 
-                 label_cell_types,  # used for labels. Should be all for train/eval and subset for test
-                 eval_cell_types,   # used for rotating features. Should be all cell types minus test for train/eval
-                 matrix,
-                 assaymap,
-                 cellmap,
-                 radii,
-                 **kwargs)
-
-    return g
-
 
 def generator_to_one_shot_iterator(g, batch_size, shuffle_size, prefetch_size):
     """

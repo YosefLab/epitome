@@ -1,10 +1,14 @@
+#####################################################################
+#
+#
+#
+#####################################################################
+
 # Imports 
 from shutil import copyfile
 import pybedtools
 import os
 import argparse
-
-# User defined paths TODO
 
 # Absolute path of Metrics folder
 current_dirname = os.path.dirname(os.path.abspath(__file__)) # in Metrics
@@ -79,7 +83,7 @@ def get_peaks_for_bed_file(bed_positions, motif_dir):
     
     motif_files = os.listdir(motif_dir)
     
-    # just get name. i.e. CTCF_M4433
+    # just get motif name. i.e. CTCF_M4433
     motif_names = list(map(lambda x: x.split('_1.02.bed')[0], motif_files))
 
     # test # by motif matrix

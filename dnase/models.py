@@ -69,20 +69,18 @@ class PeakModel():
             print("eval cell types", self.eval_cell_types)
 
             # make datasets
-            output_shape, train_iter = generator_to_one_shot_iterator(make_dataset(train_data,  
+            output_shape, train_iter = generator_to_one_shot_iterator(generator(train_data,  
                                                     self.eval_cell_types,
                                                     self.eval_cell_types,
-                                                    generator, 
                                                     matrix,
                                                     assaymap,
                                                     cellmap,
                                                     radii = radii, mode = Dataset.TRAIN),
                                                     batch_size, shuffle_size, prefetch_size)
                                                                       
-            _,            valid_iter = generator_to_one_shot_iterator(make_dataset(valid_data, 
+            _,            valid_iter = generator_to_one_shot_iterator(generator(valid_data, 
                                                     self.eval_cell_types,
                                                     self.eval_cell_types,
-                                                    generator, 
                                                     matrix,
                                                     assaymap,
                                                     cellmap,
@@ -90,10 +88,9 @@ class PeakModel():
                                                     batch_size, 1, prefetch_size)
             
             # can be empty if len(test_celltypes) == 0
-            _,            test_iter = generator_to_one_shot_iterator(make_dataset(test_data, 
+            _,            test_iter = generator_to_one_shot_iterator(generator(test_data, 
                                                    self.test_celltypes, 
                                                    self.eval_cell_types,
-                                                   generator, 
                                                    matrix,
                                                    assaymap,
                                                    cellmap,
@@ -239,70 +236,37 @@ class PeakModel():
         iter_handle = self.sess.run(handle)        
         return self.run_predictions(num_samples, iter_handle, log)
     
-    # TODO TEST
-    def eval_vector(self, data, vector, log=False):
-        
-        _, iter_ = make_dataset(data, 
-                                       self.test_celltypes, 
-                                       self.all_eval_cell_types,
-                                       gen_from_chromatin_vector, 
-                                       self.matrix,
-                                       self.assaymap,
-                                       self.cellmap,
-                                       self.batch_size, 
-                                       1           , 
-                                       self.prefetch_size, 
-                                       radii = radii,
-                                       dnase_vector = vector)
+    def eval_vector(self, data, vector, indices):
+        """
+        Evaluates a new cell type based on its chromatin (DNase or ATAC-seq) vector. len(vector) should equal
+        the data["y"].shape[1]
+        :param data: data to build features from 
+        :param vector: vector of 0s/1s of binding sites TODO AM 4/3/2019: try peak strength instead of 0s/1s
+        :param indices: indices of vector to actually score. You need all of the locations for the generator.
 
+        :return predictions for all factors
+        """
+        
+        _,  iter_ = generator_to_one_shot_iterator(gen_from_peaks(data, 
+                 self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
+                 self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                 self.matrix,
+                 self.assaymap,
+                 self.cellmap,
+                 radii = self.radii,
+                 mode = Dataset.RUNTIME,
+                 dnase_vector = vector, indices = indices), self.batch_size, 1, self.prefetch_size)
             
         handle = iter_.string_handle()
         iter_handle = self.sess.run(handle)
-        validation_holdout_indices = []
 
-        num_samples = data['y'].shape[1]
+        num_samples = len(indices)
         
-        predictions, _, _, _, _ = self.run_predictions(num_samples, iter_handle, validation_holdout_indices, log)
-        return predictions                       
-                               
-    
-    # TODO AM TEST
-    def test_vector(self, WHICH_DATASET, dnase_vector, cell_type, log=False):
+        preds, _, _, _, _ = self.run_predictions(num_samples, iter_handle, False, calculate_metrics = False)    
+        
+        return preds
 
-        # make dataset from DNase vector
-        if (WHICH_DATASET == Dataset.TRAIN):
-            data = train_data
-        elif (WHICH_DATASET == Dataset.VALID):
-            data = valid_data
-        elif (WHICH_DATASET == Dataset.TEST):
-            data = test_data
-
-        _, iter_ = make_dataset(data, 
-                               celltype, 
-                               self.all_eval_cell_types,
-                               gen_from_chromatin_vector, 
-                               self.matrix,
-                               self.assaymap,
-                               self.cellmap,
-                               self.batch_size, 
-                               1           , 
-                               self.prefetch_size, 
-                               radii = radii,
-                               dnase_vector = vector)
-
-        
-        handle = iter_.string_handle()
-        iter_handle = self.sess.run(handle)
-
-        num_samples = data['x'].shape[1]
-        
-        return self.run_predictions(num_samples, iter_handle, log)
-        
-        
-        
-        
-        
-    def run_predictions(self, num_samples, iter_handle, log):
+    def run_predictions(self, num_samples, iter_handle, log, calculate_metrics = True):
         """
         Runs predictions on num_samples records
         :param num_samples: number of samples to test
@@ -322,16 +286,21 @@ class PeakModel():
         assert not self.closed
         with self.graph.as_default():
             vals = []
-            for i in range(int(num_samples / self.batch_size)):
+            for i in range(int(num_samples / self.batch_size)+1): # +1 to account for remaining samples % batch_size
                 vals.append(
                     self.sess.run([self.predictions, self.x, self.y, self.z],
                              {self.handle: iter_handle})
                 )
-            preds = np.concatenate([v[0] for v in vals])            
+            preds = np.concatenate([v[0] for v in vals])    
+            preds = preds[:,1,:] # get second row. First row is mask
+            
+            # do not continue to calculate metrics. Just return predictions
+            if (not calculate_metrics):
+                return preds, None, None, None, None
+        
             truth = np.concatenate([v[2] for v in vals])
             sample_weight  = np.concatenate([v[3] for v in vals])
             
-            preds = preds[:,1,:] # get second row. First row is mask
             assert(preds.shape == sample_weight.shape)
             
             # TODO AM 3/6/2019 shrink down accuracy calculations
@@ -394,9 +363,9 @@ class PeakModel():
                         tf.logging.warn("%s: %s" % (assay, x))
                         assay_dict[assay] = {"AUC": np.NaN, "auPRC": np.NaN, "GINI": np.NaN }
 
-                return preds, truth, assay_dict, microAUC, macroAUC, False
+                return preds, truth, assay_dict, microAUC, macroAUC
             
-            return preds, truth, _, microAUC, macroAUC, False
+            return preds, truth, _, microAUC, macroAUC
 
 class MLP(PeakModel):
     def __init__(self,

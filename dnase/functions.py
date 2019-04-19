@@ -9,10 +9,9 @@ import collections
 import numpy as np
 import os
 from collections import Counter
-
+from itertools import groupby
 from scipy.io import loadmat
 
-######################################################
 ################### FUNCTIONS ########################
 ######################################################
 
@@ -436,6 +435,13 @@ def get_dnase_array_from_modified_dict(dnase_train, dnase_valid, dnase_test, ran
     
 ################### Parsing data from bed file ########################
 
+def center_peak(x):
+    new_start = (x.end-x.start)/2 + x.start - 1
+    new_end = new_start + 2
+    x.start = new_start
+    x.end = new_end
+    return x
+
 def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
     """
     This function takes in a bed file of peaks and converts it to a vector or 0/1s that can be 
@@ -449,30 +455,31 @@ def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
     :param: duplicate: duplicates the strands to match deepsea's dataset. This should eventually be removed, as we do not want duplication if no DNA sequence is used. 
 
     :return: vector containing the concatenated 4.4 million train, validation, and test data in the order
-    that WE have parsed train/test.
+    that we have parsed train/test. And returns a bedtool of regions that do not have corresponding locations in 
+    the training data. These can be used later to set to 0.
 
     """
 
     # load in bed file and tf pos file
     positions = BedTool(all_pos_file)
     idr_peaks = BedTool(bed_file)
+    
+    # map to intervals in case of extra columns
+    idr_peaks = BedTool(list(map(lambda x: pybedtools.Interval(x.chrom, x.start, x.end), idr_peaks)))
+    # min base pair overlap to consider peak within a training region
+    bp_overlap = 100
 
-    # get overlaps, with overlap size 0
-    c = positions.window(idr_peaks, w=0).overlap(cols=[2,3,8,9]) # cols = [start 1, end 1, start 2, end 2]
-    df = c.to_dataframe()
-
-    # only consider records that have >100bp overlap
-    filtered = df[df.iloc[:,-1] > 100] # last column will contain the bp overlap 
-
-    # get positions dataframe
-    positions_df = positions.to_dataframe()
-
-    # merge positions and regions
-    regions = filtered[[0,1,2]].drop_duplicates()
-    merged_df = pd.merge(positions_df, regions,  how='left', left_on=['chrom','start', 'end'], right_on = [0,1,2])
-
-    # convery array to np array of 0/1s
-    peak_vector=np.array(list(map(lambda x: float.is_integer(x), merged_df[1]))).astype(int)
+    # left join peaks and all positions. -1 will show when no position overlaps a peak
+    # F=0.5 should overlap 100 bp = 200 * 0.5 in positions
+    idr_windows = idr_peaks.intersect(positions, loj=True, F=bp_overlap/200) # 200 is size of positions peaks 
+    print("finished idr windows")
+    # window positions to get positions that have an idr_peak overlapping at least 100 bp (50 bp looking right and left)
+    pos_windows = positions.window(idr_peaks, w=-(bp_overlap/2)).overlap(cols=[2,3,8,9]) # cols = [start 1, end 1, start 2, end 2]
+    print("finished pos windows")
+    
+    # faster to convert it first
+    list_windows = list(pos_windows)
+    peak_vector=np.array(list(map(lambda x: x in list_windows, positions))).astype(int)
 
     # filter out rows that were not used for training (defined in constants.py)
     # also, add in fake negative strands that just duplicate the sets 
@@ -485,7 +492,6 @@ def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
         vector = np.concatenate([ATAC_train, ATAC_train, ATAC_valid, ATAC_valid, ATAC_test, ATAC_test], axis=0)
     else:
         vector = np.concatenate([ATAC_train, ATAC_valid, ATAC_test], axis=0)
-        
-    return vector
-   
+
+    return vector, idr_windows
         

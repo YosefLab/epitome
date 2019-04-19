@@ -6,9 +6,11 @@ import numpy as np
 ################### CONSTANTS ########################
 ######################################################
 class Dataset(Enum):
-    TRAIN = 1
-    VALID = 2
-    TEST = 3
+    TRAIN = 1    # TRAINING
+    VALID = 2    # VALIDATION during training
+    TEST = 3     # TEST held out test set
+    RUNTIME = 4  # Using the model at runtime. No truth, just predictions
+    
 
 # these were the default assays (20) and cells(11) run in the original model.
 # This is just to keep consistency. We can remove these, eventually.
