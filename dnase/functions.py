@@ -462,25 +462,75 @@ def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
 
     # load in bed file and tf pos file
     positions = BedTool(all_pos_file)
-    idr_peaks = BedTool(bed_file)
     
-    # map to intervals in case of extra columns
-    idr_peaks = BedTool(list(map(lambda x: pybedtools.Interval(x.chrom, x.start, x.end), idr_peaks)))
+    
+    idr_peaks = []
+    
+    # load in peaks as a list of regions
+    with open(bed_file) as f:
+        content = f.readlines()
+        # you may also want to remove whitespace characters like `\n` at the end of each line
+        idr_peaks = map(lambda x: Region(x.split()[0], int(x.split()[1]), int(x.split()[2])), content)
+    
+    # enumerate peaks for indexing
+    idr_peaks = list(enumerate(idr_peaks))
+    
     # min base pair overlap to consider peak within a training region
     bp_overlap = 100
 
-    # left join peaks and all positions. -1 will show when no position overlaps a peak
-    # F=0.5 should overlap 100 bp = 200 * 0.5 in positions
-    idr_windows = idr_peaks.intersect(positions, loj=True, F=bp_overlap/200) # 200 is size of positions peaks 
-    print("finished idr windows")
-    # window positions to get positions that have an idr_peak overlapping at least 100 bp (50 bp looking right and left)
-    pos_windows = positions.window(idr_peaks, w=-(bp_overlap/2)).overlap(cols=[2,3,8,9]) # cols = [start 1, end 1, start 2, end 2]
-    print("finished pos windows")
-    
-    # faster to convert it first
-    list_windows = list(pos_windows)
-    peak_vector=np.array(list(map(lambda x: x in list_windows, positions))).astype(int)
+    peak_vector=np.zeros(_TOTAL_POSFILE_REGIONS)
 
+    n_peaks = len(idr_peaks)
+    
+    # keeps track of which idr peaks were overlapping something in the positions file
+    found = np.zeros(n_peaks)
+    
+    def setFound(i):
+        found[i]=1
+
+    curr_chrom = "chr1"
+    idr_peaks_for_chrom = list(filter(lambda x: x[1].chrom == curr_chrom, idr_peaks))
+    
+    for position_i, pos in enumerate(positions):
+            
+
+        region = Region(pos.chrom, pos.start, pos.end)
+        
+        if (region.chrom != curr_chrom):
+            curr_chrom == region.chrom
+            idr_peaks_for_chrom = list(filter(lambda x: x[1].chrom == curr_chrom, idr_peaks))
+
+        # filter in idr_peaks that overlap
+        # takes >1s a while if empty
+        it = filter(lambda x: x[1].overlaps(region, bp_overlap), idr_peaks_for_chrom)
+    
+        # if peak exists, set peak_vector to 1
+        x = next(it, None)
+        if (x != None):
+            peak_vector[position_i] = 1
+            found[x[0]] = 1
+            map(lambda x: setFound(x[0]), it)
+            
+        # remove elements that are behind position_i
+        k = 0
+        while (region.greaterThan(idr_peaks[k][1])):
+            k += 1
+            if (k >= len(idr_peaks)):
+                break
+        
+        del idr_peaks[0:k]
+        
+        # once idr_peaks is empty, return
+        if (len(idr_peaks) == 0):
+            break
+            
+        if (position_i == 10000):
+            print("processing through lines in allpos bed file %i" % position_i)
+
+            
+    # indices of peaks that are missing, have no training positions overlapping
+    missing_idx = np.where(found == 0)[0]
+    
     # filter out rows that were not used for training (defined in constants.py)
     # also, add in fake negative strands that just duplicate the sets 
     ATAC_train = peak_vector[_TRAIN_REGIONS[0]:_TRAIN_REGIONS[1]+1]
@@ -492,6 +542,7 @@ def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
         vector = np.concatenate([ATAC_train, ATAC_train, ATAC_valid, ATAC_valid, ATAC_test, ATAC_test], axis=0)
     else:
         vector = np.concatenate([ATAC_train, ATAC_valid, ATAC_test], axis=0)
+        
+    return(vector, missing_idx)
 
-    return vector, idr_windows
         

@@ -27,7 +27,7 @@ _TRAIN_REGIONS = [0, 2200000-1]
 _VALID_REGIONS = [2200000, 2204000-1]
 # 227512 for test (chr8 and chr9) for 227512 total rows
 _TEST_REGIONS  = [2204000, 2204000 + 227512-1] # only up to chrs 8 and 9
-
+_TOTAL_POSFILE_REGIONS = 2608182 # number of lines in allTFs.pos.bed file
 
     
 # Modified regions in allpos.bed file that DeepSEA uses for training.
