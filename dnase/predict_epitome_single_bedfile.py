@@ -81,9 +81,9 @@ def score_peak_file(peak_file):
     f = peak_file.split("/")[-1]
     
     # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
-    # and are stored in pos_windows for future use.
+    # and their indices are stored in missing_idx for future use
     # This is taking hours?
-    peak_vector, pos_windows = bedFile2Vector(peak_file, _DEEPSEA_GENOME_REGIONS_FILENAME, duplicate=False)
+    peak_vector, all_peaks = bedFile2Vector(peak_file, _DEEPSEA_GENOME_REGIONS_FILENAME, duplicate=False)
     print("finished loading peak file")
     
     # only select peaks to score
@@ -91,77 +91,29 @@ def score_peak_file(peak_file):
 
     # takes about 1.5 minutes for 100,000 regions TODO AM 4/3/2019 speed up generator
     predictions = model.eval_vector(all_data, peak_vector, idx)
-
-    # map predictions with idx
-    zipped = list(zip(idx, predictions))
-    # map zipped predictions to positions
     
-    def bedRow2Interval(x):
-        """
-        Converts single row from pybedtools.BedTool to pybedtools.Interval
-        
-        :param x: row from Bedtools
-        
-        returns:
-            pybedtools.Interval
-        """
-        return pybedtools.Interval(x.chrom, x.start, x.end)
-    
-    positions = BedTool(_DEEPSEA_GENOME_REGIONS_FILENAME)
-    # map all predictions to key, value of positions bedrow and predictions
-    mapped = dict(map(lambda x: (bedRow2Interval(positions[int(x[0])]), x[1]), zipped))
-    
-    def checkInterval(x, default_factor_count):
-        """
-        Checks if interval is in mapped. If present returns
-        predictions for that interval. Otherwise, returns np zeros.
-        
-        :param x: row from Bedtools
-        
-        returns:
-            tupple of peak interval from bed file and predictions
-        """
-        chrom = x[6]
-        start = int(x[7])
-        end = int(x[8])
-        
-        peak_interval = str(pybedtools.Interval(x[0], int(x[1]), int(x[2])))
-
-        if start > 0 and pybedtools.Interval(chrom, start, end) in mapped.keys():
-            return(peak_interval, mapped[pybedtools.Interval(chrom, start, end)])
-
-        else:
-            return(peak_interval, np.zeros(default_factor_count)) 
-
     # get number of factors to fill in if values are missing
-    num_factors = list(mapped.values())[0].shape[0]
+    num_factors = predictions[0].shape[0]
     
-    # map of peaks and predictions. If peak did not match with training positions
-    # returns all 0's
-    result = map(lambda x: checkInterval(x, num_factors), pos_windows)
+
+    # map predictions with genomic position 
+    positions_bed = BedTool(_DEEPSEA_GENOME_REGIONS_FILENAME)
+    positions_idx = list(map(lambda x: positions_bed[int(x)], idx))           
+    zipped = list(zip(positions_idx, predictions))
     
-    def reduceMeans(kv):
-        """
-        Takes a grouped set of keys and itergroup of np arrays and
-        reduces the group by means. For the purpose if there are 
-        multiple predictions mapping to a single region in the query 
-        bed file.
-        
-        :param kv: single item from groupby command. k is key, v, is group of np arrays
-        
-        returns:
-            meaned np arrays for this group
-        """
-        key = kv[0]
-        group = kv[1]
-        res = list(map(lambda x: np.matrix(x[1]), group))
-        arr = np.concatenate(list(res), axis = 0)
-        return(np.mean(arr, axis = 0))
-
-
-    # mean np arraays by bed file peak (there may be multiple predictions for each peak)
-    grouped = list(map(lambda kv: reduceMeans(kv), groupby( result, lambda x: x[0])))
-    # join predictions to single matrix
+    # for each all_peaks, if 1, reduce means for all overlapping peaks in positions
+    # else, set to 0s
+    
+    def reduceMeans(peak):
+        if (peak[1] == 1):
+            # filter overlapping predictions for this peak and take mean                 
+            res = map(lambda k: k[1], filter(lambda x: peak[0].overlaps(x[0], 100), zipped))
+            arr = np.concatenate(list(map(lambda x: np.matrix(x), res)), axis = 0)
+            return(peak[0], np.mean(arr, axis = 0))
+        else:
+            return(peak[0], np.zeros(num_factors)) 
+                         
+    grouped = list(map(lambda x: np.matrix(reduceMeans(x)[1]), all_peaks))
 
     final = np.concatenate(grouped, axis=0)
 
@@ -184,7 +136,6 @@ train_data, valid_data, test_data = load_deepsea_label_data(label_path)
 matrix, cellmap, assaymap = get_assays_from_feature_file(feature_path=feature_path, 
                                   eligible_assays = None,
                                   eligible_cells = None, min_cells_per_assay = 2, min_assays_per_cell=5)
-     
      
      
 ############## Load Model #######################
