@@ -1,5 +1,4 @@
 numpy
-statsmodels=0.9.0 # for GLM
 HTSeq==0.9.1 # for genomicIntervals
 matplotlib==3.0.0
 pyfaidx

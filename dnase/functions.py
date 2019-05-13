@@ -12,6 +12,47 @@ from collections import Counter
 from itertools import groupby
 from scipy.io import loadmat
 
+
+################### CLASSES ##########################
+# TODO move to separate file
+class Region:
+    """Genomic Region"""
+
+    def __init__(self, chrom, start, end):
+        self.chrom = chrom
+        self.start = start
+        self.end = end
+        
+    def __str__(self):
+        return("%s:%d-%d" % (self.chrom, self.start, self.end))
+    
+    def overlaps(self, other, min_bp = 1):
+        return(other.chrom == self.chrom and self.overlap([self.start, self.end], [other.start, other.end]) > min_bp)
+    
+    def overlap(self, interval1, interval2):
+        """
+        Computes overlap between two intervals
+        """
+        if interval2[0] <= interval1[0] <= interval2[1]:
+            start = interval1[0]
+        elif interval1[0] <= interval2[0] <= interval1[1]:
+            start = interval2[0]
+        else:
+            return 0
+
+        if interval2[0] <= interval1[1] <= interval2[1]:
+            end = interval1[1]
+        elif interval1[0] <= interval2[1] <= interval1[1]:
+            end = interval2[1]
+        else:
+            return 0
+
+        return(end - start)
+
+    def greaterThan(self, other):
+        return(self.chrom > other.chrom or ( self.chrom == other.chrom and self.start > other.end ))
+
+
 ################### FUNCTIONS ########################
 ######################################################
 
@@ -435,13 +476,6 @@ def get_dnase_array_from_modified_dict(dnase_train, dnase_valid, dnase_test, ran
     
 ################### Parsing data from bed file ########################
 
-def center_peak(x):
-    new_start = (x.end-x.start)/2 + x.start - 1
-    new_end = new_start + 2
-    x.start = new_start
-    x.end = new_end
-    return x
-
 def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
     """
     This function takes in a bed file of peaks and converts it to a vector or 0/1s that can be 
@@ -455,8 +489,8 @@ def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
     :param: duplicate: duplicates the strands to match deepsea's dataset. This should eventually be removed, as we do not want duplication if no DNA sequence is used. 
 
     :return: vector containing the concatenated 4.4 million train, validation, and test data in the order
-    that we have parsed train/test. And returns a bedtool of regions that do not have corresponding locations in 
-    the training data. These can be used later to set to 0.
+    that we have parsed train/test. And returns a zipped of regions in the bed file and whether or not that
+    peak had an associated peak in the training set.
 
     """
 
@@ -470,10 +504,9 @@ def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
     with open(bed_file) as f:
         content = f.readlines()
         # you may also want to remove whitespace characters like `\n` at the end of each line
-        idr_peaks = map(lambda x: Region(x.split()[0], int(x.split()[1]), int(x.split()[2])), content)
+        init_idr_peaks = list(map(lambda x: Region(x.split()[0], int(x.split()[1]), int(x.split()[2])), content))
     
-    # enumerate peaks for indexing
-    idr_peaks = list(enumerate(idr_peaks))
+    idr_peaks = list(enumerate(init_idr_peaks))
     
     # min base pair overlap to consider peak within a training region
     bp_overlap = 100
@@ -528,9 +561,6 @@ def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
             print("processing through lines in allpos bed file %i" % position_i)
 
             
-    # indices of peaks that are missing, have no training positions overlapping
-    missing_idx = np.where(found == 0)[0]
-    
     # filter out rows that were not used for training (defined in constants.py)
     # also, add in fake negative strands that just duplicate the sets 
     ATAC_train = peak_vector[_TRAIN_REGIONS[0]:_TRAIN_REGIONS[1]+1]
@@ -542,7 +572,6 @@ def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
         vector = np.concatenate([ATAC_train, ATAC_train, ATAC_valid, ATAC_valid, ATAC_test, ATAC_test], axis=0)
     else:
         vector = np.concatenate([ATAC_train, ATAC_valid, ATAC_test], axis=0)
-        
-    return(vector, missing_idx)
 
+    return vector, zip(init_idr_peaks, found)
         

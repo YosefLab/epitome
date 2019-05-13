@@ -91,6 +91,7 @@ def score_peak_file(peak_file):
 
     # takes about 1.5 minutes for 100,000 regions TODO AM 4/3/2019 speed up generator
     predictions = model.eval_vector(all_data, peak_vector, idx)
+    print("finished predictions...")
     
     # get number of factors to fill in if values are missing
     num_factors = predictions[0].shape[0]
