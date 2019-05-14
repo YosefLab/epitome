@@ -8,4 +8,5 @@ sklearn
 kipoi>=0.6.9
 kipoiseq
 torch
+numba # for checking gpu
 h5sparse==0.0.5
