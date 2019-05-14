@@ -162,7 +162,7 @@ class PeakModel():
         raise NotImplementedError()
     
     def loss_fn(self):
-        cross_entropy = tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits[:, 1, :], 1)
+        cross_entropy = tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits[:, 1, :], 10)
         # mask cross entropy by weights z and take mean
         return tf.reduce_mean(tf.boolean_mask(cross_entropy, self.z) )
     
@@ -203,8 +203,7 @@ class PeakModel():
                 if step % 1000 == 0:
                     tf.logging.info(str(step) + " " + str(loss))
                     tf.logging.info("On validation")
-                    _, _, _, _, _, stop = self.test(40000, log=False)
-                    if stop: break
+                    _, _, _, _, _ = self.test(40000, log=False)
                     tf.logging.info("")
              
     def test(self, num_samples, mode = Dataset.VALID, log=False, iterator_handle=None):
@@ -392,5 +391,3 @@ class MLP(PeakModel):
             model = tf.layers.dense(model, self.num_units[i], self.activation)
         
         return tf.layers.dense(model, self.num_outputs, kernel_regularizer=tf.contrib.layers.l1_l2_regularizer(self.l1, self.l2))
-
-        
