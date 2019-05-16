@@ -13,9 +13,13 @@ Epitome leverages chromatin accessibility data to predict transcription factor b
 
 ## Setup:
 1. Create a conda venv:
-/data/akmorrow/anaconda2/bin/conda create --name EpitomeEnv python=3.6
-
-2. setup: pip install -e .
+```
+conda create --name EpitomeEnv python=3.6
+```
+2. setup: 
+```
+pip install -e .
+```
 
 ## Making Records
 TODO
