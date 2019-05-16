@@ -19,13 +19,10 @@ import datetime
 import sys
 import argparse
 
-# Absolute path of Metrics folder
-current_dirname = os.path.dirname(os.path.abspath(__file__)) # in Metrics
-
-exec(open(os.path.join(current_dirname, "../constants.py")).read())
-exec(open(os.path.join(current_dirname, "../functions.py")).read())
-exec(open(os.path.join(current_dirname, "../generators.py")).read())
-exec(open(os.path.join(current_dirname, "../models.py")).read())
+from epitome.functions import *
+from epitome.constants import *
+from epitome.generators import *
+from epitome.models import *
 
 
 ############## Read in user params ################

@@ -10,12 +10,12 @@ import pybedtools
 import os
 import argparse
 
+from epitome.functions import *
+from epitome.constants import *
+
 # Absolute path of Metrics folder
 current_dirname = os.path.dirname(os.path.abspath(__file__)) # in Metrics
 
-# Files in repository
-exec(open(os.path.join(current_dirname, "../constants.py")).read())
-exec(open(os.path.join(current_dirname, "../functions.py")).read())
 feature_path = os.path.join(current_dirname, '../../data/feature_name')
 
 ################################ Parse Args ########################

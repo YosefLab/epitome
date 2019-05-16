@@ -1,13 +1,13 @@
 """
 Functions and classes for model specifications.
 """
-# TODOS
-# - AM 3/7/2019: Currently, there are -1's in the feature vectors from the generator
-# that indicating missing labels. We are not doing anything smart here. Is there something better 
-# we can do?
 
-# Calculating PR scores
-from sklearn.metrics import average_precision_score
+import sklearn.metrics
+import tensorflow as tf
+from .constants import *
+from .functions import *
+from .generators import *
+import numpy as np
 
 ################### Simple DNase peak based distance model ############
 
@@ -22,6 +22,7 @@ class PeakModel():
                  matrix,
                  assaymap,
                  cellmap,  
+                 debug = False,
                  batch_size=64,
                  shuffle_size=10000,
                  prefetch_size=10,
@@ -40,6 +41,7 @@ class PeakModel():
         :param matrix
         :param assaymap
         :param cellmap
+        :param debug: used to print out intermediate validation values
         :param batch_size
         :param shuffle_size
         :param prefetch_size
@@ -118,6 +120,7 @@ class PeakModel():
             self.prefetch_size = prefetch_size
 
             # set self
+            self.debug = debug
             self.assaymap = assaymap
             self.test_celltypes = test_celltypes
             self.generator = generator
@@ -162,7 +165,7 @@ class PeakModel():
         raise NotImplementedError()
     
     def loss_fn(self):
-        cross_entropy = tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits[:, 1, :], 10)
+        cross_entropy = tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits[:, 1, :], 1)
         # mask cross entropy by weights z and take mean
         return tf.reduce_mean(tf.boolean_mask(cross_entropy, self.z) )
     
@@ -202,9 +205,10 @@ class PeakModel():
                 step = self.sess.run(self.global_step)
                 if step % 1000 == 0:
                     tf.logging.info(str(step) + " " + str(loss))
-                    tf.logging.info("On validation")
-                    _, _, _, _, _ = self.test(40000, log=False)
-                    tf.logging.info("")
+                    if (self.debug):
+                        tf.logging.info("On validation")
+                        _, _, _, _, _ = self.test(40000, log=False)
+                        tf.logging.info("")
              
     def test(self, num_samples, mode = Dataset.VALID, log=False, iterator_handle=None):
         """
@@ -351,7 +355,7 @@ class PeakModel():
                                                                    sample_weight = sample_weight[:, j], 
                                                                    average='macro')
                         
-                        pr_score  =  average_precision_score(truth[:,j], preds[:,j], 
+                        pr_score  =  sklearn.metrics.average_precision_score(truth[:,j], preds[:,j], 
                                                              sample_weight = sample_weight[:, j])
                         
                         gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
@@ -364,7 +368,7 @@ class PeakModel():
 
                 return preds, truth, assay_dict, microAUC, macroAUC
             
-            return preds, truth, _, microAUC, macroAUC
+            return preds, truth, None, microAUC, macroAUC
 
 class MLP(PeakModel):
     def __init__(self,

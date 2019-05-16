@@ -2,6 +2,11 @@
 Functions for data generators.
 """
 
+import numpy as np
+import tensorflow as tf
+from .constants import *
+from .functions import *
+
 ######################### Original Data Generator: Only peak based #####################
 def gen_from_peaks(data, 
                  label_cell_types,  # used for labels. Should be all for train/eval and subset for test

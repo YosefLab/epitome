@@ -285,7 +285,6 @@ def get_assays_from_feature_file(feature_path,
                                  min_assays_per_cell = 2):
     ''' Parses a feature name file from DeepSea. File can be found in repo at ../data/feature_name.
     Returns at matrix of cell type/assays which exist for a subset of cell types.
-    NOTE: this changes the ordering from the previous function. Dnase is not first.
 
     Args:
         :param feature_path: location of feature_path

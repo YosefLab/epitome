@@ -17,9 +17,9 @@ import argparse
 # Absolute path of Metrics folder
 current_dirname = os.path.dirname(os.path.abspath(__file__)) # in Metrics
 
-# Files in repository
-exec(open(os.path.join(current_dirname, "../constants.py")).read())
-exec(open(os.path.join(current_dirname, "../functions.py")).read())
+from epitome.functions import *
+from epitome.constants import *
+
 feature_path = os.path.join(current_dirname, '../../data/feature_name')
 
 # Parser for user specific locations
