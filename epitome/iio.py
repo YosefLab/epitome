@@ -1,7 +1,6 @@
 import numpy as np
 import tensorflow as tf
 import threading
-import multiprocessing
 
 
 """
@@ -51,19 +50,20 @@ def write_tfrecord(protos, path, options=None):
     writer.write(proto.SerializeToString())
   writer.close()
 
-def write_tfrecords(examples, filename, num_shards=100, options=None):
+
+def write_tfrecords(examples, filename, num_shards=100, options = None):
+
     filenames = sharded_filenames(filename, num_shards)
     func = lambda file: tf.python_io.TFRecordWriter(file, options)
     writers = list(map(func, filenames))
-    running = []
+    
     for i, example in enumerate(examples):
-      # t = threading.Thread(
-      t = multiprocessing.Process(
-          target=writers[i % num_shards].write,
-          args=(example.SerializeToString(),))
-      t.daemon = True
-      t.start()
-      t.join()
+        t = threading.Thread(
+            target=writers[i % num_shards].write,
+            args=(example.SerializeToString(),))
+        t.daemon = True
+        t.start()
+        t.join()
 
 
   ################################# Sharded Filespec ################################

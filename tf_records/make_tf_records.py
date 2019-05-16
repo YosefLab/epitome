@@ -1,139 +1,106 @@
-# TODO(weston): clean up this file.
+### Creates TF records from DEEPSEA data ###
 
-import tensorflow as tf
-import numpy as np
-import h5py
-import iio
-import os
+import epitome.iio as iio
+from epitome.functions import *
+from epitome.constants import *
+from epitome.generators import *
+
 import argparse
+import threading
+import random
 import glob
 
-
-# Builds dictionaries to look up coordinates
-def parse_feature_name(path):
-    with open(path) as f:
-        for _ in f:
-            break
-
-        i = 0
-        dnase_dict = {}
-        tf_dict = {}
-
-        for line in f:
-            if i == 815:
-                break
-            _, label = line.split('\t')
-            cell, assay, note = label.split('|')
-            if assay == "DNase":
-                dnase_dict[cell] = i
-            else:
-                if cell not in tf_dict:
-                    tf_dict[cell] = {}
-                if assay not in tf_dict[cell]:
-                    tf_dict[cell][assay] = i
-            i += 1
-    return dnase_dict, tf_dict
-
-cells = ['HeLa-S3', 'GM12878', 'H1-hESC', 'HepG2', 'K562']
-tfs = ['p300', 'NRSF', 'CTCF', 'GABP', 'JunD', 'CEBPB', 'Pol2', 'EZH2',
-        'Mxi1', 'Max', 'RFX5', 'TAF1', 'Nrf1', 'Rad21', 'TBP', 'USF2',
-             'c-Myc','CHD2']
-
-# Generates records for a given cell type and range
-
-# TODO: get allpos_bed file, use this to get regions in accessibility_path
-def records_iterator(input_, target, cell, start, stop, features_path, accessibility_path
-    ):
-
-    # Builds dicts of indicies of different features
-    dnase_dict, tf_dict = parse_feature_name(features_path)
-    
-    # builds the vector of locations for querying from matrix, and the mask
-    tf_vec = []
-    i = 0
-    for tf in tfs:
-        if tf in tf_dict[cell]:
-            tf_vec += [(tf_dict[cell][tf], 1)]
-        else:
-            tf_vec += [(0, 0)]
-    tf_locs = np.array([v[0] for v in tf_vec])
-    tf_mask = np.array([v[1] for v in tf_vec])
-
-    # Pre-build these features
-    mask_feature = iio.make_int64_feature(tf_mask)
-    name_feature = iio.make_bytes_feature([bytes(cell, 'utf-8')])
-
-    num_samples = input_.shape[2]
-    for i in range(start, min(stop, num_samples)):
-
-        # x is 1000 * 5, where the last row is all 0s or 1s depending on the
-        # dnase label
-        x1 = input_[0:1000,:,i]
-        x2 = np.array([[target[dnase_dict[cell], i]]] * 1000)
-        x = np.append(x1, x2, 1)
-
-        # y is queried from the target matrix. We mask by whether we actually
-        # have this TF for this cell type.
-        y = np.array([target[c, i] for c in tf_locs]) * tf_mask
-
-        # The features going into the example.
-        features = {}
-        # x has to be flattened.
-        features['x/data'] = iio.make_int64_feature(x.flatten())
-        features['x/shape'] = iio.make_int64_feature(x.shape)
-        features['y'] = iio.make_int64_feature(y)
-        # We'll use mask in the loss function. 
-        features['mask'] = mask_feature
-        features['cell'] = name_feature
-
-        yield iio.make_example(features)
-        
 def main():
+    """
+    Writes tf records for dataset. 
+    """
+    
     parser = argparse.ArgumentParser()
-    parser.add_argument('--start', default=0)
-    parser.add_argument('--stop', default=1000)
-    parser.add_argument('--cell', default='HeLa-S3')
+    # array of cell types to be tested
+    parser.add_argument('--test_celltypes', nargs='+', help='test celltypes', default="A549")
+    parser.add_argument('--sample', help='rate to sample records by', default=0.1, type=float)
+    parser.add_argument('--seed', help='random seet to sample records', default=3)
+    
     # On millennium, these paths should not be in the home directory!!!!
-    parser.add_argument('--features', 
+    parser.add_argument('--feature_path', 
         default='../../DeepSEA-v0.94/resources/feature_name')
-    parser.add_argument('--accessibility', 
-        default='/data/epitome/accessibility/dnase/hg19')
-    parser.add_argument('--out', default='./output')
-    parser.add_argument('--data', default='../../deepsea_train/train.mat')
+    parser.add_argument('--output_dir', default='./output')
+    parser.add_argument('--data', default='../../deepsea_train')
     args = parser.parse_args()
-
-
-    output_dir = os.path.join(args.out, args.cell)
-    if not glob.glob(args.out):
-        os.mkdir(args.out)
-    if not glob.glob(output_dir):
-        os.mkdir(output_dir)
-
-
-    tmp = h5py.File(args.data)
-    i, t = tmp['trainxdata'], tmp['traindata']
+    
+    # create output dir if it does not exist
+    if not glob.glob(args.output_dir):
+        os.mkdir(args.output_dir)
+        
+    train_data, valid_data, test_data = load_deepsea_label_data(args.data)
     
     
+    matrix, cellmap, assaymap = get_assays_from_feature_file(feature_path=args.feature_path, 
+                                  eligible_assays = None,
+                                  eligible_cells = None, min_cells_per_assay = 2, min_assays_per_cell=5)
+    
+    eval_cell_types = list(cellmap).copy()
+    
+    test_cell_types = args.test_celltypes
 
-    # traverse through all files in accessibility directory and get filenames
-    accessibility_files = [f for f in os.listdir(args.accessibility) if os.isfile(os.join(args.accessibility, f))]
-    # get accessibility file with correct cell type
-    accessibility_path = filter(lambda x: x.contains(args.cell, accessibility_files)
-                                
-    # there should be accessibility
-    assert(len(accessibility_path) == 1)
-                    
+    [eval_cell_types.remove(test_cell) for test_cell in test_cell_types]
+    print("eval cell types", eval_cell_types)
+    print("test cell types", test_cell_types)
+    
+    # set sampling seed
+    random.seed(args.seed)
+            
+    # make datasets for train, valid and test
+    radii = [1,3,10,30]
+    indices = random.sample(range(train_data["y"].shape[1]), int(train_data["y"].shape[1] * args.sample))
+    train_iter = gen_from_peaks_to_tf_records(train_data,  
+                                            eval_cell_types,
+                                            eval_cell_types,
+                                            matrix,
+                                            assaymap,
+                                            cellmap, 
+                                            radii = radii, 
+                                            mode = Dataset.TRAIN, indices = indices)()
 
-    iterator = records_iterator(i, t, args.cell, int(args.start),
-     int(args.stop), features_path=args.features, accessibility = accessibility_path[0])
+    indices = random.sample(range(valid_data["y"].shape[1]), int(valid_data["y"].shape[1] * args.sample))
+    valid_iter = gen_from_peaks_to_tf_records(valid_data, 
+                                            eval_cell_types,
+                                            eval_cell_types,
+                                            matrix,
+                                            assaymap,
+                                            cellmap,
+                                            radii = radii, 
+                                            mode = Dataset.VALID, indices = indices)()
+
+    # Don't sample test set
+    test_iter = gen_from_peaks_to_tf_records(test_data, 
+                                           test_cell_types, 
+                                           eval_cell_types,
+                                           matrix,
+                                           assaymap,
+                                           cellmap, 
+                                           radii = radii, 
+                                           mode = Dataset.TEST)()
+    
+    # set compression to gzipped
     compression_options = tf.python_io.TFRecordOptions(
         tf.python_io.TFRecordCompressionType.GZIP)
-
-    iio.write_tfrecord(
-        protos=iterator,
-        path=os.path.join(output_dir, args.start.zfill(7)),
-        options=compression_options)
-
-
+    
+    # write train
+    print("writing gzipped train records")
+    iio.write_tfrecords(train_iter, filename=os.path.join(args.output_dir, 'train.tfrecord'),
+        num_shards = 500, options=compression_options)
+    
+    # write validation
+    print("writing gzipped validation records")
+    iio.write_tfrecords(valid_iter, filename=os.path.join(args.output_dir, 'valid.tfrecord'),
+        num_shards = 10, options=compression_options)
+    
+    # write test
+    print("writing gzipped test records")       
+    iio.write_tfrecords(test_iter, filename=os.path.join(args.output_dir, 'test.tfrecord'),
+        num_shards = 50, options=compression_options)
+    
 if __name__ == '__main__':
     main()
+

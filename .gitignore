@@ -1,23 +1,17 @@
 # dev
 .idea*
 *.iml
-venv
 
+
+# output files
+out/
+models/
 python/target/
-workfiles
 *.pyc
-assembly/target
 
 **/.ipynb_checkpoints
 .DS_Store
 __pycache__
 
-bionetz/bdgenomics_data
-bionetz/deepsea_train
-
-ram/MNIST_data/
 
 *deepsea_train*
-ram/results/
-*nohup.out*
-*results-hdf5*
