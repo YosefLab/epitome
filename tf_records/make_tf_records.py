@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--test_celltypes', nargs='+', help='test celltypes', default="A549")
     parser.add_argument('--sample', help='rate to sample records by', default=0.1, type=float)
     parser.add_argument('--seed', help='random seet to sample records', default=3)
+    parser.add_argument('--sample_test', help='whether to sample test points (for debugging)', type=bool, default=False)
     
     # On millennium, these paths should not be in the home directory!!!!
     parser.add_argument('--feature_path', 
@@ -73,14 +74,25 @@ def main():
                                             mode = Dataset.VALID, indices = indices)()
 
     # Don't sample test set
-    test_iter = gen_from_peaks_to_tf_records(test_data, 
-                                           test_cell_types, 
-                                           eval_cell_types,
-                                           matrix,
-                                           assaymap,
-                                           cellmap, 
-                                           radii = radii, 
-                                           mode = Dataset.TEST)()
+    if (args.sample_test):
+        indices = random.sample(range(test_data["y"].shape[1]), int(test_data["y"].shape[1] * args.sample))
+        test_iter = gen_from_peaks_to_tf_records(test_data, 
+                                               test_cell_types, 
+                                               eval_cell_types,
+                                               matrix,
+                                               assaymap,
+                                               cellmap, 
+                                               radii = radii, 
+                                               mode = Dataset.TEST, indices = indices)()
+    else:
+        test_iter = gen_from_peaks_to_tf_records(test_data, 
+                                       test_cell_types, 
+                                       eval_cell_types,
+                                       matrix,
+                                       assaymap,
+                                       cellmap, 
+                                       radii = radii, 
+                                       mode = Dataset.TEST)()
     
     # set compression to gzipped
     compression_options = tf.python_io.TFRecordOptions(
@@ -94,12 +106,12 @@ def main():
     # write validation
     print("writing gzipped validation records")
     iio.write_tfrecords(valid_iter, filename=os.path.join(args.output_dir, 'valid.tfrecord'),
-        num_shards = 10, options=compression_options)
+       num_shards = 10, options=compression_options)
     
     # write test
     print("writing gzipped test records")       
     iio.write_tfrecords(test_iter, filename=os.path.join(args.output_dir, 'test.tfrecord'),
-        num_shards = 50, options=compression_options)
+       num_shards = 50, options=compression_options)
     
 if __name__ == '__main__':
     main()

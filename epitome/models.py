@@ -108,7 +108,6 @@ class PeakModel():
                                                        cellmap,
                                                        radii = radii, mode = Dataset.TEST),
                                                            batch_size, 1, prefetch_size)
-                output_shape = output_shape[0]
 
             else:
                 raise Exception("Incorrect data format specified %s" % data)
@@ -181,7 +180,7 @@ class PeakModel():
     def loss_fn(self):
         cross_entropy = tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits[:, 1, :], 1)
         # mask cross entropy by weights z and take mean
-        return tf.reduce_mean(tf.boolean_mask(cross_entropy, self.z) )
+        return tf.reduce_mean(tf.boolean_mask(cross_entropy, self.z))
     
     def minimizer_fn(self):
         self.opt = tf.train.AdamOptimizer(self.lr)
@@ -369,7 +368,7 @@ class PeakModel():
                                                                    sample_weight = sample_weight[:, j], 
                                                                    average='macro')
                         
-                        pr_score  =  average_precision_score(truth[:,j], preds[:,j], 
+                        pr_score  =  sklearn.metrics.average_precision_score(truth[:,j], preds[:,j], 
                                                              sample_weight = sample_weight[:, j])
                         
                         gini_score = self.gini_normalized(truth[:,j], preds[:,j], 

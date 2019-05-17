@@ -11,6 +11,7 @@ import os
 from collections import Counter
 from itertools import groupby
 from scipy.io import loadmat
+from numba import cuda
 
 
 ################### CLASSES ##########################
@@ -59,6 +60,10 @@ class Region:
 
 ################## HELPER FUNCTIONS ##################
 
+def release_gpu_resources():
+    cuda.select_device(0)
+    cuda.close()
+    
 def get_y_indices_for_cell(matrix, cellmap, cell):
     """
     Gets indices for a cell.
