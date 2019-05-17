@@ -7,6 +7,7 @@ import tensorflow as tf
 from .constants import *
 from .functions import *
 import epitome.iio as iio
+import glob
 
 ######################### Original Data Generator: Only peak based #####################
 def gen_from_peaks(data, 
@@ -46,7 +47,7 @@ def gen_from_peaks(data,
     # TODO AM 4/17/2019: move this to an actual parameter
     indices = kwargs.get("indices")
     
-    if (not isinstance(indices, np.ndarray) and not isinstance(indices, list)):
+    if (not isinstance(indices, np.ndarray)):
         indices = range(0, data["y"].shape[-1]) # if not defined, set to all points
     
     if (not isinstance(mode, Dataset)):
@@ -351,7 +352,7 @@ def gen_from_peaks_to_tf_records(data,
                 assert(x_mask.shape == x_data.shape)
                 
                 feature = {}
-                # x has to be flattened.
+                # TODO maybe nest these for readability
                 feature['x/data'] = iio.make_float_feature(x_data)
                 feature['x/shape'] = iio.make_int64_feature(x_data.shape)
                 feature['x/mask'] =iio.make_int64_feature(x_mask.astype(np.bool))
@@ -409,7 +410,93 @@ def gen_from_peaks_to_tf_records(data,
 ############################################################################################
 ######################## Functions for running data generators #############################
 ############################################################################################
+def _parse_function(example_proto, example):
+    """ 
+    A helper function for extracting data from an example_proto
+    
+    :param single instance of tensorflow.core.example.example_pb2.Example
+    :return (data, labels and label mask) for example
+    """
+    x_shape = example.features.feature['x/shape'].int64_list.value[0]
+    y_shape = example.features.feature['y/shape'].int64_list.value[0]
+    eval_cell_count = len(example.features.feature['eval_cell_types'].bytes_list.value)
+    label_cell_count = len(example.features.feature['label_cell_types'].bytes_list.value)
+    print(x_shape, y_shape, eval_cell_count, label_cell_count)
+    features = {
+        'x/data': tf.FixedLenFeature((x_shape,), tf.float32),
+        'x/shape': tf.FixedLenFeature((1,), tf.int64),
+        'x/mask': tf.FixedLenFeature((x_shape,), tf.int64),
+        'eval_cell_types': tf.FixedLenFeature((eval_cell_count,), tf.string),
+        'label_cell_types': tf.FixedLenFeature((label_cell_count,), tf.string),
+        'y/labels': tf.FixedLenFeature((y_shape,), tf.string),
+        'y/celltype': tf.FixedLenFeature((1,), tf.string),
+        'y/mask': tf.FixedLenFeature((y_shape,), tf.int64),
+        'x/celltypes': tf.FixedLenFeature((x_shape,), tf.string),
+        'x/labels': tf.FixedLenFeature((x_shape,), tf.string),
+        'y/data': tf.FixedLenFeature((y_shape,), tf.int64),
+        'y/shape': tf.FixedLenFeature((1,), tf.int64),
+        'has_real_labels': tf.FixedLenFeature((1,), tf.int64)
+    }
 
+    parsed_features = tf.parse_single_example(example_proto, features)
+    
+    feature_tensor = tf.concat([tf.cast(parsed_features["x/mask"], tf.float32), parsed_features["x/data"]], 0)
+    feature_tensor = tf.reshape(feature_tensor, (2, x_shape))
+    
+    return (feature_tensor, tf.cast( parsed_features["y/data"], tf.float32), 
+            tf.cast(parsed_features["y/mask"], tf.float32))
+
+def tf_records_to_one_shot_iterator(path, dataset, batch_size, shuffle_size, prefetch_size):
+    """
+    Generates a one shot iterator from a list of filenames pointing to tf records.
+    
+    :param g: data generator
+    :param batch_size: number of elements in generator to combine into a single batch
+    :param shuffle_size: number of elements from the  generator fromw which the new dataset will shuffle
+    :param prefetch_size: maximum number of elements that will be buffered  when prefetching
+    :param radii: where to calculate DNase similarity to.
+    
+    :returns: tuple of (label shape, one shot iterator)
+    """
+    
+    files = glob.glob(os.path.join(path, "*"))
+    
+    if dataset == Dataset.TRAIN:
+        file_prefix = "train.tfrecord"
+    elif dataset == Dataset.VALID:
+        file_prefix = "valid.tfrecord"
+    elif dataset == Dataset.TEST:
+        file_prefix = "test.tfrecord"
+        
+    else:
+        raise Exception("invalid dataset specified for generating iterator: %s" % dataset)
+        
+    filtered_files = list(filter(lambda x: file_prefix in x, files))
+
+    # get 1 example to get sample shape information
+    compression_options = tf.python_io.TFRecordOptions(tf.python_io.TFRecordCompressionType.GZIP)
+    t = iio.read_tfrecord(filtered_files[0], proto=None, options=compression_options)
+    example = next(t)
+    
+    try: 
+        dataset = tf.data.TFRecordDataset(filenames=filtered_files,
+                                  compression_type='GZIP')
+
+    except NameError as e:
+        print("Error: no data, %s" % e)
+
+    dataset = dataset.map(lambda x: _parse_function(x, example))
+    dataset = dataset.batch(batch_size)
+    dataset = dataset.shuffle(shuffle_size)
+    dataset = dataset.repeat()
+    dataset = dataset.prefetch(prefetch_size)
+
+    try: 
+        return example.features.feature["y/shape"].int64_list.value[0], dataset.make_one_shot_iterator()
+    except NameError as e:
+        return None, dataset.make_one_shot_iterator()
+
+    
 def generator_to_one_shot_iterator(g, batch_size, shuffle_size, prefetch_size):
     """
     Generates a one shot iterator from a data generator.

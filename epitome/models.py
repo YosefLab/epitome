@@ -14,9 +14,7 @@ import numpy as np
 
 class PeakModel():
     def __init__(self,
-                 train_data,
-                 valid_data,
-                 test_data,
+                 data,
                  test_celltypes,
                  generator,
                  matrix,
@@ -33,9 +31,7 @@ class PeakModel():
         
         """
         Peak Model
-
-        :param train_data
-        :param valid_data
+        :param data: either a path to TF records OR a dictionary of TRAIN, VALID, and TEST data
         :param test_celltypes
         :param generator
         :param matrix
@@ -60,7 +56,7 @@ class PeakModel():
             
                 
             assert (set(test_celltypes) < set(list(cellmap))), \
-                    "test_celltypes %s must be subsets of available cell types" % (test_celltypes, list(celltypes))
+                    "test_celltypes %s must be subsets of available cell types %s" % (str(test_celltypes), str(list(cellmap)))
                 
                 
             # get evaluation cell types by removing any cell types that would be used in test
@@ -71,34 +67,52 @@ class PeakModel():
             print("eval cell types", self.eval_cell_types)
 
             # make datasets
-            output_shape, train_iter = generator_to_one_shot_iterator(generator(train_data,  
-                                                    self.eval_cell_types,
-                                                    self.eval_cell_types,
-                                                    matrix,
-                                                    assaymap,
-                                                    cellmap,
-                                                    radii = radii, mode = Dataset.TRAIN),
-                                                    batch_size, shuffle_size, prefetch_size)
-                                                                      
-            _,            valid_iter = generator_to_one_shot_iterator(generator(valid_data, 
-                                                    self.eval_cell_types,
-                                                    self.eval_cell_types,
-                                                    matrix,
-                                                    assaymap,
-                                                    cellmap,
-                                                    radii = radii, mode = Dataset.VALID), 
-                                                    batch_size, 1, prefetch_size)
-            
-            # can be empty if len(test_celltypes) == 0
-            _,            test_iter = generator_to_one_shot_iterator(generator(test_data, 
-                                                   self.test_celltypes, 
-                                                   self.eval_cell_types,
-                                                   matrix,
-                                                   assaymap,
-                                                   cellmap,
-                                                   radii = radii, mode = Dataset.TEST),
-                                                       batch_size, 1, prefetch_size)
+            if (isinstance(data, str) and os.path.exists(data)):
+                output_shape, train_iter = tf_records_to_one_shot_iterator(data, Dataset.TRAIN, 
+                                                        batch_size, shuffle_size, prefetch_size)
+
+                _,            valid_iter = tf_records_to_one_shot_iterator(data, Dataset.VALID,
+                                                        batch_size, 1, prefetch_size)
+
+                # can be empty if len(test_celltypes) == 0
+                _,            test_iter = tf_records_to_one_shot_iterator(data, Dataset.TEST,
+                                                           batch_size, 1, prefetch_size)
                 
+            # otherwise, can give raw data and a generator
+            elif (isinstance(data, dict) and data[Dataset.TRAIN] 
+                  and data[Dataset.VALID] and data[Dataset.TEST] and generator):
+                output_shape, train_iter = generator_to_one_shot_iterator(generator(data[Dataset.TRAIN],  
+                                                        self.eval_cell_types,
+                                                        self.eval_cell_types,
+                                                        matrix,
+                                                        assaymap,
+                                                        cellmap,
+                                                        radii = radii, mode = Dataset.TRAIN),
+                                                        batch_size, shuffle_size, prefetch_size)
+
+                _,            valid_iter = generator_to_one_shot_iterator(generator(data[Dataset.VALID], 
+                                                        self.eval_cell_types,
+                                                        self.eval_cell_types,
+                                                        matrix,
+                                                        assaymap,
+                                                        cellmap,
+                                                        radii = radii, mode = Dataset.VALID), 
+                                                        batch_size, 1, prefetch_size)
+
+                # can be empty if len(test_celltypes) == 0
+                _,            test_iter = generator_to_one_shot_iterator(generator(data[Dataset.TEST], 
+                                                       self.test_celltypes, 
+                                                       self.eval_cell_types,
+                                                       matrix,
+                                                       assaymap,
+                                                       cellmap,
+                                                       radii = radii, mode = Dataset.TEST),
+                                                           batch_size, 1, prefetch_size)
+                output_shape = output_shape[0]
+
+            else:
+                raise Exception("Incorrect data format specified %s" % data)
+
             self.train_handle = train_iter.string_handle()
             self.valid_handle = valid_iter.string_handle()
             self.test_handle = test_iter.string_handle()
@@ -112,7 +126,7 @@ class PeakModel():
             
             self.sess = tf.InteractiveSession(graph=graph)
 
-            self.num_outputs = output_shape[0]
+            self.num_outputs = output_shape
             self.l1, self.l2 = l1, l2
             self.default_lr = lr
             self.lr = tf.placeholder(tf.float32)
@@ -173,7 +187,7 @@ class PeakModel():
         self.opt = tf.train.AdamOptimizer(self.lr)
         return self.opt.minimize(self.loss, self.global_step)
     
-    def close():
+    def close(self):
         if not self.closed:
             self.sess.close()
         self.closed = True
@@ -355,7 +369,7 @@ class PeakModel():
                                                                    sample_weight = sample_weight[:, j], 
                                                                    average='macro')
                         
-                        pr_score  =  sklearn.metrics.average_precision_score(truth[:,j], preds[:,j], 
+                        pr_score  =  average_precision_score(truth[:,j], preds[:,j], 
                                                              sample_weight = sample_weight[:, j])
                         
                         gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
@@ -390,8 +404,7 @@ class MLP(PeakModel):
         
         if not isinstance(self.num_units, collections.Iterable):
             self.num_units = [self.num_units] * self.layers
-            
         for i in range(self.layers):
             model = tf.layers.dense(model, self.num_units[i], self.activation)
-        
+
         return tf.layers.dense(model, self.num_outputs, kernel_regularizer=tf.contrib.layers.l1_l2_regularizer(self.l1, self.l2))
