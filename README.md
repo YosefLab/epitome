@@ -8,7 +8,7 @@ Epitome leverages chromatin accessibility data to predict transcription factor b
 
 
 ## Requirements:
--- conda
+-- [conda](https://docs.conda.io/en/latest/miniconda.html)
 -- python 3.3.6
 
 ## Setup:
@@ -19,10 +19,19 @@ conda create --name EpitomeEnv python=3.6
 2. setup: 
 ```
 pip install -e .
+
+Note: Epitome is configured for tensorflow 1.12/Cuda 9. If you have a different
+version of cuda, update tensorflow-gpu version accordingly.
 ```
 
-## Making Records
-TODO
+## Configuring data
+To download and format training data, run bin/get_deepsea_data.py:
+
+
+```
+python bin/get_deepsea_data.py 
+usage: get_deepsea_data.py [-h] --output_path OUTPUT_PATH
+```
 
 ## Training a Model
 
