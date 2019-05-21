@@ -8,6 +8,7 @@ from .constants import *
 from .functions import *
 import epitome.iio as iio
 import glob
+import numpy.ma as ma    
 
 ######################### Original Data Generator: Only peak based #####################
 
@@ -19,6 +20,11 @@ def gen_from_peaks_to_tf_records(data,
                  cellmap,
                  radii,
                  **kwargs):
+    
+    # AM 5/20/2019. This is enforcing exclusive DNase bins and will make 
+    # interpretation of DNase weights easier. It does not add performance benefit
+    # over inclusive bins, which was used in the original model.
+    exclusive = True
 
     """
     Takes Deepsea data and calculates distance metrics from cell types whose locations
@@ -122,32 +128,43 @@ def gen_from_peaks_to_tf_records(data,
                     garbage_labels = assay_mask = np.zeros(label_count)
 
                 # get dnase indices for cell types that are going to be features
-                dnase_indices = [x[0] for x in feature_cell_indices_list]
-                            
-                for radius in radii:
+                dnase_indices = np.array([x[0] for x in feature_cell_indices_list])
+                
+                for r, radius in enumerate(radii):
                     min_radius = max(0, i - radius)
                     max_radius = i+radius+1
+                    radius_range = np.arange(min_radius, max_radius)
+                    
+                    
+                    if (exclusive and r != 0):
+                        radius_range_1 = np.arange(min_radius, max(0, i - radii[r-1]))
+                        radius_range_2 = np.arange(i+radii[r-1]+1, max_radius)
+                        
+                        radius_range = np.concatenate([radius_range_1, radius_range_2])
+                        
                     
                     # use DNase vector, if it is provided
                     if (mode == Dataset.RUNTIME):
+                        
+
 
                         # within the radius, fraction of places where they are both 1
-                        dnase_double_positive = np.average(data["y"][dnase_indices,min_radius:max_radius]*
-                                                 dnase_vector[min_radius:max_radius], axis=1)
+                        dnase_double_positive = np.average(data["y"][dnase_indices[:,None],radius_range]*
+                                                 dnase_vector[radius_range], axis=1)
 
                         # within the radius, fraction of places where they are both equal (0 or 1)
-                        dnase_agreement = np.average(data["y"][dnase_indices,min_radius:max_radius]==
-                                                 dnase_vector[min_radius:max_radius], axis=1)
+                        dnase_agreement = np.average(data["y"][dnase_indices[:,None],radius_range]==
+                                                 dnase_vector[radius_range], axis=1)
 
                     else:
                         # within the radius, fraction of places where they are both 1
                         # label_cell_index[0] == DNase location for specific cell type
-                        dnase_double_positive = np.average(data["y"][dnase_indices,min_radius:max_radius]*
-                                                 data["y"][label_cell_indices[0],min_radius:max_radius], axis=1)
+                        dnase_double_positive = np.average(data["y"][dnase_indices[:,None],radius_range]*
+                                                 data["y"][label_cell_indices[0],radius_range], axis=1)
 
                         # within the radius, fraction of places where they are both equal (0 or 1)
-                        dnase_agreement = np.average(data["y"][dnase_indices,min_radius:max_radius]==
-                                                 data["y"][label_cell_indices[0],min_radius:max_radius], axis=1)
+                        dnase_agreement = np.average(data["y"][dnase_indices[:,None],radius_range]==
+                                                 data["y"][label_cell_indices[0],radius_range], axis=1)
                         
                         
                     dnases.extend(dnase_double_positive)
@@ -266,9 +283,9 @@ def _parse_function(example_proto, example):
 
     parsed_features = tf.parse_single_example(example_proto, features)
     
-    feature_tensor = tf.concat([tf.cast(parsed_features["x/mask"], tf.float32), parsed_features["x/data"]], 0)
-    feature_tensor = tf.reshape(feature_tensor, (2, x_shape))
-    
+    # create boolean mask over available features. TODO 5/20/2019 this has not been tested.
+    feature_tensor = tf.boolean_mask(parsed_features["x/data"], tf.cast(parsed_features["x/mask"], tf.float32))
+
     return (feature_tensor, tf.cast( parsed_features["y/data"], tf.float32), 
             tf.cast(parsed_features["y/mask"], tf.float32))
 
@@ -324,7 +341,6 @@ def tf_records_to_one_shot_iterator(path, dataset, batch_size, shuffle_size, pre
     except NameError as e:
         return None, dataset.make_one_shot_iterator()
 
-    
 def _parse_function_from_generator(example):
     """ 
     A helper function for extracting data from an example_proto
@@ -340,7 +356,9 @@ def _parse_function_from_generator(example):
     y_data = np.array(example.features.feature["y/data"].int64_list.value)
     y_mask = np.array(example.features.feature["y/mask"].int64_list.value)
     
-    return (np.vstack([x_mask, x_data]), y_data, y_mask)
+    # mask x data by which factors are available for a cell type
+    mx = ma.masked_array(x_data, mask=np.logical_not(x_mask))
+    return(mx, y_data, y_mask)
     
 def generator_to_one_shot_iterator(g, batch_size, shuffle_size, prefetch_size):
     """
@@ -372,7 +390,8 @@ def generator_to_one_shot_iterator(g, batch_size, shuffle_size, prefetch_size):
     dataset = tf.data.TFRecordDataset.from_generator( # generator of tensorflow.core.example.example_pb2.Example
         g_mapped,
         output_types=(tf.float32,)*3, # 3 = features, labels, and missing indices
-        output_shapes=((2, x_shape), (y_shape,), (y_shape,),)
+        output_shapes=((x_shape,), (y_shape,), (y_shape,),)
+        
     )
 
     dataset = dataset.batch(batch_size)

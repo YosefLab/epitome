@@ -111,12 +111,13 @@ class PeakModel():
 
             else:
                 raise Exception("Incorrect data format specified %s" % data)
-
+            
             self.train_handle = train_iter.string_handle()
             self.valid_handle = valid_iter.string_handle()
             self.test_handle = test_iter.string_handle()
             
             self.handle = tf.placeholder(tf.string, shape=[])
+            
             iterator = tf.data.Iterator.from_string_handle(
                 self.handle, train_iter.output_types, train_iter.output_shapes)
             
@@ -178,10 +179,10 @@ class PeakModel():
         raise NotImplementedError()
     
     def loss_fn(self):
-        cross_entropy = tf.nn.weighted_cross_entropy_with_logits(self.y, self.logits[:, 1, :], 1)
-        # mask cross entropy by weights z and take mean
-        return tf.reduce_mean(tf.boolean_mask(cross_entropy, self.z))
-    
+        # weighted sum of cross entropy for non 0 weights
+        # Reduction method = Reduction.SUM_BY_NONZERO_WEIGHTS
+        return tf.losses.sigmoid_cross_entropy(self.y, self.logits, weights = self.z)
+
     def minimizer_fn(self):
         self.opt = tf.train.AdamOptimizer(self.lr)
         return self.opt.minimize(self.loss, self.global_step)
@@ -307,8 +308,8 @@ class PeakModel():
                     self.sess.run([self.predictions, self.x, self.y, self.z],
                              {self.handle: iter_handle})
                 )
+                
             preds = np.concatenate([v[0] for v in vals])    
-            preds = preds[:,1,:] # get second row. First row is mask
             
             # do not continue to calculate metrics. Just return predictions
             if (not calculate_metrics):
@@ -319,7 +320,6 @@ class PeakModel():
             
             assert(preds.shape == sample_weight.shape)
             
-            # TODO AM 3/6/2019 shrink down accuracy calculations
             try:
                 # Mean results because sample_weight mask can only work on 1 row at a time.
                 # If a given assay is not available for evaluation, sample_weights will all be 0 
@@ -329,21 +329,45 @@ class PeakModel():
                 
                 
                 # try/accept for cases with only one class (throws ValueError)
-                for k in range(preds.shape[1]):
+                assay_dict = {}
+                
+                for j in range(preds.shape[1]):
+                    assay = inv_assaymap[j+1] 
+                    
+                    roc_score = np.NAN
+                    
                     try:
-                        macroAUC_vec.append(sklearn.metrics.roc_auc_score(truth[:,k], preds[:,k], 
+                        roc_score = sklearn.metrics.roc_auc_score(truth[:,j], preds[:,j], 
                                                           average='macro', 
-                                                          sample_weight = sample_weight[:,k]))
+                                                          sample_weight = sample_weight[:,j])
+                        
+                        macroAUC_vec.append(roc_score)
+                        
                     except ValueError:
                         pass
                     
                     try:
-                        microAUC_vec.append(sklearn.metrics.roc_auc_score(truth[:,k], preds[:,k], 
+                        microAUC_vec.append(sklearn.metrics.roc_auc_score(truth[:,j], preds[:,j], 
                                                           average='micro', 
-                                                          sample_weight = sample_weight[:,k]))
+                                                          sample_weight = sample_weight[:,j]))
                     except ValueError:
                         pass
+                    
+                    if log:
+                        try:
+                            pr_score  = sklearn.metrics.average_precision_score(truth[:,j], preds[:,j], 
+                                                                 sample_weight = sample_weight[:, j])
 
+                            gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
+                                                              sample_weight = sample_weight[:, j])
+
+                            assay_dict[assay]= {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
+
+                        except ValueError:
+                            pass
+
+                            assay_dict[assay] = {"AUC": np.NaN, "auPRC": np.NaN, "GINI": np.NaN }
+                        
                 
                 macroAUC = np.nanmean(macroAUC_vec)
                 microAUC = np.nanmean(microAUC_vec)
@@ -355,33 +379,9 @@ class PeakModel():
                 microAUC = None
                 tf.logging.info("Failed to calculate macro AUC")
                 tf.logging.info("Failed to calculate micro AUC")
-                
-            if log:
-                
-                assay_dict = {}
-                
-                for j in range(truth.shape[1]): # eval on all assays except DNase and assays that are missing 
-                    assay = inv_assaymap[j+1] 
 
-                    try:
-                        auc_score =  sklearn.metrics.roc_auc_score(truth[:,j], preds[:,j], 
-                                                                   sample_weight = sample_weight[:, j], 
-                                                                   average='macro')
-                        
-                        pr_score  =  sklearn.metrics.average_precision_score(truth[:,j], preds[:,j], 
-                                                             sample_weight = sample_weight[:, j])
-                        
-                        gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
-                                                          sample_weight = sample_weight[:, j])
-                        
-                        assay_dict[assay]= {"AUC": auc_score, "auPRC": pr_score, "GINI": gini_score }
-                    except ValueError as x:
-                        tf.logging.warn("%s: %s" % (assay, x))
-                        assay_dict[assay] = {"AUC": np.NaN, "auPRC": np.NaN, "GINI": np.NaN }
-
-                return preds, truth, assay_dict, microAUC, macroAUC
+            return preds, truth, assay_dict, microAUC, macroAUC
             
-            return preds, truth, None, microAUC, macroAUC
 
 class MLP(PeakModel):
     def __init__(self,
@@ -400,10 +400,10 @@ class MLP(PeakModel):
             
     def body_fn(self):
         model = self.x
-        
+
         if not isinstance(self.num_units, collections.Iterable):
             self.num_units = [self.num_units] * self.layers
         for i in range(self.layers):
             model = tf.layers.dense(model, self.num_units[i], self.activation)
-
+        
         return tf.layers.dense(model, self.num_outputs, kernel_regularizer=tf.contrib.layers.l1_l2_regularizer(self.l1, self.l2))
