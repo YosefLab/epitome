@@ -120,24 +120,15 @@ def load_deepsea_data_allpos_file(deepsea_path):
 
     """
     tmp = h5py.File(os.path.join(deepsea_path, "train.mat"))
-    train_data = {
-        "y": tmp["traindata"][()][:,0:2200000]
-    }
-
+    train_data = tmp["traindata"][()][:,0:2200000]
 
     tmp = loadmat(os.path.join(deepsea_path, "valid.mat"))
-    valid_data = {
-        "y": tmp['validdata'].T[:,0:4000]
-    }
+    valid_data = tmp['validdata'].T[:,0:4000]
 
     tmp = loadmat(os.path.join(deepsea_path, "test.mat"))
-    test_data = {
-        "y": tmp['testdata'].T[:,0:_TEST_REGIONS[1]-_TEST_REGIONS[0]+1] # Length of regions in allpos.bed file
-    }
+    test_data = tmp['testdata'].T[:,0:_TEST_REGIONS[1]-_TEST_REGIONS[0]+1] # Length of regions in allpos.bed file
 
-    data = {
-        "y": np.concatenate((train_data["y"], valid_data["y"], test_data["y"]), axis=1)
-    }
+    data = np.concatenate((train_data, valid_data, test_data), axis=1)
 
     return data
 
@@ -147,61 +138,48 @@ def save_deepsea_label_data(deepsea_path, label_output_path):
     
     Args:
         :param deepsea_path: path to .mat data, downloaded from script ./bin/download_deepsea_data
-        :param label_output_path: new output path to save labels
+        :param label_output_path: new output path to save labels. saves as numpy files.
 
     """
     if not os.path.exists(label_output_path):
         os.mkdir(label_output_path)
         print("%s Created " % label_output_path)
     
-    
     tmp = h5py.File(os.path.join(deepsea_path, "train.mat"))
-    train_data = {
-        "y": tmp["traindata"][()]
-    }
-
+    train_data = np.matrix(tmp["traindata"][:,0:int(tmp["traindata"].shape[1]/2)])
 
     tmp = loadmat(os.path.join(deepsea_path, "valid.mat"))
-    valid_data = {
-        "y": tmp['validdata'].T
-    }
+    valid_data = np.matrix(tmp['validdata'][0:int(tmp['validdata'].shape[0]/2),:].T)
 
     tmp = loadmat(os.path.join(deepsea_path, "test.mat"))
-    test_data = {
-        "y": tmp['testdata'].T
-    }
+    test_data = np.matrix(tmp['testdata'][0:int(tmp['testdata'].shape[0]/2),:].T)
+    
+    print(train_data.shape, valid_data.shape, test_data.shape)
 
-    valid_data = {
-        "y": np.concatenate([train_data["y"][:,2200000:2400000],train_data["y"][:,4200000:4400000],valid_data["y"]], axis=1),
-    }
-
-    train_data = {
-        "y": np.concatenate([train_data["y"][:,0:2200000],train_data["y"][:,2400000:4200000], test_data["y"]], axis=1),
-    } 
     # save files
-    
-    print("saving train.mat, valid.mat and test.mat to %s" % label_output_path)
-    savemat(os.path.join(label_output_path, "train.mat"), train_data)
-    savemat(os.path.join(label_output_path, "valid.mat"), valid_data)
-    savemat(os.path.join(label_output_path, "test.mat"), test_data)
-    
+    print("saving train.npy, valid.npy and test.npy to %s" % label_output_path)
+    np.save(os.path.join(label_output_path, "train"), train_data)
+    np.save(os.path.join(label_output_path, "valid"), valid_data)
+    np.save(os.path.join(label_output_path, "test"), test_data)
+
+
 def load_deepsea_label_data(deepsea_path):
     """
     Loads just deepsea labels, saved from save_deepsea_label_data function
     
     Args:
-        :param deepsea_path: path to .mat data, saved by save_deepsea_label_data function
+        :param deepsea_path: path to .npy data, saved by save_deepsea_label_data function
         
     :returns: train_data, valid_data, and test_data
-        3 dictionaries for train, valid and test containing a 'y' matrix of labels
+        3 numpy ndarrays for train, valid and test
     """
     
-    train_data = loadmat(os.path.join(deepsea_path, "train.mat"))
+    train_data = np.load(os.path.join(deepsea_path, "train.npy"))
 
-    valid_data = loadmat(os.path.join(deepsea_path, "valid.mat"))
+    valid_data = np.load(os.path.join(deepsea_path, "valid.npy"))
 
 
-    test_data = loadmat(os.path.join(deepsea_path, "test.mat"))
+    test_data = np.load(os.path.join(deepsea_path, "test.npy"))
 
     return train_data, valid_data, test_data
 
@@ -212,7 +190,6 @@ def load_deepsea_data(deepsea_path):
         "x": tmp["trainxdata"][()].transpose([2,1,0]),
         "y": tmp["traindata"][()]
     }
-
 
     tmp = loadmat(os.path.join(deepsea_path, "valid.mat"))
     valid_data = {
@@ -225,18 +202,6 @@ def load_deepsea_data(deepsea_path):
         "x": tmp['testxdata'],
         "y": tmp['testdata'].T
     }
-
-
-
-    valid_data = {
-        "x": np.concatenate([train_data["x"][2200000:2400000,:,:],train_data["x"][4200000:4400000,:,:],valid_data["x"]], axis=0),
-        "y": np.concatenate([train_data["y"][:,2200000:2400000],train_data["y"][:,4200000:4400000],valid_data["y"]], axis=1),
-    }
-
-    train_data = {
-        "x": np.concatenate([train_data["x"][0:2200000,:,:],train_data["x"][2400000:4200000,:,:], test_data["x"]], axis=0),
-        "y": np.concatenate([train_data["y"][:,0:2200000],train_data["y"][:,2400000:4200000], test_data["y"]], axis=1),
-    } 
 
     return train_data, valid_data, test_data
 
@@ -578,4 +543,44 @@ def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
         vector = np.concatenate([ATAC_train, ATAC_valid, ATAC_test], axis=0)
 
     return vector, zip(init_idr_peaks, found)
+
+
+def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights = None):
+    """
+    Selects n rows from data that have the greatest number of labels (can be weighted)
+    Returns indices to these rows.
+    
+    :param data: data matrix with shape (factors, records)
+    :param n: number or rows to sample
+    :param matrix: cell type by assay position matrix
+    :param cellmap dict of cells and row positions in matrix
+    :param assaymap: dict of assays and column positions in matrix
+    :param weights: Optional vector of weights whos length = # factors (1 weight for each factor).
+    The greater the weight, the more the positives for this factor matters.
+    """
+
+    # only take rows that will be used in set
+    # drop DNase from indices in assaymap first
+    selected_assays = list(assaymap.values())[1:]
+    indices = matrix[list(cellmap.values())][:,selected_assays].flatten()
+
+    # set missing assay/cell combinations to -1 
+    t1 = data[indices, :]
+    t1[np.where(indices < 0)[0],:] = 0
+    
+    # sum over each factor for each record
+    sums = np.sum(np.reshape(t1, (len(selected_assays), len(cellmap), t1.shape[1])), axis=1) 
+
+    if (weights is not None):
+        weights = np.reshape(weights, (weights.shape[0],1)) # reshape so multiply works
+        probs = np.sum(sums * weights, axis = 0)
+        probs = probs/np.sum(probs)
+    else:
+        # simple sum over recoreds. Weights records with more positive
+        # samples higher for random sampling.
+        probs = np.sum(sums, axis=0)
+        probs = (probs)/np.sum(probs)
+        
+    # sample by probabilities. not sorted.
+    return np.random.choice(np.arange(0, data.shape[1]), n, p = probs)
         

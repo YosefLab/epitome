@@ -11,12 +11,10 @@ import numpy as np
 
 ################### Simple DNase peak based distance model ############
 
-
 class PeakModel():
     def __init__(self,
                  data,
                  test_celltypes,
-                 generator,
                  matrix,
                  assaymap,
                  cellmap,  
@@ -27,7 +25,8 @@ class PeakModel():
                  l1=0.,
                  l2=0.,
                  lr=1e-3,
-                 radii=[1,3,10,30]):
+                 radii=[1,3,10,30], 
+                 train_indices = None):
         
         """
         Peak Model
@@ -66,51 +65,34 @@ class PeakModel():
             [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
             print("eval cell types", self.eval_cell_types)
 
-            # make datasets
-            if (isinstance(data, str) and os.path.exists(data)):
-                output_shape, train_iter = tf_records_to_one_shot_iterator(data, Dataset.TRAIN, 
-                                                        batch_size, shuffle_size, prefetch_size)
+            output_shape, train_iter = generator_to_one_shot_iterator(load_data(data[Dataset.TRAIN],  
+                                                    self.eval_cell_types,
+                                                    self.eval_cell_types,
+                                                    matrix,
+                                                    assaymap,
+                                                    cellmap,
+                                                    radii = radii, mode = Dataset.TRAIN),
+                                                    batch_size, shuffle_size, prefetch_size)
 
-                _,            valid_iter = tf_records_to_one_shot_iterator(data, Dataset.VALID,
-                                                        batch_size, 1, prefetch_size)
+            _,            valid_iter = generator_to_one_shot_iterator(load_data(data[Dataset.VALID], 
+                                                    self.eval_cell_types,
+                                                    self.eval_cell_types,
+                                                    matrix,
+                                                    assaymap,
+                                                    cellmap,
+                                                    radii = radii, mode = Dataset.VALID), 
+                                                    batch_size, 1, prefetch_size)
 
-                # can be empty if len(test_celltypes) == 0
-                _,            test_iter = tf_records_to_one_shot_iterator(data, Dataset.TEST,
-                                                           batch_size, 1, prefetch_size)
-                
-            # otherwise, can give raw data and a generator
-            elif (isinstance(data, dict) and data[Dataset.TRAIN] 
-                  and data[Dataset.VALID] and data[Dataset.TEST] and generator):
-                output_shape, train_iter = generator_to_one_shot_iterator(generator(data[Dataset.TRAIN],  
-                                                        self.eval_cell_types,
-                                                        self.eval_cell_types,
-                                                        matrix,
-                                                        assaymap,
-                                                        cellmap,
-                                                        radii = radii, mode = Dataset.TRAIN),
-                                                        batch_size, shuffle_size, prefetch_size)
+            # can be empty if len(test_celltypes) == 0
+            _,            test_iter = generator_to_one_shot_iterator(load_data(data[Dataset.TEST], 
+                                                   self.test_celltypes, 
+                                                   self.eval_cell_types,
+                                                   matrix,
+                                                   assaymap,
+                                                   cellmap,
+                                                   radii = radii, mode = Dataset.TEST),
+                                                       batch_size, 1, prefetch_size)
 
-                _,            valid_iter = generator_to_one_shot_iterator(generator(data[Dataset.VALID], 
-                                                        self.eval_cell_types,
-                                                        self.eval_cell_types,
-                                                        matrix,
-                                                        assaymap,
-                                                        cellmap,
-                                                        radii = radii, mode = Dataset.VALID), 
-                                                        batch_size, 1, prefetch_size)
-
-                # can be empty if len(test_celltypes) == 0
-                _,            test_iter = generator_to_one_shot_iterator(generator(data[Dataset.TEST], 
-                                                       self.test_celltypes, 
-                                                       self.eval_cell_types,
-                                                       matrix,
-                                                       assaymap,
-                                                       cellmap,
-                                                       radii = radii, mode = Dataset.TEST),
-                                                           batch_size, 1, prefetch_size)
-
-            else:
-                raise Exception("Incorrect data format specified %s" % data)
             
             self.train_handle = train_iter.string_handle()
             self.valid_handle = valid_iter.string_handle()
@@ -124,9 +106,13 @@ class PeakModel():
             # self.x = predictions, self.y=labels, self.z = missing labels for this record (cell type specific)
             self.x, self.y, self.z = iterator.get_next()
             
+            # set session
+#             config = tf.ConfigProto(log_device_placement=False)
+#             config.gpu_options.allow_growth = True
+#             self.sess = tf.Session(graph=graph, config=config)
             self.sess = tf.InteractiveSession(graph=graph)
 
-            self.num_outputs = output_shape
+            self.num_outputs = output_shape[0]
             self.l1, self.l2 = l1, l2
             self.default_lr = lr
             self.lr = tf.placeholder(tf.float32)
@@ -137,10 +123,10 @@ class PeakModel():
             self.debug = debug
             self.assaymap = assaymap
             self.test_celltypes = test_celltypes
-            self.generator = generator
             self.matrix = matrix
             self.assaymap= assaymap 
             self.cellmap = cellmap
+            self.data = data
             self.global_step = tf.Variable(0, name='global_step', trainable=False)
             self.logits = self.body_fn()
             self.predictions = tf.sigmoid(self.logits)
@@ -181,12 +167,44 @@ class PeakModel():
     def loss_fn(self):
         # weighted sum of cross entropy for non 0 weights
         # Reduction method = Reduction.SUM_BY_NONZERO_WEIGHTS
-        return tf.losses.sigmoid_cross_entropy(self.y, self.logits, weights = self.z)
-
+        individual_losses = tf.losses.sigmoid_cross_entropy(self.y,  # TODO AM 5/23/2019 right dimensions
+                                                            self.logits, 
+                                                            weights = self.z,
+                                                            reduction = tf.losses.Reduction.NONE)
+        
+        # TODO AM 5/17/2019 what about missing labels (weights)?
+        individual_losses = tf.math.reduce_mean(individual_losses, axis = 0)
+        
+        return (tf.losses.sigmoid_cross_entropy(self.y, self.logits, weights = self.z), 
+                individual_losses)
+    
     def minimizer_fn(self):
         self.opt = tf.train.AdamOptimizer(self.lr)
-        return self.opt.minimize(self.loss, self.global_step)
+        return self.opt.minimize(self.loss[0], self.global_step)
     
+    def resample_train(self, individual_losses):
+        tf.logging.info("get new indices")
+        new_train_data_indices = indices_for_weighted_resample(self.data[Dataset.TRAIN], 1000, 
+                                                                     self.matrix, 
+                                                                     self.cellmap, 
+                                                                     self.assaymap, 
+                                                                     weights = individual_losses)
+
+        # reset train handle
+        output_shape, train_iter = generator_to_one_shot_iterator(load_data(data[Dataset.TRAIN],  
+                                        self.eval_cell_types,
+                                        self.eval_cell_types,
+                                        matrix,
+                                        assaymap,
+                                        cellmap,
+                                        indices = new_train_data_indices,
+                                        radii = self.radii, mode = Dataset.TRAIN),
+                                        self.batch_size, 1, self.prefetch_size)
+        
+        self.train_handle = train_iter.string_handle()
+        self.train_handle = self.sess.run(self.train_handle)
+        
+        
     def close(self):
         if not self.closed:
             self.sess.close()
@@ -218,7 +236,9 @@ class PeakModel():
                 _, loss = self.sess.run([self.min, self.loss], {self.handle: self.train_handle, self.lr: lr})
                 step = self.sess.run(self.global_step)
                 if step % 1000 == 0:
-                    tf.logging.info(str(step) + " " + str(loss))
+                    tf.logging.info(str(step) + " " + str(loss[0]))
+                    # weighted resample based on losses
+                    self.resample_train(loss[1])
                     if (self.debug):
                         tf.logging.info("On validation")
                         _, _, _, _, _ = self.test(40000, log=False)
@@ -256,7 +276,7 @@ class PeakModel():
     def eval_vector(self, data, vector, indices):
         """
         Evaluates a new cell type based on its chromatin (DNase or ATAC-seq) vector. len(vector) should equal
-        the data["y"].shape[1]
+        the data.shape[1]
         :param data: data to build features from 
         :param vector: vector of 0s/1s of binding sites TODO AM 4/3/2019: try peak strength instead of 0s/1s
         :param indices: indices of vector to actually score. You need all of the locations for the generator.
@@ -264,7 +284,7 @@ class PeakModel():
         :return predictions for all factors
         """
         
-        _,  iter_ = generator_to_one_shot_iterator(gen_from_peaks(data, 
+        _,  iter_ = generator_to_one_shot_iterator(load_data(data, 
                  self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
                  self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
                  self.matrix,
