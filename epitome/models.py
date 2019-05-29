@@ -191,12 +191,12 @@ class PeakModel():
                                                                      weights = individual_losses)
 
         # reset train handle
-        output_shape, train_iter = generator_to_one_shot_iterator(load_data(data[Dataset.TRAIN],  
+        output_shape, train_iter = generator_to_one_shot_iterator(load_data(self.data[Dataset.TRAIN],  
                                         self.eval_cell_types,
                                         self.eval_cell_types,
-                                        matrix,
-                                        assaymap,
-                                        cellmap,
+                                        self.matrix,
+                                        self.assaymap,
+                                        self.cellmap,
                                         indices = new_train_data_indices,
                                         radii = self.radii, mode = Dataset.TRAIN),
                                         self.batch_size, 1, self.prefetch_size)

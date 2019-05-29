@@ -36,6 +36,12 @@ def joint_plot(dict_model1,
     ax.set_axis_labels(model1_name, model2_name)
     ax.fig.suptitle(metric) 
 
+    def ann(row):
+        ind = row[0]
+        r = row[1]
+        plt.gca().annotate(ind, xy=(r[model1_name], r[model2_name]), 
+                xytext=(2,2) , textcoords ="offset points", )
+        
     # filter for labels
     if (outlier_filter is not None):
         label_df = dataframe.query(outlier_filter)
@@ -43,12 +49,6 @@ def joint_plot(dict_model1,
         for index, row in label_df.iterrows():
             if (not np.isnan(row[model1_name]) and not np.isnan(row[model2_name])):
                 ann((index, row))
-
-    def ann(row):
-        ind = row[0]
-        r = row[1]
-        plt.gca().annotate(ind, xy=(r[model1_name], r[model2_name]), 
-                xytext=(2,2) , textcoords ="offset points", )
 
     for i,row in dataframe.iterrows():
         color = "blue" if row[model1_name] <  row[model2_name] else "red"
