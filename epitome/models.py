@@ -105,12 +105,13 @@ class PeakModel():
             
             # self.x = predictions, self.y=labels, self.z = missing labels for this record (cell type specific)
             self.x, self.y, self.z = iterator.get_next()
-            
-            # set session
-#             config = tf.ConfigProto(log_device_placement=False)
-#             config.gpu_options.allow_growth = True
-#             self.sess = tf.Session(graph=graph, config=config)
-            self.sess = tf.InteractiveSession(graph=graph)
+
+            # Set session and graph. to interact with model outside functions,
+            # you will have to use "with model.graph.as_default():" (ie for creating generators and such)
+            config = tf.ConfigProto(log_device_placement=False)
+            config.gpu_options.allow_growth = True
+            self.sess = tf.Session(graph=graph, config=config)
+            self.graph = graph
 
             self.num_outputs = output_shape[0]
             self.l1, self.l2 = l1, l2
@@ -168,14 +169,14 @@ class PeakModel():
         # weighted sum of cross entropy for non 0 weights
         # Reduction method = Reduction.SUM_BY_NONZERO_WEIGHTS
         individual_losses = tf.losses.sigmoid_cross_entropy(self.y,  # TODO AM 5/23/2019 right dimensions
-                                                            self.logits, 
+                                                            self.logits[:, Features.FEATURE_IDX.value, :], 
                                                             weights = self.z,
                                                             reduction = tf.losses.Reduction.NONE)
         
         # TODO AM 5/17/2019 what about missing labels (weights)?
         individual_losses = tf.math.reduce_mean(individual_losses, axis = 0)
         
-        return (tf.losses.sigmoid_cross_entropy(self.y, self.logits, weights = self.z), 
+        return (tf.losses.sigmoid_cross_entropy(self.y, self.logits[:, Features.FEATURE_IDX.value, :], weights = self.z), 
                 individual_losses)
     
     def minimizer_fn(self):
@@ -183,7 +184,12 @@ class PeakModel():
         return self.opt.minimize(self.loss[0], self.global_step)
     
     def resample_train(self, individual_losses):
-        tf.logging.info("get new indices")
+        """
+        Resamples training dataset weighted by losses. Factors with higher loss will
+        be upsampled more. Resets the train handle.
+        
+        :param individual_losses: tensor of losses for each factor. Shape is 1-dimensional array of number of factors
+        """
         new_train_data_indices = indices_for_weighted_resample(self.data[Dataset.TRAIN], 1000, 
                                                                      self.matrix, 
                                                                      self.cellmap, 
@@ -329,7 +335,8 @@ class PeakModel():
                              {self.handle: iter_handle})
                 )
                 
-            preds = np.concatenate([v[0] for v in vals])    
+            preds = np.concatenate([v[0] for v in vals])   
+            preds = preds[:,Features.FEATURE_IDX.value,:] # get feature row
             
             # do not continue to calculate metrics. Just return predictions
             if (not calculate_metrics):

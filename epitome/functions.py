@@ -205,45 +205,45 @@ def load_deepsea_data(deepsea_path):
 
     return train_data, valid_data, test_data
 
-
-def get_dnase_array_from_modified(dnase_train, dnase_valid, dnase_test, index_i, celltype, DATA_LABEL="train", num_records = 1):
-    ''' This function pull respective validation and training data corresponding to
-    the points chosen above.
-    Args:
-        :param dnase_train: h5sparse file of 1000 by n for each celltype
-        :param dnase_valid: h5sparse file of 1000 by n for each celltype 
-        :param dnase_test: h5sparse file of 1000 by n for each celltype 
-        :param index_i: what row to index to in dataset
-        :param cell_type: string of cell typex
-        :param DATA_LABEL: should be train, valid or test
-        :param num_records: number of records to fetch, starting at index_i
-    '''
-    if (DATA_LABEL == "train"):
-        # from above, we concatenated [train_data["x"][0:2200000,:,:]
-        # and train_data["x"][2400000:4200000,:,:]]
-        if (index_i >= 0 and index_i < 2200000):
-            return dnase_train[celltype][index_i:index_i+num_records].toarray()
-        else:
-            new_index = index_i + (2400000 - 2200000) # increment distance we removed from train set
-            return dnase_train[celltype][new_index:new_index+num_records].toarray()
+# TODO remove
+# def get_dnase_array_from_modified(dnase_train, dnase_valid, dnase_test, index_i, celltype, DATA_LABEL="train", num_records = 1):
+#     ''' This function pull respective validation and training data corresponding to
+#     the points chosen above.
+#     Args:
+#         :param dnase_train: h5sparse file of 1000 by n for each celltype
+#         :param dnase_valid: h5sparse file of 1000 by n for each celltype 
+#         :param dnase_test: h5sparse file of 1000 by n for each celltype 
+#         :param index_i: what row to index to in dataset
+#         :param cell_type: string of cell typex
+#         :param DATA_LABEL: should be train, valid or test
+#         :param num_records: number of records to fetch, starting at index_i
+#     '''
+#     if (DATA_LABEL == "train"):
+#         # from above, we concatenated [train_data["x"][0:2200000,:,:]
+#         # and train_data["x"][2400000:4200000,:,:]]
+#         if (index_i >= 0 and index_i < 2200000):
+#             return dnase_train[celltype][index_i:index_i+num_records].toarray()
+#         else:
+#             new_index = index_i + (2400000 - 2200000) # increment distance we removed from train set
+#             return dnase_train[celltype][new_index:new_index+num_records].toarray()
         
-    elif (DATA_LABEL == "valid"):
+#     elif (DATA_LABEL == "valid"):
         
-        # from above, we concatenated [train_data["x"][2200000:2400000,:,:],
-        #    train_data["x"][4200000:4400000,:,:] 
-        #    valid_data["x"]], axis=0),
-        if (index_i >= 0 and index_i < 2400000-2200000):
-            new_index = 2200000 + index_i
-            return dnase_train[celltype][new_index:new_index+num_records].toarray()
-        elif (index_i >= (2400000-2200000) and index_i < (2400000-2200000) + (4400000-4200000)):
-            new_index = 4200000 + index_i
-            return dnase_train[celltype][new_index:new_index+num_records].toarray()
-        else:
-            new_index = index_i - ((2400000-2200000) + (4400000-4200000)) # between 0 to 8000
-            return dnase_valid[celltype][new_index:new_index+num_records].toarray()
+#         # from above, we concatenated [train_data["x"][2200000:2400000,:,:],
+#         #    train_data["x"][4200000:4400000,:,:] 
+#         #    valid_data["x"]], axis=0),
+#         if (index_i >= 0 and index_i < 2400000-2200000):
+#             new_index = 2200000 + index_i
+#             return dnase_train[celltype][new_index:new_index+num_records].toarray()
+#         elif (index_i >= (2400000-2200000) and index_i < (2400000-2200000) + (4400000-4200000)):
+#             new_index = 4200000 + index_i
+#             return dnase_train[celltype][new_index:new_index+num_records].toarray()
+#         else:
+#             new_index = index_i - ((2400000-2200000) + (4400000-4200000)) # between 0 to 8000
+#             return dnase_valid[celltype][new_index:new_index+num_records].toarray()
             
-    else:
-        return dnase_test[celltype][index_i:index_i+num_records].toarray()
+#     else:
+#         return dnase_test[celltype][index_i:index_i+num_records].toarray()
     
 
 
@@ -558,7 +558,7 @@ def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights =
     :param weights: Optional vector of weights whos length = # factors (1 weight for each factor).
     The greater the weight, the more the positives for this factor matters.
     """
-
+    
     # only take rows that will be used in set
     # drop DNase from indices in assaymap first
     selected_assays = list(assaymap.values())[1:]
@@ -581,6 +581,17 @@ def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights =
         probs = np.sum(sums, axis=0)
         probs = (probs)/np.sum(probs)
         
+    # TODO assign equal probs to non-zero weights
+    probs[probs != 0] = 1/probs[probs != 0].shape[0]
+    
+    radius = 20
+    
+    n = int(n / radius)
+    data_count = data.shape[1]
+    
     # sample by probabilities. not sorted.
-    return np.random.choice(np.arange(0, data.shape[1]), n, p = probs)
-        
+    choice = np.random.choice(np.arange(0, data_count), n, p = probs)
+    
+    func_ = lambda x: np.arange(x - radius/2, x + radius/2)
+    surrounding = np.unique(list(map(func_, choice)))
+    return surrounding[(surrounding > 0) & (surrounding < data_count)].astype(int)

@@ -3,181 +3,177 @@
 # Produces figures for paper.
 #############################################################
 
-
 import collections
 import datetime
+
+import seaborn as sns; sns.set()
+import matplotlib.pyplot as plt
 
 import tensorflow as tf
 import h5py
 from scipy.io import loadmat
 import numpy as np
+import matplotlib.pyplot as plt
 import sklearn.metrics
+
 import os
-import h5sparse
+
+# from numpy.random import choice
+
+# import h5sparse
 import datetime
 import logging
 from numba import cuda
 from scipy import stats
 
-import seaborn as sns; sns.set()
-import matplotlib.pyplot as plt
-
 from scipy.sparse import coo_matrix, vstack
 
 from scipy.fftpack import fft, ifft
-from tensorflow.python.client import device_lib
 import sys
+
+import yaml
+
 
 import json
 
-
-# # Define Paths for this user
-
-# In[3]:
-
-
-feature_path = '../data/feature_name'
-
-output_path = '/home/eecs/akmorrow/epitome/out/Epitome'
-
-data_path = "/data/akmorrow/epitome_data/deepsea_labels_train/"
-
-
-from epitome.functions import *
+from epitome.constants import *
 from epitome.models import *
 from epitome.generators import *
-from epitome.constants import *
+from epitome.functions import *
+from epitome.viz import *
 
+# load in user paths
+with open('/home/eecs/akmorrow/epitome/config.yml') as f:
+    config = yaml.safe_load(f)
 
 
 # ### Load DeepSEA data
-
-train_data, valid_data, test_data = load_deepsea_label_data(data_path)
-
-
-# In[7]:
-
-
-print(valid_data["y"].shape, train_data["y"].shape, test_data["y"].shape)
-
-
-
+train_data, valid_data, test_data = load_deepsea_label_data(config["data_path"])
+data = {Dataset.TRAIN: train_data, Dataset.VALID: valid_data, Dataset.TEST: test_data}
 
 # Available cell types
-validation_celltypes = ["K562"] # we remove hepg2 from the validation, as there are so few SMC3 cell types to begin with 
-test_celltypes = ["HepG2"]
+test_celltypes = ["K562"]
+
+train_iters = 5000
+test_iters = 50000
 
 
-matrix, cellmap, assaymap = get_assays_from_feature_file(feature_path='../../data/feature_name', 
+matrix, cellmap, assaymap = get_assays_from_feature_file(feature_path=config['feature_name_file'], 
                                   eligible_assays = None,
                                   eligible_cells = None, min_cells_per_assay = 2, min_assays_per_cell=5)
     
-inv_assaymap = {v: k for k, v in assaymap.items()}
-
-fig = plt.figure(figsize = (20,10))
-ax = fig.add_subplot(1,1,1)
-ax.set_aspect('equal')
-plt.xticks(np.arange(len(assaymap)), rotation = 90)
-ax.set_xticklabels(assaymap.keys())
-plt.yticks(np.arange(len(cellmap)))
-ax.set_yticklabels(cellmap.keys())
-
 
 print("training model")
 radii = [1,3,10,30]
+shuffle_size = 2 # train data indices are already shuffled during sampling
+
+label = "adaptive_sampling"
+file_joint_name = '/home/eecs/akmorrow/epitome/out/Epitome/scratch/tmp_prediction_aucs_allTFs_%s.json' % label
+                  
 model = MLP(4, [100, 100, 100, 50], 
             tf.tanh, 
-            train_data, 
-            valid_data, 
-            test_data, 
+            data,
             test_celltypes,
-            gen_from_peaks, 
             matrix,
             assaymap,
             cellmap,
-            shuffle_size=2, 
+            shuffle_size=shuffle_size, 
+            prefetch_size = 64,
             batch_size=64,
             radii=radii)
-model.train(5000)
-print("evaluating joint model")
 
-eval_count = 50000
-test_DNase = model.test(eval_count, log=True)
+# define a set iterator for testing
+g = load_data(data[Dataset.VALID], 
+                 model.eval_cell_types,  # used for labels. Should be all for train/eval and subset for test
+                 model.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                 matrix,
+                 assaymap,
+                 cellmap,
+                 model.radii, mode = Dataset.VALID)
+
+iter_ = generator_to_one_shot_iterator(g, model.batch_size, 1, model.prefetch_size)
+model.train(train_iters)
+
+test_DNase = model.test_from_generator(test_iters, iter_[1], log=True)
 model.close()
 
+# write
+file_joint = open(file_joint_name, 'w')
 
-time = datetime.datetime.now().time().strftime("%Y-%m-%d_%H:%M:%S")
-
-file = open('/data/akmorrow/epitome_data/out/tmp_prediction_aucs_allTFs_%s.json' % time, 'w')
-
-file.write(json.dumps(test_DNase[2]))
-file.write("\n")
+file_joint.write(json.dumps(test_DNase[2]))
+file_joint.write("\n")
 
 # flush to file
-file.flush()
-file.close()
+file_joint.flush()
+file_joint.close()
 
-
+### Single models ###
 
 factors = list(assaymap)[1:]
 eligible_cells = list(cellmap)
 NODATA_PLACEHOLDER = {'AUC': np.NAN,'auPRC': np.NAN,'GINI': np.NAN}
 
-
-file = open('/data/akmorrow/epitome_data/out/tmp_prediction_aucs_singleTFs_%s.json' % time, 'w')
-
-
-time = datetime.datetime.now().time().strftime("%Y-%m-%d_%H:%M:%S")
-
-file_single = open('/data/akmorrow/epitome_data/out/tmp_prediction_aucs_singleTFs_%s.json' % time, 'w')
+file_single_name = '/home/eecs/akmorrow/epitome/out/Epitome/scratch/prediction_aucs_singleTFs_%s.json' % test_celltypes[0]
+file_single = open(file_single_name, 'w')
 
 # write opening brace for valid json
 file_single.write("[")
 
+i = 0
 for assay in factors:
-
-    print(" Running on assay %s..." % assay)
-
-    label_assays = ['DNase', assay]
     
-    try: 
-        matrix, cellmap, assaymap = get_assays_from_feature_file(feature_path='../../data/feature_name', eligible_assays = ["DNase", assay], 
-                                     eligible_cells = eligible_cells)
-        print(cellmap)
-        print(test_celltypes)
-        
+    try: # sometimes not enough positives or negatives 
+    
+        print(" Running on assay %s..." % assay)
+
+        label_assays = ['DNase', assay]
+
+        matrix, cellmap, assaymap = get_assays_from_feature_file(feature_path=config['feature_name_file'], 
+                                                                 eligible_assays = ["DNase", assay], 
+                                                                 eligible_cells = eligible_cells)
 
         model = MLP(4, [100, 100, 100, 50], 
-                    tf.tanh, 
-                    train_data, 
-                    valid_data, 
-                    test_data, 
+                    tf.tanh,
+                    data, 
                     test_celltypes,
-                    gen_from_peaks, 
                     matrix,
                     assaymap,
                     cellmap,
                     shuffle_size=2, 
                     radii=radii)
-        model.train(5000)
+        model.train(train_iters)
 
-        test_DNase_1 = model.test(455024, log=True)
-        model.close()
-        single_results[assay] = test_DNase_1
+        
 
-        file_single.write(json.dumps(test_DNase_1[2]))
-        file_single.write(",")
+        # define a set iterator for testing
+        g = load_data(data[Dataset.VALID], 
+                         model.eval_cell_types,  # used for labels. Should be all for train/eval and subset for test
+                         model.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                         matrix,
+                         assaymap,
+                         cellmap,
+                         model.radii, mode = Dataset.VALID)
+
+        iter_ = generator_to_one_shot_iterator(g, model.batch_size, 1, model.prefetch_size)
+
+        test_DNase = model.test_from_generator(test_iters, iter_[1], log=True)
+
+        file_single.write(json.dumps(test_DNase[2]))
 
         # flush to file
         file_single.flush()
-    except:
-        print("%s failed\n" % assay)
+        
+    except Exception as e:
+        print("%s failed\n with message %s" % (assay, str(e)))
         tmp_object = {assay: NODATA_PLACEHOLDER}
         file_single.write(json.dumps(tmp_object))
         
+    if i < (len(factors)-1):
+        file_single.write(",")
+    i = i + 1
+        
 # write closing brace for valid json
 file_single.write("]")
-
 
 
 # flush to file
@@ -185,79 +181,41 @@ file_single.flush()
 file_single.close()
 
 ##################### PLOTTING #######################
+#Read JSON data into the datastore variable
+with open(file_single_name, 'r') as f:
+    single_results_tmp = json.load(f)
 
-# tmp hack for missing json in singles file, in the case that not all single models get written.
-single_names = single_results.keys()
-joint_names = joint_results.keys()
-single_names
-
-for i in joint_names:
-    if i not in single_names:
-        single_results[i] = NODATA_PLACEHOLDER
-        
-# function for jointly plotting 
-def joint_plot(dataframe, outlier_filter = "joint < 0"):
-    """
-    Returns seaborn joint plot 
+# # Flatten nested single results
+single_results = {}
+for d in single_results_tmp:
+    single_results.update(d)
     
-    :param: dataframe of single, joint, and index is TF name
-    :outlier_filter: string filter to label. Defaults to no labels.
-    """
+with open(file_joint_name, 'r') as f:
+    joint_results = json.load(f)
 
-    ax = sns.jointplot("single", "joint", data=dataframe, kind="reg", color='k', stat_func=None)
-    ax.ax_joint.cla()
-    # filter for labels
-    label_df = df.query(outlier_filter)
-
-    def ann(row):
-        ind = row[0]
-        r = row[1]
-        plt.gca().annotate(ind, xy=(r["single"], r["joint"]), 
-                xytext=(2,2) , textcoords ="offset points", )
-
-    for index, row in label_df.iterrows():
-        if (not np.isnan(row["single"]) and not np.isnan(row["joint"])):
-            ann((index, row))
-    
-    for i,row in dataframe.iterrows():
-        color = "blue" if row["single"] <  row["joint"] else "red"
-        ax.ax_joint.plot(row["single"], row["joint"], color=color, marker='o')
-        
-    return ax
-
-########### ROC Scatter Plot ##############
-joint_ROC_values = list(map(lambda x: x["AUC"], joint_results.values()))
-single_ROC_values = list(map(lambda x: x["AUC"], single_results.values()))
-names = list(joint_names)
-
-d = {'joint': joint_ROC_values, 'single': single_ROC_values}
-df = pd.DataFrame(data=d, index=names)
-
-
-ax = joint_plot(df, "joint < 0.6")
+ax = joint_plot(single_results, 
+               joint_results, 
+               metric = "AUC", 
+               model1_name = "single", 
+               model2_name = "joint",
+               outlier_filter = "joint < single")
 ax.savefig("/home/eecs/akmorrow/epitome/out/figures/Figure_epitome_internals/joint_v_single_auROC.pdf")
 
-########### PR Scatter Plot ##############
-joint_auPRC_values = list(map(lambda x: x["auPRC"], joint_results.values()))
-single_auPRC_values = list(map(lambda x: x["auPRC"], single_results.values()))
 
-d = {'joint': joint_auPRC_values, 'single': single_auPRC_values}
-df = pd.DataFrame(data=d, index=names)
-
-
-# ax = scatter_plot(single_ROC_values, joint_ROC_values, names, 'Single auROC values', 'Joint auROC values')
-ax = joint_plot(df, "joint < 0.1")
-ax.savefig("/home/eecs/akmorrow/epitome/out/figures/Figure_epitome_internals/joint_v_single_auPR.pdf")
+ax = joint_plot(single_results, 
+               joint_results, 
+               metric = "auPRC", 
+               model1_name = "single", 
+               model2_name = "joint",
+               outlier_filter = "joint < single")
+ax.savefig("/home/eecs/akmorrow/epitome/out/figures/Figure_epitome_internals/joint_v_single_auPRC.pdf")
 
 
-########### GINI Scatter Plot ##############
-joint_auPRC_values = list(map(lambda x: x["GINI"], joint_results.values()))
-single_auPRC_values = list(map(lambda x: x["GINI"], single_results.values()))
-
-d = {'joint': joint_auPRC_values, 'single': single_auPRC_values}
-df = pd.DataFrame(data=d, index=names)
-
-
-# ax = scatter_plot(single_ROC_values, joint_ROC_values, names, 'Single auROC values', 'Joint auROC values')
-ax = joint_plot(df, "joint < 0.4")
+ax = joint_plot(single_results, 
+               joint_results, 
+               metric = "GINI", 
+               model1_name = "single", 
+               model2_name = "joint",
+               outlier_filter = "joint < single")
 ax.savefig("/home/eecs/akmorrow/epitome/out/figures/Figure_epitome_internals/joint_v_single_GINI.pdf")
+

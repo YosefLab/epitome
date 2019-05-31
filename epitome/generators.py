@@ -8,7 +8,6 @@ from .constants import *
 from .functions import *
 import epitome.iio as iio
 import glob
-import numpy.ma as ma    
 
 ######################### Original Data Generator: Only peak based #####################
 
@@ -89,10 +88,13 @@ def load_data(data,
         del tmp
         del cell_assay_counts
         
+        
     def g():
         for i in indices: # for all records specified
             for (cell) in label_cell_types: # for all cell types to be used in labels
                 dnases = [] 
+                dnases_double_positive = []
+                dnases_agreement = []
                 
                 # cells to be featurized
                 feature_cells = eval_cell_types.copy()
@@ -102,7 +104,7 @@ def load_data(data,
                     feature_cells.remove(cell) 
                 except ValueError:
                     pass  # do nothing!
-                
+                                
                 # features from all remaining cells not in label set
                 feature_cell_indices_list = list(map(lambda c: get_y_indices_for_cell(matrix, cellmap, c), 
                                                      feature_cells))
@@ -168,41 +170,51 @@ def load_data(data,
                         dnase_agreement = np.average(data[dnase_indices[:,None],radius_range]==
                                                  data[label_cell_indices[0],radius_range], axis=1)
                         
+                    dnases_double_positive.extend(dnase_double_positive)
+                    dnases_agreement.extend(dnase_agreement)
                         
-                    dnases.extend(dnase_double_positive)
-                    dnases.extend(dnase_agreement)
-                    
+                # rehape agreement DNase to Radii by feature_cells
+                dnases_agreement_reshaped = np.array(dnases_agreement).reshape([len(radii), len(feature_cells)])
+                dnases_double_positive_reshaped = np.array(dnases_double_positive).reshape([len(radii), len(feature_cells)])
+                dnase_means = np.mean(dnases_agreement_reshaped, axis = 0)
 
-                # Handle missing values 
-                # Set missing values to 0. Should be handled later.
+                ######### reorder cells by similarity ################
+                ## This was added 5/30/2019. It seems to *maybe help 
+                ## a little bit on cell types not seen in the model.
+                ## This makes sense because cell types are now ordered
+                ## by similarity and keep some spacial positioning 
+                ## based on the similarity to the new cell. 
+                best_indices = (-dnase_means).argsort()
+
+                dnases.extend(dnases_double_positive_reshaped[:,best_indices].flatten())
+                dnases.extend(dnases_agreement_reshaped[:,best_indices].flatten())
+
+                feature_cell_indices = feature_cell_indices.reshape([len(feature_cells), len(assaymap)])[best_indices,:].flatten()
+                ######## End reorder #################################                                                   
+                                                                        
+                                                                        
+                # Extract features
                 features = data[feature_cell_indices,i]
-
-                # one hot encoding (ish). First row is 1/0 for known/unknown. second row is value.
-                binding_features_n  = len(features)
                 
-                feature_n = binding_features_n + len(dnases)
-                
-                # two row matrix where first row is feature mask and second row is features
+                # concatenate features and DNases
                 x_data = np.concatenate([features, dnases])
                 
-                # mask for features
-                x_mask = np.ones([feature_n])
-                x_mask[np.where(feature_cell_indices == -1)[0]] = 0 # assign UNKs to missing features
-
+                # mask for x_data. 0 = do not mask, 1 = mask.
+                x_mask = np.zeros(x_data.shape[0])
+                x_mask[np.where(feature_cell_indices == -1)[0]] = True # assign mask to missing features
 
                 # There can be NaNs in the DNases for edge cases (when the radii extends past the end of the chr).
                 # Mask these values in the first row of tmp
-                x_mask[np.where(np.isnan(x_data))[0]] = 0 # assign UNKs to missing DNase values
-                x_data[np.where(np.isnan(x_data))[0]] = 0 # set NaNs to 0
+                x_mask[np.where(np.isnan(x_data))[0]] = True # assign mask to missing DNase values
+                x_data[np.where(x_mask == True)[0]] = 0 # set all UNKs to 0
                 
                 # mask x data by which factors are available for a cell type
-                x_data_masked = ma.masked_array(x_data, mask=np.logical_not(x_mask))
-                
+                x_data_masked = np.vstack([x_mask, x_data]) # top row 0 = mask, bottom row 1 = data
+                        
                 if (mode != Dataset.RUNTIME):
-                    # yield features, labels, label mask
                     labels = data[label_cell_indices_no_dnase,i]
 
-                else:
+                else: # used when just predicting
                     # The features going into the example.
                     labels = garbage_labels # all 0's
                     
@@ -224,14 +236,14 @@ def generator_to_one_shot_iterator(g, batch_size, shuffle_size, prefetch_size):
     :returns: tuple of (label shape, one shot iterator)
     """
     
-    for x, y, z in g():
+    for x, y, y_mask in g():
         break
     
     try: 
         dataset = tf.data.Dataset.from_generator(
             g,
             output_types=(tf.float32,)*3, # 3 = features, labels, and missing indices
-            output_shapes=(x.shape, y.shape, z.shape,)
+            output_shapes=(x.shape, y.shape, y.shape,)
         )
     except NameError as e:
         print("Error: no data, %s" % e)

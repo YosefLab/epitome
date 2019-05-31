@@ -5,6 +5,10 @@ import numpy as np
 ######################################################
 ################### CONSTANTS ########################
 ######################################################
+class Features(Enum):
+    MASK_IDX = 0   
+    FEATURE_IDX = 1    
+    
 class Dataset(Enum):
     TRAIN = 1    # TRAINING
     VALID = 2    # VALIDATION during training
