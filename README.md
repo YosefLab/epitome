@@ -2,7 +2,7 @@
 
 Full pipeline for learning TFBS from epigenetic datasets.
 
-![Epitome Diagram](figures/epitome_diagram.png)
+![Epitome Diagram](docs/figures/epitome_diagram.png)
 
 Epitome leverages chromatin accessibility data to predict transcription factor binding sites on a novel cell type of interest. Epitome computes the chromatin similarity between 11 cell types in ENCODE and the novel cell types, and uses chromatin similarity to transfer binding information in known cell types to a novel cell type of interest. 
 
@@ -40,9 +40,7 @@ from epitome.models import *
 radii = [1,3,10,30]
 model = MLP(4, [100, 100, 100, 50], 
             tf.tanh, 
-            train_data, 
-            valid_data, 
-            test_data, 
+            data
             test_celltypes,
             gen_from_peaks, 
             matrix,
