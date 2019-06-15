@@ -34,7 +34,6 @@ if not os.path.isdir(deepsea_path):
     tar_call = "tar -C %s -zxvf %s" % (output_path, tar_path)
     calls.append(tar_call)
  
-# Run download_deepsea_data.sh to get data
 
 for call in calls:
     call = call.split()

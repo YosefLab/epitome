@@ -55,3 +55,78 @@ def joint_plot(dict_model1,
         ax.ax_joint.plot(row[model1_name], row[model2_name], color=color, marker='o')
         
     return ax
+
+
+def plot_assay_heatmap(assaymap, matrix, cellmap):
+    nv_assaymap = {v: k for k, v in assaymap.items()}
+
+    fig = plt.figure(figsize = (20,10))
+    ax = fig.add_subplot(1,1,1)
+    ax.set_aspect('equal')
+    plt.xticks(np.arange(len(assaymap)), rotation = 90)
+    ax.set_xticklabels(assaymap.keys())
+    plt.yticks(np.arange(len(cellmap)))
+    ax.set_yticklabels(cellmap.keys())
+
+    plt.imshow(matrix!=-1)
+    
+    
+    
+    
+#####################################################################    
+############## Network visualization helper functions ###############
+#####################################################################
+
+def number_to_bp(n):
+    """ converts bp number to short string
+    :param n: number in base pairs
+    :return string of number with kbp or Mbp suffix
+    """
+    n = str(n)
+    
+    if len(n) < 4:
+        return n
+    elif len(n) == 4:
+        return "%skbp" % n[0]
+    elif len(n) == 5:
+        return "%skbp" % n[0:1]
+    elif len(n) == 6:
+        return "%skbp" % n[0:2]    
+    elif len(n) == 7:
+        return "%sMbp" % n[0]     
+    else:
+        raise
+        
+        
+        
+def heatmap_aggreement_from_model_weights(model):
+    """ 
+    Plots seaborn heatmap for DNase weights of first layer in network.
+    Plots one heatmap for each celltype used in the features for training (about 10-13).
+    
+    :param model: an Epitome model
+    """
+    
+    # get weights
+    with model.graph.as_default():
+        with tf.variable_scope('layer0', reuse=True):
+            w = tf.get_variable('kernel')
+            weights = model.sess.run(w)
+            
+    dnases = weights[len(model.assaymap) * (len(model.cellmap) - 1 - len(model.test_celltypes)): , :]
+
+    num_radii = 2*len(model.radii)
+
+    xtick_labels = [x * 200 for x in model.radii]
+    xtick_labels = [number_to_bp(x) for x in xtick_labels]
+
+    for i in range((len(model.cellmap) - 1 - len(model.test_celltypes))):
+        # dnases are just at the end
+        dnases = x[len(model.assaymap) * (len(model.cellmap) - 2): , :]
+
+        heatmap = dnases[i*num_radii + int(num_radii/2):i*num_radii + num_radii, :].T
+        ax = sns.heatmap(heatmap, cmap='bwr_r', vmin=np.min(dnases), vmax=np.max(dnases))
+        ax.set_xlabel("Distance from peak (bp)")
+        ax.set_ylabel("Unit")
+        ax.set_xticklabels(xtick_labels, rotation=-60)
+        plt.show()

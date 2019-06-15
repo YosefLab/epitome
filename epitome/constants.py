@@ -1,6 +1,16 @@
 # imports
 from enum import Enum
 import numpy as np
+import os
+
+
+######################################################
+##################### Files ##########################
+######################################################
+this_dir, this_filename = os.path.split(__file__)
+
+DEEPSEA_ALLTFS_BEDFILE = os.path.join(this_dir, "..", "data", "allTFs.pos.bed.gz")
+FEATURE_NAME_FILE = os.path.join(this_dir, "..", "data", "feature_name")
 
 ######################################################
 ################### CONSTANTS ########################
@@ -27,9 +37,14 @@ OPTIMAL_ASSAYS = ["CTCF", "Pol2", "YY1", "Pol2-4H8", "p300", "c-Myc", "TAF1", "M
 # Regions in allpos.bed file that DeepSEA uses for training.
 # Note that they are contiguous, so the total regions used 
 # starts at _TRAIN_REGIONS[0] and ends at _TEST_REGIONS[1]+1
-_TRAIN_REGIONS = [0, 2200000-1]
-_VALID_REGIONS = [2200000, 2204000-1]
+TRAIN_REGIONS = [0, 2200000-1]
+VALID_REGIONS = [2200000, 2204000-1]
 # 227512 for test (chr8 and chr9) for 227512 total rows
-_TEST_REGIONS  = [2204000, 2204000 + 227512-1] # only up to chrs 8 and 9
-_TOTAL_POSFILE_REGIONS = 2608182 # number of lines in allTFs.pos.bed file
+TEST_REGIONS  = [2309367, 2536878] # chr 8 and 9
 
+def N_TOTAL_REGIONS():
+    """
+    Get the total number of genomic regions in train, valid and test.
+    Should = 2431512
+    """
+    return (TEST_REGIONS[1]-TEST_REGIONS[0] + 1) +(VALID_REGIONS[1] + 1)

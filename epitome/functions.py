@@ -12,7 +12,13 @@ from collections import Counter
 from itertools import groupby
 from scipy.io import loadmat
 from numba import cuda
+from .constants import * 
 
+from operator import itemgetter
+import gzip
+
+# to load in positions file
+import tabix
 
 ################### CLASSES ##########################
 # TODO move to separate file
@@ -27,7 +33,14 @@ class Region:
     def __str__(self):
         return("%s:%d-%d" % (self.chrom, self.start, self.end))
     
+    def __eq__(self, other):
+        """Overrides the default implementation"""
+        if isinstance(other, Region):
+            return self.chrom == other.chrom and self.start == other.start and self.end == other.end
+        return False
+
     def overlaps(self, other, min_bp = 1):
+        assert(type(other) == Region), "overlaps analysis must take Region as input but got %s" % type(other)
         return(other.chrom == self.chrom and self.overlap([self.start, self.end], [other.start, other.end]) > min_bp)
     
     def overlap(self, interval1, interval2):
@@ -51,6 +64,7 @@ class Region:
         return(end - start)
 
     def greaterThan(self, other):
+        assert(type(other) == Region), "overlaps analysis must take Region as input but got %s" % type(other)
         return(self.chrom > other.chrom or ( self.chrom == other.chrom and self.start > other.end ))
 
 
@@ -111,26 +125,6 @@ def get_missing_indices_for_cell(matrix, cellmap, cell):
     
 
 ################## LOADING DATA ######################
-
-def load_deepsea_data_allpos_file(deepsea_path):
-    """
-    Loads deepsea data in, concatenating train, valid, and test into 1 object.
-    Each row of the matrix corresponds to the first 2431512 lines of the allpos.bed file.
-    Note: Currently does not load in DNA sequence.
-
-    """
-    tmp = h5py.File(os.path.join(deepsea_path, "train.mat"))
-    train_data = tmp["traindata"][()][:,0:2200000]
-
-    tmp = loadmat(os.path.join(deepsea_path, "valid.mat"))
-    valid_data = tmp['validdata'].T[:,0:4000]
-
-    tmp = loadmat(os.path.join(deepsea_path, "test.mat"))
-    test_data = tmp['testdata'].T[:,0:_TEST_REGIONS[1]-_TEST_REGIONS[0]+1] # Length of regions in allpos.bed file
-
-    data = np.concatenate((train_data, valid_data, test_data), axis=1)
-
-    return data
 
 def save_deepsea_label_data(deepsea_path, label_output_path):
     """
@@ -205,51 +199,33 @@ def load_deepsea_data(deepsea_path):
 
     return train_data, valid_data, test_data
 
-# TODO remove
-# def get_dnase_array_from_modified(dnase_train, dnase_valid, dnase_test, index_i, celltype, DATA_LABEL="train", num_records = 1):
-#     ''' This function pull respective validation and training data corresponding to
-#     the points chosen above.
-#     Args:
-#         :param dnase_train: h5sparse file of 1000 by n for each celltype
-#         :param dnase_valid: h5sparse file of 1000 by n for each celltype 
-#         :param dnase_test: h5sparse file of 1000 by n for each celltype 
-#         :param index_i: what row to index to in dataset
-#         :param cell_type: string of cell typex
-#         :param DATA_LABEL: should be train, valid or test
-#         :param num_records: number of records to fetch, starting at index_i
-#     '''
-#     if (DATA_LABEL == "train"):
-#         # from above, we concatenated [train_data["x"][0:2200000,:,:]
-#         # and train_data["x"][2400000:4200000,:,:]]
-#         if (index_i >= 0 and index_i < 2200000):
-#             return dnase_train[celltype][index_i:index_i+num_records].toarray()
-#         else:
-#             new_index = index_i + (2400000 - 2200000) # increment distance we removed from train set
-#             return dnase_train[celltype][new_index:new_index+num_records].toarray()
-        
-#     elif (DATA_LABEL == "valid"):
-        
-#         # from above, we concatenated [train_data["x"][2200000:2400000,:,:],
-#         #    train_data["x"][4200000:4400000,:,:] 
-#         #    valid_data["x"]], axis=0),
-#         if (index_i >= 0 and index_i < 2400000-2200000):
-#             new_index = 2200000 + index_i
-#             return dnase_train[celltype][new_index:new_index+num_records].toarray()
-#         elif (index_i >= (2400000-2200000) and index_i < (2400000-2200000) + (4400000-4200000)):
-#             new_index = 4200000 + index_i
-#             return dnase_train[celltype][new_index:new_index+num_records].toarray()
-#         else:
-#             new_index = index_i - ((2400000-2200000) + (4400000-4200000)) # between 0 to 8000
-#             return dnase_valid[celltype][new_index:new_index+num_records].toarray()
-            
-#     else:
-#         return dnase_test[celltype][index_i:index_i+num_records].toarray()
+################### Parsing Deepsea Files ########################
+
+def load_allpos_regions():
+    ''' Loads Deepsea bed file (stored as .gz format), removing
+    regions that have no data (the regions between valid/test
+    and chromosomes X/Y). 
     
+    :return list of genomic Regions the size of train/valid/test data. 
+    '''
+    
+    with gzip.open(DEEPSEA_ALLTFS_BEDFILE, 'r') as f:
+            liPositions = f.readlines()
 
+    # remove unused genomic positions from liPositions
+    a = range(0,VALID_REGIONS[1]+1)
+    b = range(TEST_REGIONS[0],TEST_REGIONS[1]+1)
 
+    # adjust liPositions to remove unused regions between valid/test and after test
+    liPositions = itemgetter(*np.concatenate([a,b]))(liPositions)
 
-def get_assays_from_feature_file(feature_path, 
-                                 eligible_assays = None, 
+    def fromString(x):
+        tmp = x.decode("utf-8").split('\t')
+        return Region(tmp[0], int(tmp[1]), int(tmp[2]))
+
+    return list(map(lambda x: fromString(x), liPositions))
+
+def get_assays_from_feature_file(eligible_assays = None, 
                                  eligible_cells = None,
                                  min_cells_per_assay= 3, 
                                  min_assays_per_cell = 2):
@@ -257,7 +233,6 @@ def get_assays_from_feature_file(feature_path,
     Returns at matrix of cell type/assays which exist for a subset of cell types.
 
     Args:
-        :param feature_path: location of feature_path
         :param eligible_assays: list of assays to filter by (ie ["CTCF", "EZH2", ..]). If None, then returns all assays.
         Note that DNase will always be included in the factors, as it is required by the method.
         :param eligible_cells: list of cells to filter by (ie ["HepG2", "GM12878", ..]). If None, then returns all cell types.
@@ -296,7 +271,7 @@ def get_assays_from_feature_file(feature_path,
     # TODO want a dictionary of assay: {list of cells}
     # then filter out assays with less than min_cells_per_assay cells
     # after this, there may be some unused cells so remove those as well
-    with open(feature_path) as f:
+    with open(FEATURE_NAME_FILE) as f:
 
         indexed_assays={}    # dict of {cell: {dict of indexed assays} }
         for i,l in enumerate(f):
@@ -361,188 +336,101 @@ def get_assays_from_feature_file(feature_path,
     matrix = matrix.astype(int) 
     return matrix, cellmap, assaymap
 
-
-###############################################################################
-################### Processing h5sparse files for DNase #######################
-
-def toSparseDictionary(sparse_map, normalize): 
-    ''' Converts h5 file to dictionary of sparse matrices, indexed by cell type.
-    
-    Args:
-        :param sparse_map: map of (cell type, sparse matrix)
-        :param normalize: boolean specifying whether or not to normalize the data
-        
-    Returns:
-        dictionary of (celltype, sparsematrix)
-    
-    '''
-    if (normalize):
-        return {x[0]:x[1]/x[1].max() for x in sparse_map}
-    else:
-        return {x[0]:x[1] for x in sparse_map}
-
-
-def toSparseIndexedDictionary(dnase_train, dnase_valid,dnase_test, DATA_LABEL, normalize = True):
-    ''' Converts h5 file to dictionary of sparse matrices, indexed by cell type.
-    Corrects for indices when we moved some of train into the validation set.
-    
-    Args:
-        :param dnase_train: h5sparse file for train
-        :param dnase_valid: h5sparse file for valid
-        :param dnase_test: h5sparse file for test
-        :param DATA_LABEL: specifies Dataset.TRAIN, valid or TEST
-        :param normalize: boolean specifying whether or not to normalize the data
-        
-    Returns:
-        dictionary of (celltype, sparsematrix)
-    '''
-    
-    if (DATA_LABEL == Dataset.TRAIN):
-        # from above, we concatenated [train_data["x"][0:2200000,:,:]
-        # and train_data["x"][2400000:4200000,:,:]] 
-        m = map(lambda x: (x[0], dnase_train[x[0]].value[np.r_[0:2200000,2400000:4200000]]), dnase_file_dict.items())
-        return toSparseDictionary(m, normalize)
-    
-    elif (DATA_LABEL == Dataset.VALID):
-        
-        # from above, we concatenated [train_data["x"][2200000:2400000,:,:],
-        #    then train_data["x"][4200000:4400000,:,:] 
-        #    then valid_data["x"]], axis=0),
-        m = map(lambda x: (x[0], 
-                           vstack([dnase_train[x[0]].value[np.r_[2200000:2400000,4200000:4400000]],
-                                   dnase_valid[x[0]].value])), dnase_file_dict.items())
-        
-        return toSparseDictionary(m, normalize) 
-    elif (DATA_LABEL == Dataset.TEST): # test
-        m = map(lambda x: (x[0], dnase_test[x[0]][:]), dnase_file_dict.items())
-        return toSparseDictionary(m, normalize)
-    else:
-        raise
-            
-def get_dnase_array_from_modified_dict(dnase_train, dnase_valid, dnase_test, range_i, celltype, DATA_LABEL="train"):
-    ''' This function pulls respective validation and training data corresponding to
-    the points chosen above.
-    Args:
-        :param dnase_train: dict of 1000 by n matrix for each celltype
-        :param dnase_valid: dict of 1000 by n matrrix for each celltype 
-        :param dnase_test: dict of 1000 by n matrix for each celltype 
-        :param range_i: what rows to index in to dataset
-        :param cell_type: string of cell typex
-        :param DATA_LABEL: should be train, valid or test
-    Returns:
-        csr_matrix sparse matrix of cut site counts
-    '''
-    
-    if (DATA_LABEL == Dataset.TRAIN):
-        return dnase_train[celltype][range_i]
-    elif (DATA_LABEL == Dataset.VALID):
-        return dnase_valid[celltype][range_i]
-    elif (DATA_LABEL == Dataset.TEST):
-        return dnase_test[celltype][range_i]
-    else:
-        raise
-    
     
 ################### Parsing data from bed file ########################
 
-def bedFile2Vector(bed_file, all_pos_file, duplicate = True):
+
+def bedFile2Vector(bed_file, processes = 1):
     """
     This function takes in a bed file of peaks and converts it to a vector or 0/1s that can be 
-    uses as input into a model. Each 0/1 represents a region in the train/test/validation set from DeepSEA.
+    uses as input into an Epitome model. Each 0/1 represents a region in the train/test/validation set from DeepSEA.
+    
+    TODO takes 5 min for ~15,000 peak file!
 
     Most likely, the bed file will be the output of the IDR function, which detects peaks based on the
     reproducibility of multiple samples.
 
     :param: bed_file: bed file containing peaks
-    :param: all_pos_file: file from DeepSEA that specified  genomic region ordering
-    :param: duplicate: duplicates the strands to match deepsea's dataset. This should eventually be removed, as we do not want duplication if no DNA sequence is used. 
 
     :return: vector containing the concatenated 4.4 million train, validation, and test data in the order
     that we have parsed train/test. And returns a zipped of regions in the bed file and whether or not that
     peak had an associated peak in the training set.
 
     """
-
-    # load in bed file and tf pos file
-    positions = BedTool(all_pos_file)
     
+    if (processes > 1):
+        raise Exception("tabix is currently only working with 1 thread")
+
+    # load in tf pos file
+    tbPositions = tabix.open(DEEPSEA_ALLTFS_BEDFILE)
+
+    liRegions = load_allpos_regions()
     
     idr_peaks = []
-    
+
     # load in peaks as a list of regions
     with open(bed_file) as f:
         content = f.readlines()
         # you may also want to remove whitespace characters like `\n` at the end of each line
         init_idr_peaks = list(map(lambda x: Region(x.split()[0], int(x.split()[1]), int(x.split()[2])), content))
-    
-    idr_peaks = list(enumerate(init_idr_peaks))
-    
-    # min base pair overlap to consider peak within a training region
-    bp_overlap = 100
 
-    peak_vector=np.zeros(_TOTAL_POSFILE_REGIONS)
 
-    n_peaks = len(idr_peaks)
-    
+    peak_vector=np.zeros(N_TOTAL_REGIONS())
+
+    n_peaks = len(init_idr_peaks)
+
     # keeps track of which idr peaks were overlapping something in the positions file
     found = np.zeros(n_peaks)
-    
-    def setFound(i):
-        found[i]=1
 
-    curr_chrom = "chr1"
-    idr_peaks_for_chrom = list(filter(lambda x: x[1].chrom == curr_chrom, idr_peaks))
-    
-    for position_i, pos in enumerate(positions):
-            
+#     def init(l, tbPositions, liRegions):
+#         global tbPos
+#         global liReg
+#         tbPos = tbPositions
+#         liReg = liRegions
 
-        region = Region(pos.chrom, pos.start, pos.end)
-        
-        if (region.chrom != curr_chrom):
-            curr_chrom == region.chrom
-            idr_peaks_for_chrom = list(filter(lambda x: x[1].chrom == curr_chrom, idr_peaks))
+    iter_= enumerate(init_idr_peaks)
 
-        # filter in idr_peaks that overlap
-        # takes >1s a while if empty
-        it = filter(lambda x: x[1].overlaps(region, bp_overlap), idr_peaks_for_chrom)
-    
+    def tabixQuery(peak):
+        """
+        Single process cmd for loading in positions overlapping peak.
+
+        :param peak: tuple of (indxex, Region)
+        :return tuple of position indexed from all positions and 
+
+        """
+
+        # TODO AM 6/14/2019: this isn't working with > 1 thread currently
+        records = list(tbPositions.query(peak[1].chrom, peak[1].start, peak[1].end))
+
+        # filter in idr_peaks that overlap at least 100 bp
+        it = filter(lambda x: peak[1].overlaps(Region(x[0], int(x[1]), int(x[2])), min_bp = 100), records)
+
         # if peak exists, set peak_vector to 1
         x = next(it, None)
         if (x != None):
+            try:
+                position_i = liRegions.index(Region(x[0], int(x[1]), int(x[2])))
+            except ValueError:
+                return -1, -1 # region not found in truncated liRegions
+
+            return position_i, peak[0]
+
+        return -1, -1
+
+# TODO NOT WORKING
+#     pool = mp.Pool(processes, initializer=init, initargs=(tbPositions, liRegions,))
+#     results = pool.map(tabixQuery, iter_)
+#     pool.close()
+#     pool.join()
+    results = [tabixQuery(peak) for peak in iter_]
+
+    for position_i, peak_i in results:
+        if position_i > -1:
             peak_vector[position_i] = 1
-            found[x[0]] = 1
-            map(lambda x: setFound(x[0]), it)
-            
-        # remove elements that are behind position_i
-        k = 0
-        while (region.greaterThan(idr_peaks[k][1])):
-            k += 1
-            if (k >= len(idr_peaks)):
-                break
-        
-        del idr_peaks[0:k]
-        
-        # once idr_peaks is empty, return
-        if (len(idr_peaks) == 0):
-            break
-            
-        if (position_i == 10000):
-            print("processing through lines in allpos bed file %i" % position_i)
+            # set peak as found
+            found[peak_i] = 1
+    return peak_vector, list(zip(init_idr_peaks, found))
 
-            
-    # filter out rows that were not used for training (defined in constants.py)
-    # also, add in fake negative strands that just duplicate the sets 
-    ATAC_train = peak_vector[_TRAIN_REGIONS[0]:_TRAIN_REGIONS[1]+1]
-    ATAC_valid = peak_vector[_VALID_REGIONS[0]:_VALID_REGIONS[1]+1]
-    ATAC_test =  peak_vector[_TEST_REGIONS[0]:_TEST_REGIONS[1]+1]
-
-    # need to duplicate results for forward/reverse strand
-    if (duplicate):
-        vector = np.concatenate([ATAC_train, ATAC_train, ATAC_valid, ATAC_valid, ATAC_test, ATAC_test], axis=0)
-    else:
-        vector = np.concatenate([ATAC_train, ATAC_valid, ATAC_test], axis=0)
-
-    return vector, zip(init_idr_peaks, found)
 
 
 def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights = None):

@@ -6,6 +6,7 @@ sklearn
 kipoi>=0.6.9
 kipoiseq
 # torch idk if we really need this
+pytabix==0.1
 numba # for closing gpu resources
 tensorflow-gpu==1.12.0
 h5sparse==0.0.5

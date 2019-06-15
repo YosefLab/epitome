@@ -9,6 +9,13 @@ from .functions import *
 from .generators import *
 import numpy as np
 
+from operator import itemgetter
+
+# disable sklearn warnings when training
+import warnings
+warnings.filterwarnings("ignore", category=sklearn.exceptions.UndefinedMetricWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
 ################### Simple DNase peak based distance model ############
 
 class PeakModel():
@@ -20,7 +27,7 @@ class PeakModel():
                  cellmap,  
                  debug = False,
                  batch_size=64,
-                 shuffle_size=10000,
+                 shuffle_size=10,
                  prefetch_size=10,
                  l1=0.,
                  l2=0.,
@@ -119,8 +126,10 @@ class PeakModel():
             self.lr = tf.placeholder(tf.float32)
             self.batch_size = batch_size
             self.prefetch_size = prefetch_size
+            self.shuffle_size = shuffle_size
 
             # set self
+            self.radii = radii
             self.debug = debug
             self.assaymap = assaymap
             self.test_celltypes = test_celltypes
@@ -140,6 +149,21 @@ class PeakModel():
     def save(self, checkpoint_path):
         save_path = self.saver.save(self.sess, checkpoint_path)
         tf.logging.info("Model saved in path: %s" % save_path)
+        
+        # save model params to pickle file
+        dict_ = {'test_celltypes':self.test_celltypes,
+                         'matrix':self.matrix,
+                         'assaymap':self.assaymap,
+                         'cellmap':self.cellmap,  
+                         'debug': self.debug,
+                         'batch_size':self.batch_size,
+                         'shuffle_size':self.shuffle_size,
+                         'prefetch_size':self.prefetch_size,
+                         'radii':self.radii}
+        
+        fileObject = open(checkpoint_path + ".model_params.pickle",'wb')
+        pickle.dump(dict_,fileObject)   
+        fileObject.close()
         
         
     def gini(self, actual, pred, sample_weight):                                                 
@@ -244,7 +268,7 @@ class PeakModel():
                 if step % 1000 == 0:
                     tf.logging.info(str(step) + " " + str(loss[0]))
                     # weighted resample based on losses
-                    self.resample_train(loss[1])
+#                     self.resample_train(loss[1])
                     if (self.debug):
                         tf.logging.info("On validation")
                         _, _, _, _, _ = self.test(40000, log=False)
@@ -316,12 +340,12 @@ class PeakModel():
         :param iter_: output of self.sess.run(generator_to_one_shot_iterator()), handle to one shot iterator of records
         :param log: if true, logs individual factor accuracies
         
-        :return preds, truth, assay_dict, microAUC, macroAUC, False
+        :return preds, truth, assay_dict, auROC, auPRC, False
             preds = predictions, 
             truth = actual values, 
             assay_dict = if log=True, holds predictions for individual factors
-            microAUC = average micro AUC for all factors with truth values
-            macroAUC = average macro AUC for all factors with truth values
+            auROC = average macro area under ROC for all factors with truth values
+            auPRC = average area under PRC for all factors with truth values
         """
         
         inv_assaymap = {v: k for k, v in self.assaymap.items()}
@@ -351,8 +375,9 @@ class PeakModel():
                 # Mean results because sample_weight mask can only work on 1 row at a time.
                 # If a given assay is not available for evaluation, sample_weights will all be 0 
                 # and the resulting roc_auc_score will be NaN.
-                macroAUC_vec = []
-                microAUC_vec = []
+                auROC_vec = []
+                auPRC_vec = []
+                GINI_vec =  []
                 
                 
                 # try/accept for cases with only one class (throws ValueError)
@@ -368,62 +393,122 @@ class PeakModel():
                                                           average='macro', 
                                                           sample_weight = sample_weight[:,j])
                         
-                        macroAUC_vec.append(roc_score)
+                        auROC_vec.append(roc_score)
                         
                     except ValueError:
-                        pass
+                        roc_score = np.NaN
                     
                     try:
-                        microAUC_vec.append(sklearn.metrics.roc_auc_score(truth[:,j], preds[:,j], 
-                                                          average='micro', 
-                                                          sample_weight = sample_weight[:,j]))
-                    except ValueError:
-                        pass
-                    
-                    if log:
-                        try:
-                            pr_score  = sklearn.metrics.average_precision_score(truth[:,j], preds[:,j], 
+                        pr_score = sklearn.metrics.average_precision_score(truth[:,j], preds[:,j], 
                                                                  sample_weight = sample_weight[:, j])
+                        
+                        auPRC_vec.append(pr_score)
+                        
+                    except ValueError:
+                        auPRC_vec = np.NaN
+                    
+                    try:
+                        gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
+                                                          sample_weight = sample_weight[:, j])
+                        
+                        GINI_vec.append(gini_score)
+                        
+                    except ValueError:
+                        gini_score = np.NaN
+                    
+                    
+                    assay_dict[assay]= {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
 
-                            gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
-                                                              sample_weight = sample_weight[:, j])
-
-                            assay_dict[assay]= {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
-
-                        except ValueError:
-                            pass
-
-                            assay_dict[assay] = {"AUC": np.NaN, "auPRC": np.NaN, "GINI": np.NaN }
                         
                 
-                macroAUC = np.nanmean(macroAUC_vec)
-                microAUC = np.nanmean(microAUC_vec)
+                auROC = np.nanmean(auROC_vec)
+                auPRC = np.nanmean(auPRC_vec)
 
-                tf.logging.info("Our macro AUC:     " + str(macroAUC))
-                tf.logging.info("Our micro AUC:     " + str(microAUC))
+                tf.logging.info("macro auROC:     " + str(auROC))
+                tf.logging.info("auPRC:     " + str(auPRC))
+                tf.logging.info("GINI:     " + str(np.nanmean(GINI_vec)))
             except ValueError as v:
-                macroAUC = None
-                microAUC = None
-                tf.logging.info("Failed to calculate macro AUC")
-                tf.logging.info("Failed to calculate micro AUC")
+                auROC = None
+                auPRC = None
+                tf.logging.info("Failed to calculate metrics")
 
-            return preds, truth, assay_dict, microAUC, macroAUC
+            return preds, truth, assay_dict, auROC, auPRC
+        
+    def score_peak_file(self, peak_file):
+    
+        # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
+        # and their indices are stored in missing_idx for future use
+        peak_vector, all_peaks = bedFile2Vector(peak_file)
+        print("finished loading peak file")
+
+        # only select peaks to score
+        idx = np.where(peak_vector == 1)[0]
+        
+        if len(idx) == 0:
+            raise ValueError("No positive peaks found in %s" % peak_file)
+
+        all_data = np.concatenate((self.data[Dataset.TRAIN], self.data[Dataset.VALID], self.data[Dataset.TEST]), axis=1)
+
+        # takes about 1.5 minutes for 100,000 regions TODO AM 4/3/2019 speed up generator
+        predictions = self.eval_vector(all_data, peak_vector, idx)
+        print("finished predictions...", predictions.shape)
+
+
+        # get number of factors to fill in if values are missing
+        num_factors = predictions[0].shape[0]
+
+
+        # map predictions with genomic position 
+        liRegions = load_allpos_regions()
+        prediction_positions = itemgetter(*idx)(liRegions)
+        zipped = list(zip(prediction_positions, predictions))
+
+        # for each all_peaks, if 1, reduce means for all overlapping peaks in positions
+        # else, set to 0s
+
+        def reduceMeans(peak):
+            if (peak[1] == 1):
+                # parse region
+
+                # filter overlapping predictions for this peak and take mean      
+                res = map(lambda k: k[1], filter(lambda x: peak[0].overlaps(x[0], 100), zipped))
+                arr = np.concatenate(list(map(lambda x: np.matrix(x), res)), axis = 0)
+                return(peak[0], np.mean(arr, axis = 0))
+            else:
+                return(peak[0], np.zeros(num_factors)) 
+
+        grouped = list(map(lambda x: np.matrix(reduceMeans(x)[1]), all_peaks))
+
+        final = np.concatenate(grouped, axis=0)
+
+        df = pd.DataFrame(final, columns=list(self.assaymap)[1:])
+
+        # load in peaks to get positions and could be called only once
+        # TODO why are you reading this in twice?
+        df_pos = pd.read_csv(peak_file, sep="\t", header = None)[[0,1,2]]
+        final_df = pd.concat([df_pos, df], axis=1)
+
+        return final_df
             
 
 class MLP(PeakModel):
     def __init__(self,
-             layers,
-             num_units,
-             activation,
              *args,
              **kwargs):
 
-        self.layers = layers
-        self.num_units = num_units
-        self.activation = activation
-        self.radii = kwargs["radii"]
-
-        PeakModel.__init__(self, *args, **kwargs)
+        """ To resume model training, call:
+            model2 = MLP(data = data, checkpoint="/home/eecs/akmorrow/epitome/out/models/test_model")
+        """
+        self.layers = 4
+        self.num_units = [100, 100, 100, 50]
+        self.activation = tf.tanh
+                          
+        if "checkpoint" in kwargs.keys():
+            fileObject = open(kwargs["checkpoint"] + ".model_params.pickle" ,'rb')
+            metadata = pickle.load(fileObject)
+            PeakModel.__init__(self, kwargs["data"], **metadata)
+        else: 
+            PeakModel.__init__(self, *args, **kwargs)
             
     def body_fn(self):
         model = self.x
@@ -434,3 +519,4 @@ class MLP(PeakModel):
             model = tf.layers.dense(model, self.num_units[i], self.activation)
         
         return tf.layers.dense(model, self.num_outputs, kernel_regularizer=tf.contrib.layers.l1_l2_regularizer(self.l1, self.l2))
+
