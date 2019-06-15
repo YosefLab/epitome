@@ -43,18 +43,13 @@ usage: get_deepsea_data.py [-h] --output_path OUTPUT_PATH
 
 ```python
 from epitome.models import *
-radii = [1,3,10,30]
-model = MLP(4, [100, 100, 100, 50], 
-            tf.tanh, 
-            data
+model = MLP(data
             test_celltypes,
-            gen_from_peaks, 
             matrix,
             assaymap,
             cellmap,
             shuffle_size=2, 
-            batch_size=64,
-            radii=radii)
+            batch_size=64)
 model.train(10000)
 ```
 

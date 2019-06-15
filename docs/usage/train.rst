@@ -57,9 +57,7 @@ Next train a model for 5000 iterations:
   	# for each, train a model
 	shuffle_size = 2 
 
-	model = MLP(4, [100, 100, 100, 50], 
-            	tf.tanh, 
-	            data,
+	model = MLP(data,
 	            ["K562"], # cell line reserved for testing
 	            matrix,
 	            assaymap,
