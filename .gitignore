@@ -13,5 +13,7 @@ python/target/
 .DS_Store
 __pycache__
 
+# docs
+docs/_build/*
 
 *deepsea_train*
