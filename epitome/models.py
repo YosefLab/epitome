@@ -3,6 +3,8 @@ Functions and classes for model specifications.
 """
 
 import sklearn.metrics
+
+
 import tensorflow as tf
 from .constants import *
 from .functions import *
@@ -58,7 +60,7 @@ class PeakModel():
     
         with self.graph.as_default() as graph:
             
-            tf.logging.set_verbosity(tf.logging.INFO)
+            tf.compat.v1.logging.set_verbosity(tf.logging.INFO)
             
                 
             assert (set(test_celltypes) < set(list(cellmap))), \
@@ -405,7 +407,7 @@ class PeakModel():
                         auPRC_vec.append(pr_score)
                         
                     except ValueError:
-                        auPRC_vec = np.NaN
+                        pr_score = np.NaN
                     
                     try:
                         gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
