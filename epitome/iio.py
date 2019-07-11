@@ -7,9 +7,6 @@ import threading
 Lightweight library to read and write TF-Records.
 """
 
-slim = tf.contrib.slim
-
-
 ################################# TF-Record Utilities ################################
 
 def make_bytes_feature(value_list):

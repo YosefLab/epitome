@@ -21,7 +21,7 @@ install_reqs = parse_requirements('requirements.txt', session='hack')
 reqs = [str(ir.req) for ir in install_reqs]
 
 # append tensorflow or tensorflow-gpu to reqs
-TENSORFLOW_VERSION = "1.14.0"
+TENSORFLOW_VERSION = "2.0.0b1"
 
 try:
     subprocess.check_output(["nvidia-smi", "-L"])
