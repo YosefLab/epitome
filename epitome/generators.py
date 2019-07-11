@@ -223,17 +223,17 @@ def load_data(data,
     return g
 
 
-def generator_to_one_shot_iterator(g, batch_size, shuffle_size, prefetch_size):
+
+def generator_to_tf_dataset(g, batch_size, shuffle_size, prefetch_size):
     """
-    Generates a one shot iterator from a data generator.
+    Generates a tensorflow dataset from a data generator.
     
     :param g: data generator
     :param batch_size: number of elements in generator to combine into a single batch
     :param shuffle_size: number of elements from the  generator fromw which the new dataset will shuffle
     :param prefetch_size: maximum number of elements that will be buffered  when prefetching
-    :param radii: where to calculate DNase similarity to.
     
-    :returns: tuple of (label shape, one shot iterator)
+    :returns: tuple of (label shape, tf.data.Dataset)
     """
     
     for x, y, y_mask in g():
@@ -251,14 +251,14 @@ def generator_to_one_shot_iterator(g, batch_size, shuffle_size, prefetch_size):
             g,
             output_types=(tf.float32,)*3 # 3 = features, labels, and missing indices
         )
-        
+
     dataset = dataset.batch(batch_size)
     dataset = dataset.shuffle(shuffle_size)
-    dataset = dataset.repeat() 
+    dataset = dataset.repeat()
     dataset = dataset.prefetch(prefetch_size)
     
     try: 
         y
-        return y.shape, dataset.make_one_shot_iterator()
+        return y.shape, dataset
     except NameError as e:
-        return None, dataset.make_one_shot_iterator()
+        return None, dataset
