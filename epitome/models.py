@@ -114,8 +114,6 @@ class PeakModel():
         self.assaymap= assaymap 
         self.cellmap = cellmap
         self.data = data
-        self.global_step = tf.Variable(0, name='global_step', trainable=False)
-
             
     def save(self, checkpoint_path):
         """
