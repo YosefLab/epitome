@@ -68,6 +68,10 @@ class PeakModel():
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
         print("eval cell types", self.eval_cell_types)
 
+	assert (len(self.eval_cell_types) >= 2 ), \
+		"there must be more than one eval_cell_type {} for feature rotation".format(self.eval_cell_types)
+
+
         self.output_shape, self.train_iter = generator_to_tf_dataset(load_data(data[Dataset.TRAIN],  
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
