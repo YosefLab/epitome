@@ -21,13 +21,14 @@ install_reqs = parse_requirements('requirements.txt', session='hack')
 reqs = [str(ir.req) for ir in install_reqs]
 
 # append tensorflow or tensorflow-gpu to reqs
-TENSORFLOW_VERSION = "2.0.0b1"
+# need nightly build to work with tensorflow probability
+TENSORFLOW_VERSION = "2.0.0.dev20190729"
 
 try:
     subprocess.check_output(["nvidia-smi", "-L"])
-    tf_req = "tensorflow-gpu==%s" % TENSORFLOW_VERSION
+    tf_req = "tf-nightly-gpu-2.0-preview==%s" % TENSORFLOW_VERSION
 except:
-    tf_req = "tensorflow==%s" % TENSORFLOW_VERSION
+    tf_req = "tf-nightly-2.0-preview==%s" % TENSORFLOW_VERSION
 
 reqs.append(tf_req)
 
