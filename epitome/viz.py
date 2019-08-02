@@ -130,3 +130,44 @@ def heatmap_aggreement_from_model_weights(model):
         ax.set_ylabel("Unit")
         ax.set_xticklabels(xtick_labels, rotation=-60)
         plt.show()
+        
+        
+
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+import matplotlib.transforms as mtransforms
+
+def calibration_plot(truth, preds, assay_dict, list_assaymap):
+    """
+    Creates an xy scatter plot for predicted probability vs true probability.
+    Adds a separate set of points for each transcription factor. 
+    
+    Args:
+        :param truth: matrix of n samples by t TFs
+        :param preds: matrix same size as truth
+        :param assay_dict: dictionary of TFs and scores
+        :param: list_assaymap: list of assay names for data matrix
+    """
+
+    fig, ax = plt.subplots()
+    # only these two lines are calibration curves
+    for i in range(truth.shape[1]):
+        logreg_y, logreg_x = calibration_curve(truth[:,i], preds[:,i], n_bins=10)
+
+        if (not np.isnan(assay_dict[list_assaymap[i+1]]["AUC"])): # test cell type does not have all factors!
+            plt.plot(logreg_x,logreg_y, marker='o', linewidth=1, label=list_assaymap[i+1])
+
+
+    # reference line, legends, and axis labels
+    line = mlines.Line2D([0, 1], [0, 1], color='black')
+    transform = ax.transAxes
+    line.set_transform(transform)
+    ax.add_line(line)
+    fig.suptitle('Calibration plot for test regions')
+    ax.set_xlabel('Predicted probability')
+    ax.set_ylabel('True probability in each bin')
+
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5),
+              ncol=2, fancybox=True, shadow=True)
+
+    plt.show()
