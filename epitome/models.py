@@ -373,7 +373,7 @@ class PeakModel():
             'preds': preds,
             'truth': truth,
             'weights': sample_weight,
-            'assay_dict': ssay_dict,
+            'assay_dict': assay_dict,
             'auROC': auROC, 
             'auPRC': auPRC
         }
