@@ -83,7 +83,7 @@ def load_data(data,
         cell_assay_counts = list(filter(lambda x: x[0] in eval_cell_types, cell_assay_counts))
         
         # remove cell types with smallest number of factors
-        eval_cell_types = eval_cell_types.copy()
+        eval_cell_types = list(eval_cell_types)
         [eval_cell_types.remove(i[0]) for i in cell_assay_counts[0:len(label_cell_types)]]
         del tmp
         del cell_assay_counts
@@ -97,7 +97,7 @@ def load_data(data,
                 dnases_agreement = []
                 
                 # cells to be featurized
-                feature_cells = eval_cell_types.copy()
+                feature_cells = list(eval_cell_types)
                 
                 # try to remove cell if it is in the possible list of feature cell types
                 try:

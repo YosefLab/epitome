@@ -39,7 +39,7 @@ class PeakModel():
                  l2=0.,
                  lr=1e-3,
                  radii=[1,3,10,30], 
-                 train_indices = None):
+                 split_indices = None):
         
         """
         Peak Model
@@ -56,7 +56,7 @@ class PeakModel():
         :param l2
         :param lr
         :param radii
-        :param train_indices: option numpy array of indices to train from data[Dataset.TRAIN]
+        :param split_indices: used to indicate boundaries of train, cv, and test sets
         """
         
         tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
@@ -65,12 +65,33 @@ class PeakModel():
                 "test_celltypes %s must be subsets of available cell types %s" % (str(test_celltypes), str(list(cellmap)))
 
         # get evaluation cell types by removing any cell types that would be used in test
-        self.eval_cell_types = list(cellmap).copy()
+        self.eval_cell_types = list(cellmap)
         self.test_celltypes = test_celltypes
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
         print("eval cell types", self.eval_cell_types)
+        assert (len(self.eval_cell_types) >= 2 ), \
+            "there must be more than one eval_cell_type {} for feature rotation".format(self.eval_cell_types)
 
-        self.output_shape, self.train_iter = generator_to_tf_dataset(load_data(data[Dataset.TRAIN],  
+        
+        # if split  indices were specified, then subset the dataset differently.
+        if(split_indices != None):
+            # configure the data
+            combined_data = np.append(data[Dataset.TRAIN], data[Dataset.VALID], axis =1)
+            combined_data = np.append(combined_data, data[Dataset.TEST], axis =1)
+
+            start_train, end_train = split_indices[0]
+            start_cv, end_cv       = split_indices[1]
+            start_test, end_test   = split_indices[2]
+
+            train_data = combined_data[:,start_train:end_train]
+            valid_data = combined_data[:,start_cv:end_cv]
+            test_data  = combined_data[:,start_test:end_test]
+        else:
+            train_data = data[Dataset.TRAIN]
+            valid_data = data[Dataset.VALID]
+            test_data  = data[Dataset.TEST]
+
+        self.output_shape, self.train_iter = generator_to_tf_dataset(load_data(train_data,  
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
                                                 matrix,
@@ -79,7 +100,7 @@ class PeakModel():
                                                 radii = radii, mode = Dataset.TRAIN),
                                                 batch_size, shuffle_size, prefetch_size)
 
-        _,            self.valid_iter = generator_to_tf_dataset(load_data(data[Dataset.VALID], 
+        _,            self.valid_iter = generator_to_tf_dataset(load_data(valid_data, 
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
                                                 matrix,
@@ -89,7 +110,7 @@ class PeakModel():
                                                 batch_size, 1, prefetch_size)
 
         # can be empty if len(test_celltypes) == 0
-        _,            self.test_iter = generator_to_tf_dataset(load_data(data[Dataset.TEST], 
+        _,            self.test_iter = generator_to_tf_dataset(load_data(test_data, 
                                                self.test_celltypes, 
                                                self.eval_cell_types,
                                                matrix,
@@ -415,7 +436,7 @@ class PeakModel():
                 # parse region
 
                 # filter overlapping predictions for this peak and take mean      
-                res = map(lambda k: k[1], filter(lambda x: peak[0].overlaps(x[0], 100), zipped))
+                res = map(lambda k: k[1], filter(lambda x: peak[0].overlaps(x[0], 1), zipped)) # this must be changed
                 arr = np.concatenate(list(map(lambda x: np.matrix(x), res)), axis = 0)
                 return(peak[0], np.mean(arr, axis = 0))
             else:
