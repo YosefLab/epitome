@@ -40,7 +40,7 @@ class Region:
         return False
 
     def overlaps(self, other, min_bp = 1):
-        assert(type(other) == Region), "overlaps analysis must take Region as input but got %s" % type(other)
+        #assert(type(other) == Region), "overlaps analysis must take Region as input but got %s" % type(other)
         return(other.chrom == self.chrom and self.overlap([self.start, self.end], [other.start, other.end]) > min_bp)
     
     def overlap(self, interval1, interval2):
@@ -403,10 +403,13 @@ def bedFile2Vector(bed_file, processes = 1):
         records = list(tbPositions.query(peak[1].chrom, peak[1].start, peak[1].end))
 
         # filter in idr_peaks that overlap at least 100 bp
-        it = filter(lambda x: peak[1].overlaps(Region(x[0], int(x[1]), int(x[2])), min_bp = 100), records)
+        #it = filter(lambda x: peak[1].overlaps(Region(x[0], int(x[1]), int(x[2])), min_bp = 100), records)
 
         # if peak exists, set peak_vector to 1
-        x = next(it, None)
+        #x = next(it, None)
+        
+        x = next(iter(filter(lambda x: peak[1].overlaps(Region(x[0], int(x[1]), int(x[2]))), records)), None)
+
         if (x != None):
             try:
                 position_i = liRegions.index(Region(x[0], int(x[1]), int(x[2])))
