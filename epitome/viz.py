@@ -6,6 +6,9 @@ import seaborn as sns; sns.set()
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+from matplotlib.backends import backend_agg
+from matplotlib import figure
+
 
 def joint_plot(dict_model1, 
                dict_model2, 
@@ -171,3 +174,46 @@ def calibration_plot(truth, preds, assay_dict, list_assaymap):
               ncol=2, fancybox=True, shadow=True)
 
     plt.show()
+    
+    
+    
+    
+############################################################################
+###################### Visualizing model internals #########################
+############################################################################
+
+def plot_weight_posteriors(names, qm_vals, qs_vals, fname=None):
+    """Save a PNG plot with histograms of weight means and stddevs.
+    From https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py
+    Args:
+    names: A Python `iterable` of `str` variable names.
+    qm_vals: A Python `iterable`, the same length as `names`,
+      whose elements are Numpy `array`s, of any shape, containing
+      posterior means of weight varibles.
+    qs_vals: A Python `iterable`, the same length as `names`,
+      whose elements are Numpy `array`s, of any shape, containing
+      posterior standard deviations of weight varibles.
+    fname: Python `str` filename to save the plot to.
+    """
+    fig = figure.Figure(figsize=(6, 3))
+    canvas = backend_agg.FigureCanvasAgg(fig)
+
+    ax = fig.add_subplot(1, 2, 1)
+    for n, qm in zip(names, qm_vals):
+        sns.distplot(tf.reshape(qm, [-1]), ax=ax, label=n)
+    ax.set_title("weight means")
+    ax.set_xlim([-1.5, 1.5])
+    ax.legend()
+
+    ax = fig.add_subplot(1, 2, 2)
+    for n, qs in zip(names, qs_vals):
+        sns.distplot(tf.reshape(qs, [-1]), ax=ax)
+    ax.set_title("weight stddevs")
+    ax.set_xlim([0, 0.2])
+
+    fig.tight_layout()
+    if fname != None:
+        canvas.print_figure(fname, format="png")
+        print("saved {}".format(fname))
+        
+    fig.show()
