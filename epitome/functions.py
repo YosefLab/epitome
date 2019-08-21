@@ -13,12 +13,14 @@ from itertools import groupby
 from scipy.io import loadmat
 from numba import cuda
 from .constants import * 
+import scipy.sparse
 
 from operator import itemgetter
 import gzip
 
 # to load in positions file
-import tabix
+import pybedtools
+import multiprocessing
 
 ################### CLASSES ##########################
 # TODO move to separate file
@@ -41,9 +43,10 @@ class Region:
 
     def overlaps(self, other, min_bp = 1):
         #assert(type(other) == Region), "overlaps analysis must take Region as input but got %s" % type(other)
-        return(other.chrom == self.chrom and self.overlap([self.start, self.end], [other.start, other.end]) > min_bp)
+        return(other.chrom == self.chrom and Region.overlap([self.start, self.end], [other.start, other.end]) > min_bp)
     
-    def overlap(self, interval1, interval2):
+    @staticmethod
+    def overlap(interval1, interval2):
         """
         Computes overlap between two intervals
         """
@@ -199,9 +202,58 @@ def load_deepsea_data(deepsea_path):
 
     return train_data, valid_data, test_data
 
+
+def load_epitome_data(data_dir):
+    """
+    Loads data processed using data/download_encode.py. This will load three sparse matrix files 
+    (.npz). One for train, valid (chr7) and test (chr 8 and 8).
+    
+    Takes ~10 seconds to load data.
+    
+    Args:
+        :param data_dir: Directory containing train.npz, valid.npz, test.npz, 
+        all.pos.bed file and feature_name files saved by data/download_encode.py script.
+        
+    :returns: train_data, valid_data, and test_data
+        3 numpy ndarrays for train, valid and test
+    """
+    
+    # make sure all required files exist
+    required_files = ["all.pos.bed","train.npz","valid.npz", "feature_name","test.npz"]
+    required_paths = [os.path.join(data_dir, x) for x in required_files]
+    assert(np.all([os.path.exists(x) for x in required_paths]))
+    npz_files = list(filter(lambda x: x.endswith(".npz"), required_paths))
+    
+    sparse_matrices = [scipy.sparse.load_npz(x).toarray() for x in npz_files]
+    return sparse_matrices
+
+def get_epitome_indices_deepsea_validation(epitome_allpos_file):
+    """ Gets new indices matching DeepSEA's validation set (chr7: 30508800-35296600)
+    Used to compare performance of Epitome model on DeepSEA's data vs processed data.
+    
+    Args:
+        :param epitome_allpos_file: path to Epitome's allpos.bed file
+        
+    Returns:
+        list of indices in Epitome's dataset that correspond to DeepSEA's
+        
+    """
+    deepsea_valid_start = 30508800
+    deepsea_valid_stop = 35296600 # start of last region
+    
+    with open(epitome_allpos_file) as f:
+        lines = f.readlines()
+        
+    def split_line(f):
+        split = f.split("\t")
+        return (split[0], int(split[1]), int(split[2]))
+                          
+    filtered = enumerate([split_line(line) for line in lines if line.startswith("chr7")])
+    return [i[0] for i in filtered if i[1][1] >= deepsea_valid_start and i[1][1] <= deepsea_valid_stop]
+
 ################### Parsing Deepsea Files ########################
 
-def load_allpos_regions():
+def load_bed_regions(bedfile):
     ''' Loads Deepsea bed file (stored as .gz format), removing
     regions that have no data (the regions between valid/test
     and chromosomes X/Y). 
@@ -209,15 +261,8 @@ def load_allpos_regions():
     :return list of genomic Regions the size of train/valid/test data. 
     '''
     
-    with gzip.open(DEEPSEA_ALLTFS_BEDFILE, 'r') as f:
+    with gzip.open(bedfile, 'r') as f:
             liPositions = f.readlines()
-
-    # remove unused genomic positions from liPositions
-    a = range(0,VALID_REGIONS[1]+1)
-    b = range(TEST_REGIONS[0],TEST_REGIONS[1]+1)
-
-    # adjust liPositions to remove unused regions between valid/test and after test
-    liPositions = itemgetter(*np.concatenate([a,b]))(liPositions)
 
     def fromString(x):
         tmp = x.decode("utf-8").split('\t')
@@ -225,7 +270,8 @@ def load_allpos_regions():
 
     return list(map(lambda x: fromString(x), liPositions))
 
-def get_assays_from_feature_file(eligible_assays = None, 
+def get_assays_from_feature_file(feature_name_file, 
+                                 eligible_assays = None, 
                                  eligible_cells = None,
                                  min_cells_per_assay= 3, 
                                  min_assays_per_cell = 2):
@@ -243,7 +289,7 @@ def get_assays_from_feature_file(eligible_assays = None,
         cellmap: index of cells
         assaymap: index of assays
     '''
-
+    
     # check argument validity
     if (min_assays_per_cell < 2):     
          print("Warning: min_assays_per_cell should not be < 2 (this means it only has DNase) but was set to %i" % min_assays_per_cell)
@@ -264,19 +310,16 @@ def get_assays_from_feature_file(eligible_assays = None,
             Lower min_cells_per_assay to (%i) if you plan to use only %i eligible cells""" \
                             % (eligible_cells, min_cells_per_assay, len(eligible_cells)+1, len(eligible_cells)))
             
-    # TFs are 126 to 816 and DNase is 1 to 126, TFs are 126 to 816
-    # We don't want to include histone information.
-    elegible_assay_indices  = np.linspace(1,815, num=815).astype(int)
 
     # TODO want a dictionary of assay: {list of cells}
     # then filter out assays with less than min_cells_per_assay cells
     # after this, there may be some unused cells so remove those as well
-    with open(FEATURE_NAME_FILE) as f:
+    with open(feature_name_file) as f:
 
         indexed_assays={}    # dict of {cell: {dict of indexed assays} }
         for i,l in enumerate(f):
-            if i not in elegible_assay_indices: 
-                continue # skip first rows and non-transcription factors
+            if (i == 0):
+                continue
 
             # for example, split '8988T|DNase|None' 
             cell, assay = l.split('\t')[1].split('|')[:2]
@@ -340,100 +383,42 @@ def get_assays_from_feature_file(eligible_assays = None,
 ################### Parsing data from bed file ########################
 
 
-def bedFile2Vector(bed_file, processes = 1):
+
+def bedtools_intersect(file_tuple):
+    return_peaks = file_tuple[2]
+    bed = pybedtools.BedTool(file_tuple[0])
+    res =  bed.intersect(file_tuple[1], c=True)
+    overlap_vector = np.array(list(map(lambda x: int(x.fields[-1])>0, res)))
+    
+    l = list(bed) if return_peaks else None
+    return (l, overlap_vector)
+    
+def bedFile2Vector(bed_file, allpos_bed_file):
     """
     This function takes in a bed file of peaks and converts it to a vector or 0/1s that can be 
     uses as input into an Epitome model. Each 0/1 represents a region in the train/test/validation set from DeepSEA.
     
-    TODO takes 5 min for ~15,000 peak file!
+    Takes 30 seconds for ~40,000 peak file
 
     Most likely, the bed file will be the output of the IDR function, which detects peaks based on the
     reproducibility of multiple samples.
 
-    :param: bed_file: bed file containing peaks
+    :param bed_file: bed file containing peaks
+    :param allpos_bed_file: bed file containing all positions in the dataset
 
-    :return: vector containing the concatenated 4.4 million train, validation, and test data in the order
-    that we have parsed train/test. And returns a zipped of regions in the bed file and whether or not that
-    peak had an associated peak in the training set.
-
+    :return: tuple (numpy_train_array, (bed_peaks, numpy_bed_array). 
+    numpy_train_array: boolean numpy array indicating overlap of training data with peak file (length of training data). 
+    bed_peaks: a list of intervals loaded from bed_file. 
+    numpy_bed_array: boolean numpy array indicating presence or absense of each bed_peak region in the training dataset.
     """
+
+    bed_files = [(allpos_bed_file, bed_file, False), (bed_file, allpos_bed_file, True)]
+    pool = multiprocessing.Pool(processes=2)
+    results = pool.map(bedtools_intersect, bed_files)
     
-    if (processes > 1):
-        raise Exception("tabix is currently only working with 1 thread")
-
-    # load in tf pos file
-    tbPositions = tabix.open(DEEPSEA_ALLTFS_BEDFILE)
-
-    liRegions = load_allpos_regions()
+    bed_file_peaks = list(zip(results[1][0], results[1][1]))
     
-    idr_peaks = []
-
-    # load in peaks as a list of regions
-    with open(bed_file) as f:
-        content = f.readlines()
-        # you may also want to remove whitespace characters like `\n` at the end of each line
-        init_idr_peaks = list(map(lambda x: Region(x.split()[0], int(x.split()[1]), int(x.split()[2])), content))
-
-
-    peak_vector=np.zeros(N_TOTAL_REGIONS())
-
-    n_peaks = len(init_idr_peaks)
-
-    # keeps track of which idr peaks were overlapping something in the positions file
-    found = np.zeros(n_peaks)
-
-#     def init(l, tbPositions, liRegions):
-#         global tbPos
-#         global liReg
-#         tbPos = tbPositions
-#         liReg = liRegions
-
-    iter_= enumerate(init_idr_peaks)
-
-    def tabixQuery(peak):
-        """
-        Single process cmd for loading in positions overlapping peak.
-
-        :param peak: tuple of (indxex, Region)
-        :return tuple of position indexed from all positions and 
-
-        """
-
-        # TODO AM 6/14/2019: this isn't working with > 1 thread currently
-        records = list(tbPositions.query(peak[1].chrom, peak[1].start, peak[1].end))
-
-        # filter in idr_peaks that overlap at least 100 bp
-        #it = filter(lambda x: peak[1].overlaps(Region(x[0], int(x[1]), int(x[2])), min_bp = 100), records)
-
-        # if peak exists, set peak_vector to 1
-        #x = next(it, None)
-        
-        x = next(iter(filter(lambda x: peak[1].overlaps(Region(x[0], int(x[1]), int(x[2]))), records)), None)
-
-        if (x != None):
-            try:
-                position_i = liRegions.index(Region(x[0], int(x[1]), int(x[2])))
-            except ValueError:
-                return -1, -1 # region not found in truncated liRegions
-
-            return position_i, peak[0]
-
-        return -1, -1
-
-# TODO NOT WORKING
-#     pool = mp.Pool(processes, initializer=init, initargs=(tbPositions, liRegions,))
-#     results = pool.map(tabixQuery, iter_)
-#     pool.close()
-#     pool.join()
-    results = [tabixQuery(peak) for peak in iter_]
-
-    for position_i, peak_i in results:
-        if position_i > -1:
-            peak_vector[position_i] = 1
-            # set peak as found
-            found[peak_i] = 1
-    return peak_vector, list(zip(init_idr_peaks, found))
-
+    return (results[0][1], results[1])
 
 
 def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights = None):
