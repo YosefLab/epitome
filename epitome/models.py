@@ -12,6 +12,7 @@ from .generators import *
 import numpy as np
 
 import tqdm 
+import tensorflow_probability as tfp
 
 # for saving model
 import pickle
@@ -505,9 +506,9 @@ class MLP(PeakModel):
         model.add(tf.keras.layers.Dense(self.num_outputs, kernel_regularizer=tf.keras.regularizers.l1_l2(self.l1, self.l2)))
         return model
 
+#######################################################################
 #################### Variational Peak Model ###########################
-import tqdm 
-import tensorflow_probability as tfp
+#######################################################################
 
 class VariationalPeakModel():
     def __init__(self,
@@ -601,6 +602,28 @@ class VariationalPeakModel():
         self.assaymap= assaymap 
         self.cellmap = cellmap
         self.data = data
+        
+    def get_weight_parameters(self):
+        """
+        Extracts weight posterior statistics for layers with weight distributions.
+        :param model: keras model
+
+        :return triple of layer names, weight means for each layer and stddev for each layer.
+        """
+
+        names = []
+        qmeans = []
+        qstds = []
+        for i, layer in enumerate(self.model.layers):
+            try:
+                q = layer.kernel_posterior
+            except AttributeError:
+                continue
+            names.append("Layer {}".format(i))
+            qmeans.append(q.mean())
+            qstds.append(q.stddev())
+
+        return (names, qmeans, qstds)
             
     def save(self, checkpoint_path):
         """
@@ -692,6 +715,7 @@ class VariationalPeakModel():
             loss = train_step(inputs, labels, weights)
 
             if step % 1000 == 0:
+                
                 tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) + 
                                           str(tf.reduce_mean(loss[1])) +
                                           str(tf.reduce_mean(loss[2])))
@@ -788,14 +812,14 @@ class VariationalPeakModel():
         y_pred_list = []
         for i in tqdm.tqdm(range(samples)):
             
-            y_pred = tf.sigmoid(self.model(inputs, training=False))
+            y_pred = self.model(inputs, training=False)
             y_pred = y_pred[:,Features.FEATURE_IDX.value,:] # get feature row
             y_pred_list.append(y_pred)
             
         preds = np.dstack(y_pred_list)
 
-        preds_mean = np.mean(preds, axis=2)
-        preds_std = np.std(preds, axis=2)
+        preds_mean = tf.sigmoid(np.mean(preds, axis=2))
+        preds_std = tf.sigmoid(np.std(preds, axis=2))
         
         # reset truth back to 0 to compute metrics
         # sample weights will rule these out anyways when computing metrics
@@ -981,5 +1005,4 @@ class VLP(VariationalPeakModel):
                                           activity_regularizer=tf.keras.regularizers.l1_l2(self.l1, self.l2)))
         
         return model
-
 

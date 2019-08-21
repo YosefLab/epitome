@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from matplotlib.backends import backend_agg
 from matplotlib import figure
-
+import tensorflow as tf
 
 def joint_plot(dict_model1, 
                dict_model2, 
@@ -79,6 +79,32 @@ def plot_assay_heatmap(assaymap, matrix, cellmap):
 #####################################################################    
 ############## Network visualization helper functions ###############
 #####################################################################
+
+def plot_uncertainty(preds_mean, preds_std, truth, title):
+    """
+    Plot means vs stds for regions
+    
+    Args:
+    :param preds_mean: prediction means
+    :param preds_std: prediction standard devations
+    :param truth: 0/1 real values
+    :param title: plot title
+   
+    """
+    xdata = np.arange(0, preds_mean.shape[0])
+    # Visualize the result
+    plt.plot(xdata, truth, 'ro')
+    plt.plot(xdata, preds_mean, '-', color='gray')
+    
+    plt.xlabel("genomic region")
+    plt.ylabel("predictions (dark grey), stdev (light grey)")
+
+    plt.fill_between(xdata, preds_mean - preds_std, preds_mean + preds_std,
+                     color='gray', alpha=0.2)
+    
+    plt.title(title)
+    plt.show()
+
 
 def number_to_bp(n):
     """ converts bp number to short string
@@ -216,4 +242,4 @@ def plot_weight_posteriors(names, qm_vals, qs_vals, fname=None):
         canvas.print_figure(fname, format="png")
         print("saved {}".format(fname))
         
-    fig.show()
+    return fig
