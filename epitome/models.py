@@ -389,45 +389,60 @@ class PeakModel():
     
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
         # and their indices are stored in missing_idx for future use
-        peak_vector, all_peaks = bedFile2Vector(peak_file)
+        peak_vector, all_peaks = bedFile2Vector(peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
         print("finished loading peak file")
 
         # only select peaks to score
-        idx = np.where(peak_vector == 1)[0]
-        
+        idx = np.where(peak_vector == True)[0]
+
         if len(idx) == 0:
             raise ValueError("No positive peaks found in %s" % peak_file)
 
         all_data = np.concatenate((self.data[Dataset.TRAIN], self.data[Dataset.VALID], self.data[Dataset.TEST]), axis=1)
 
+
         # takes about 1.5 minutes for 100,000 regions TODO AM 4/3/2019 speed up generator
         predictions = self.eval_vector(all_data, peak_vector, idx)
-        print("finished predictions...", predictions.shape)
 
+        print("finished predictions...", predictions.shape)
 
         # get number of factors to fill in if values are missing
         num_factors = predictions[0].shape[0]
 
-        # map predictions with genomic position 
-        liRegions = load_allpos_regions()
+
+        def load_bed_regions(bedfile):
+            ''' Loads Deepsea bed file (stored as .gz format).
+
+            :return list of genomic Regions the size of train/valid/test data. 
+            '''
+
+            with gzip.open(bedfile, 'r') as f:
+                    liPositions = f.readlines()
+
+            def fromString(x):
+                tmp = x.decode("utf-8").split('\t')
+                return Region(tmp[0], int(tmp[1]), int(tmp[2]))
+
+            return list(map(lambda x: fromString(x), liPositions))
+
+        # map predictions with genomic position
+        liRegions = load_bed_regions(EPITOME_ALLTFS_BEDFILE + ".gz")
         prediction_positions = itemgetter(*idx)(liRegions)
         zipped = list(zip(prediction_positions, predictions))
 
-        # for each all_peaks, if 1, reduce means for all overlapping peaks in positions
-        # else, set to 0s
-
         def reduceMeans(peak):
+
             if (peak[1] == 1):
                 # parse region
 
-                # filter overlapping predictions for this peak and take mean      
-                res = map(lambda k: k[1], filter(lambda x: peak[0].overlaps(x[0], 1), zipped)) # this must be changed
+                # filter overlapping predictions for this peak and take mean  
+                res = map(lambda k: k[1], filter(lambda x: Region.overlaps(peak[0], x[0], 1), zipped)) # this must be changed
                 arr = np.concatenate(list(map(lambda x: np.matrix(x), res)), axis = 0)
                 return(peak[0], np.mean(arr, axis = 0))
             else:
                 return(peak[0], np.zeros(num_factors)) 
 
-        grouped = list(map(lambda x: np.matrix(reduceMeans(x)[1]), all_peaks))
+        grouped = list(map(lambda x: np.matrix(reduceMeans(x)[1]), zip(all_peaks[0], all_peaks[1])))
 
         final = np.concatenate(grouped, axis=0)
 
@@ -437,7 +452,6 @@ class PeakModel():
         # TODO why are you reading this in twice?
         df_pos = pd.read_csv(peak_file, sep="\t", header = None)[[0,1,2]]
         final_df = pd.concat([df_pos, df], axis=1)
-
         return final_df
             
 

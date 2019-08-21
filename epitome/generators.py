@@ -54,7 +54,11 @@ def load_data(data,
     indices = kwargs.get("indices")
     
     if (not isinstance(indices, np.ndarray) and not isinstance(indices, list)):
-        indices = range(0, data.shape[-1]) # if not defined, set to all points
+        # model performs better when there are less 0s
+        if mode == Dataset.TRAIN:
+            indices = np.where(np.sum(data, axis=0) > 10)[0]
+        else:
+            indices = range(0, data.shape[-1]) # if not defined, set to all points
     
     if (not isinstance(mode, Dataset)):
         raise ValueError("mode is not a Dataset enum")
