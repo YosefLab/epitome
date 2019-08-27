@@ -774,11 +774,11 @@ class VariationalPeakModel():
 
         num_samples = len(indices)
         
-        preds, _, _, _, _ = self.run_predictions(num_samples, ds, calculate_metrics = False)    
+        results = self.run_predictions(num_samples, ds, calculate_metrics = False)    
         
-        return preds
+        return results['preds_mean'], results['preds_std']
 
-    def run_predictions(self, num_samples, iter_, calculate_metrics = True, samples = 500):
+    def run_predictions(self, num_samples, iter_, calculate_metrics = True, samples = 50):
         """
         Runs predictions on num_samples records
         :param num_samples: number of samples to test
@@ -795,31 +795,42 @@ class VariationalPeakModel():
         """
         
         inv_assaymap = {v: k for k, v in self.assaymap.items()}
-                        
-        # batches of predictions
-        vals = []
-
-        # Calculate epistemic uncertainty by iterating over a certain number of times,
-        # getting y_preds. You can then calculate the mean and stdev of the predictions, 
-        # and use this to gather uncertainty: (see http://krasserm.github.io/2019/03/14/bayesian-neural-networks/)
-        # inputs, truth, sample_weight
-        vals = [(i[0],i[1],i[2]) for i in iter_.take(int(num_samples / self.batch_size)+1)]
         
-        inputs = np.concatenate([v[0] for v in vals])[:num_samples]
-        truth = np.concatenate([v[1] for v in vals])[:num_samples]
-        sample_weight = np.concatenate([v[2] for v in vals])[:num_samples]
-    
-        y_pred_list = []
-        for i in tqdm.tqdm(range(samples)):
+        batches = int(num_samples / self.batch_size)+1
+        
+        # empty arrays for concatenation
+        truth = np.empty((0,self.num_outputs))
+        preds_mean = np.empty((0,self.num_outputs))
+        preds_std = np.empty((0,self.num_outputs))
+        sample_weight = np.empty((0,self.num_outputs))
+        
+        for inputs_b, truth_b, weights_b in tqdm.tqdm(iter_.take(batches)): 
             
-            y_pred = self.model(inputs, training=False)
-            y_pred = y_pred[:,Features.FEATURE_IDX.value,:] # get feature row
-            y_pred_list.append(y_pred)
-            
-        preds = np.dstack(y_pred_list)
+            # Calculate epistemic uncertainty for batch by iterating over a certain number of times,
+            # getting y_preds. You can then calculate the mean and sigma of the predictions, 
+            # and use this to gather uncertainty: (see http://krasserm.github.io/2019/03/14/bayesian-neural-networks/)
+            # inputs, truth, sample_weight
+            y_pred_list = []
 
-        preds_mean = tf.sigmoid(np.mean(preds, axis=2))
-        preds_std = tf.sigmoid(np.std(preds, axis=2))
+            # sample n times by tiling batch by rows, running 
+            # predictions for each row
+            inputs_tiled = np.tile(inputs_b, (samples, 1, 1))
+            y_pred = tf.sigmoid(self.model(inputs_tiled))[:,Features.FEATURE_IDX.value,:]
+            # split up batches into a third dimension and stack them in third dimension
+            preds = np.stack(np.split(y_pred, samples, axis=0), axis=2)
+ 
+            preds_mean = np.vstack([preds_mean, np.mean(preds, axis=2)])
+            preds_std = np.vstack([preds_std, np.std(preds, axis=2)])
+                    
+            truth = np.vstack([truth, truth_b])    
+            sample_weight = np.vstack([sample_weight, weights_b])
+        
+        
+        # trim off extra from last batch
+        truth = truth[:num_samples, :]
+        preds_mean = preds_mean[:num_samples, :]
+        preds_std = preds_std[:num_samples, :]
+        sample_weight = sample_weight[:num_samples, :]
         
         # reset truth back to 0 to compute metrics
         # sample weights will rule these out anyways when computing metrics
@@ -860,7 +871,7 @@ class VariationalPeakModel():
                 roc_score = np.NAN
 
                 try:
-                    roc_score = sklearn.metrics.roc_auc_score(truth[:,j], preds_mean[:,j], 
+                    roc_score = sklearn.metrics.roc_auc_score(truth_reset[:,j], preds_mean[:,j], 
                                                       average='macro', 
                                                       sample_weight = sample_weight[:,j])
 
@@ -870,7 +881,7 @@ class VariationalPeakModel():
                     roc_score = np.NaN
 
                 try:
-                    pr_score = sklearn.metrics.average_precision_score(truth[:,j], preds_mean[:,j], 
+                    pr_score = sklearn.metrics.average_precision_score(truth_reset[:,j], preds_mean[:,j], 
                                                              sample_weight = sample_weight[:, j])
 
                     auPRC_vec.append(pr_score)
@@ -879,7 +890,7 @@ class VariationalPeakModel():
                     pr_score = np.NaN
 
                 try:
-                    gini_score = self.gini_normalized(truth[:,j], preds_mean[:,j], 
+                    gini_score = self.gini_normalized(truth_reset[:,j], preds_mean[:,j], 
                                                       sample_weight = sample_weight[:, j])
 
                     GINI_vec.append(gini_score)
