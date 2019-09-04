@@ -1,14 +1,13 @@
 """
 Functions and classes for model specifications.
 """
-
-import sklearn.metrics
-
+# import sklearn.metrics
 
 import tensorflow as tf
 from .constants import *
 from .functions import *
 from .generators import *
+from .metrics import *
 import numpy as np
 
 import tqdm 
@@ -18,9 +17,9 @@ import tensorflow_probability as tfp
 import pickle
 from operator import itemgetter
 
-# disable sklearn warnings when training
-import warnings
-warnings.filterwarnings("ignore", category=sklearn.exceptions.UndefinedMetricWarning)
+# # disable sklearn warnings when training
+# import warnings
+# warnings.filterwarnings("ignore", category=sklearn.exceptions.UndefinedMetricWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 ################### Simple DNase peak based distance model ############
@@ -164,21 +163,6 @@ class PeakModel():
         fileObject.close()
         
         
-    def gini(self, actual, pred, sample_weight):                                                 
-        df = sorted(zip(actual, pred), key=lambda x : (x[1], x[0]),  reverse=True)
-        random = [float(i+1)/float(len(df)) for i in range(len(df))]                
-        totalPos = np.sum([x[0] for x in df])           
-        cumPosFound = np.cumsum([x[0] for x in df])                                     
-        Lorentz = [float(x)/totalPos for x in cumPosFound]                          
-        Gini = np.array([l - r for l, r in zip(Lorentz, random)])
-        # mask Gini with weights
-        Gini[np.where(sample_weight == 0)[0]] = 0
-        return np.sum(Gini)    
-
-    def gini_normalized(self, actual, pred, sample_weight = None):              
-        normalized_gini = self.gini(actual, pred, sample_weight)/self.gini(actual, actual, sample_weight)      
-        return normalized_gini       
-
     def body_fn(self):
         raise NotImplementedError()
         
@@ -340,52 +324,57 @@ class PeakModel():
             auPRC_vec = []
             GINI_vec =  []
 
-
             # try/accept for cases with only one class (throws ValueError)
-            assay_dict = {}
-
-            for j in range(preds.shape[1]): # for all assays
-                assay = inv_assaymap[j+1] 
-
-                roc_score = np.NAN
-
-                try:
-                    roc_score = sklearn.metrics.roc_auc_score(truth[:,j], preds[:,j], 
-                                                      average='macro', 
-                                                      sample_weight = sample_weight[:,j])
-
-                    auROC_vec.append(roc_score)
-
-                except ValueError:
-                    roc_score = np.NaN
-
-                try:
-                    pr_score = sklearn.metrics.average_precision_score(truth[:,j], preds[:,j], 
-                                                             sample_weight = sample_weight[:, j])
-
-                    auPRC_vec.append(pr_score)
-
-                except ValueError:
-                    pr_score = np.NaN
-
-                try:
-                    gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
-                                                      sample_weight = sample_weight[:, j])
-
-                    GINI_vec.append(gini_score)
-
-                except ValueError:
-                    gini_score = np.NaN
-
-                assay_dict[assay] = {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
+            assay_dict = get_performance(self.assaymap, preds, truth, sample_weight)
+            
+            # calculate averages
+            auROC = np.nanmean(list(map(lambda x: x['AUC'],assay_dict.values())))
+            auPRC = np.nanmean(list(map(lambda x: x['auPRC'],assay_dict.values())))
+            avgGINI = np.nanmean(list(map(lambda x: x['GINI'],assay_dict.values())))
 
 
-            auROC = np.nanmean(auROC_vec)
-            auPRC = np.nanmean(auPRC_vec)
+#             for j in range(preds.shape[1]): # for all assays
+#                 assay = inv_assaymap[j+1] 
+
+#                 roc_score = np.NAN
+
+#                 try:
+#                     roc_score = sklearn.metrics.roc_auc_score(truth[:,j], preds[:,j], 
+#                                                       average='macro', 
+#                                                       sample_weight = sample_weight[:,j])
+
+#                     auROC_vec.append(roc_score)
+
+#                 except ValueError:
+#                     roc_score = np.NaN
+
+#                 try:
+#                     pr_score = sklearn.metrics.average_precision_score(truth[:,j], preds[:,j], 
+#                                                              sample_weight = sample_weight[:, j])
+
+#                     auPRC_vec.append(pr_score)
+
+#                 except ValueError:
+#                     pr_score = np.NaN
+
+#                 try:
+#                     gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
+#                                                       sample_weight = sample_weight[:, j])
+
+#                     GINI_vec.append(gini_score)
+
+#                 except ValueError:
+#                     gini_score = np.NaN
+
+#                 assay_dict[assay] = {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
+
+
+#             auROC = np.nanmean(auROC_vec)
+#             auPRC = np.nanmean(auPRC_vec)
 
             tf.compat.v1.logging.info("macro auROC:     " + str(auROC))
             tf.compat.v1.logging.info("auPRC:     " + str(auPRC))
-            tf.compat.v1.logging.info("GINI:     " + str(np.nanmean(GINI_vec)))
+            tf.compat.v1.logging.info("GINI:     " + str(avgGINI))
         except ValueError as v:
             auROC = None
             auPRC = None
@@ -401,7 +390,7 @@ class PeakModel():
         }
 
         
-    def score_peak_file(self, peak_file):
+    def score_peak_file(self, atac_peak_file):
     
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
         # and their indices are stored in missing_idx for future use
@@ -648,22 +637,6 @@ class VariationalPeakModel():
         fileObject = open(os.path.join(checkpoint_path, "model_params.pickle"),'wb')
         pickle.dump(dict_,fileObject)   
         fileObject.close()
-        
-        
-    def gini(self, actual, pred, sample_weight):                                                 
-        df = sorted(zip(actual, pred), key=lambda x : (x[1], x[0]),  reverse=True)
-        random = [float(i+1)/float(len(df)) for i in range(len(df))]                
-        totalPos = np.sum([x[0] for x in df])           
-        cumPosFound = np.cumsum([x[0] for x in df])                                     
-        Lorentz = [float(x)/totalPos for x in cumPosFound]                          
-        Gini = np.array([l - r for l, r in zip(Lorentz, random)])
-        # mask Gini with weights
-        Gini[np.where(sample_weight == 0)[0]] = 0
-        return np.sum(Gini)    
-
-    def gini_normalized(self, actual, pred, sample_weight = None):              
-        normalized_gini = self.gini(actual, pred, sample_weight)/self.gini(actual, actual, sample_weight)      
-        return normalized_gini       
 
     def body_fn(self):
         raise NotImplementedError()
@@ -852,61 +825,54 @@ class VariationalPeakModel():
         
         assert(preds_mean.shape == sample_weight.shape)
         
-
         try:
-            # Mean results because sample_weight mask can only work on 1 row at a time.
-            # If a given assay is not available for evaluation, sample_weights will all be 0 
-            # and the resulting roc_auc_score will be NaN.
-            auROC_vec = []
-            auPRC_vec = []
-            GINI_vec =  []
-
-
+            
             # try/accept for cases with only one class (throws ValueError)
-            assay_dict = {}
+            assay_dict = get_performance(self.assaymap, preds_mean, truth_reset, sample_weight)
+            
+#             for j in range(preds.shape[1]): # for all assays
+#                 assay = inv_assaymap[j+1] 
 
-            for j in range(preds.shape[1]): # for all assays
-                assay = inv_assaymap[j+1] 
+#                 roc_score = np.NAN
 
-                roc_score = np.NAN
+#                 try:
+#                     roc_score = sklearn.metrics.roc_auc_score(truth_reset[:,j], preds_mean[:,j], 
+#                                                       average='macro', 
+#                                                       sample_weight = sample_weight[:,j])
 
-                try:
-                    roc_score = sklearn.metrics.roc_auc_score(truth_reset[:,j], preds_mean[:,j], 
-                                                      average='macro', 
-                                                      sample_weight = sample_weight[:,j])
+#                     auROC_vec.append(roc_score)
 
-                    auROC_vec.append(roc_score)
+#                 except ValueError:
+#                     roc_score = np.NaN
 
-                except ValueError:
-                    roc_score = np.NaN
+#                 try:
+#                     pr_score = sklearn.metrics.average_precision_score(truth_reset[:,j], preds_mean[:,j], 
+#                                                              sample_weight = sample_weight[:, j])
 
-                try:
-                    pr_score = sklearn.metrics.average_precision_score(truth_reset[:,j], preds_mean[:,j], 
-                                                             sample_weight = sample_weight[:, j])
+#                     auPRC_vec.append(pr_score)
 
-                    auPRC_vec.append(pr_score)
+#                 except ValueError:
+#                     pr_score = np.NaN
 
-                except ValueError:
-                    pr_score = np.NaN
+#                 try:
+#                     gini_score = self.gini_normalized(truth_reset[:,j], preds_mean[:,j], 
+#                                                       sample_weight = sample_weight[:, j])
 
-                try:
-                    gini_score = self.gini_normalized(truth_reset[:,j], preds_mean[:,j], 
-                                                      sample_weight = sample_weight[:, j])
+#                     GINI_vec.append(gini_score)
 
-                    GINI_vec.append(gini_score)
+#                 except ValueError:
+#                     gini_score = np.NaN
 
-                except ValueError:
-                    gini_score = np.NaN
+#                 assay_dict[assay] = {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
 
-                assay_dict[assay] = {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
-
-
-            auROC = np.nanmean(auROC_vec)
-            auPRC = np.nanmean(auPRC_vec)
+            # calculate averages
+            auROC = np.nanmean(list(map(lambda x: x['AUC'],assay_dict.values())))
+            auPRC = np.nanmean(list(map(lambda x: x['auPRC'],assay_dict.values())))
+            avgGINI = np.nanmean(list(map(lambda x: x['GINI'],assay_dict.values())))
 
             tf.compat.v1.logging.info("macro auROC:     " + str(auROC))
             tf.compat.v1.logging.info("auPRC:     " + str(auPRC))
-            tf.compat.v1.logging.info("GINI:     " + str(np.nanmean(GINI_vec)))
+            tf.compat.v1.logging.info("GINI:     " + str(avgGINI))
         except ValueError as v:
             auROC = None
             auPRC = None
@@ -922,32 +888,32 @@ class VariationalPeakModel():
             'auPRC': auPRC
         }
     
-        
-    def score_peak_file(self, peak_file):
+    def score_peak_file(self, chromatin_peak_file, regions_peak_file):
     
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
         # and their indices are stored in missing_idx for future use
-        peak_vector, all_peaks = bedFile2Vector(peak_file)
+        peak_vector_chromatin, all_peaks_chromatin = bedFile2Vector(chromatin_peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
+        peak_vector_regions, all_peaks_regions = bedFile2Vector(regions_peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
+        
         print("finished loading peak file")
 
         # only select peaks to score
-        idx = np.where(peak_vector == 1)[0]
+        idx = np.where(peak_vector_regions == True)[0]
         
         if len(idx) == 0:
-            raise ValueError("No positive peaks found in %s" % peak_file)
+            raise ValueError("No positive peaks found in %s" % regions_peak_file)
 
         all_data = np.concatenate((self.data[Dataset.TRAIN], self.data[Dataset.VALID], self.data[Dataset.TEST]), axis=1)
 
-        # takes about 1.5 minutes for 100,000 regions TODO AM 4/3/2019 speed up generator
-        predictions = self.eval_vector(all_data, peak_vector, idx)
-        print("finished predictions...", predictions.shape)
-
+        # TODO takes about 1.5 minutes for 100,000 regions
+        predictions = self.eval_vector(all_data, peak_vector_chromatin, idx)
+        print("finished predictions...", predictions[0].shape)
 
         # get number of factors to fill in if values are missing
         num_factors = predictions[0].shape[0]
 
         # map predictions with genomic position 
-        liRegions = load_allpos_regions()
+        liRegions = load_bed_regions(EPITOME_ALLTFS_BEDFILE + ".gz")
         prediction_positions = itemgetter(*idx)(liRegions)
         zipped = list(zip(prediction_positions, predictions))
 
@@ -965,7 +931,7 @@ class VariationalPeakModel():
             else:
                 return(peak[0], np.zeros(num_factors)) 
 
-        grouped = list(map(lambda x: np.matrix(reduceMeans(x)[1]), all_peaks))
+        grouped = list(map(lambda x: np.matrix(reduceMeans(x)[1]), all_peaks_regions))
 
         final = np.concatenate(grouped, axis=0)
 

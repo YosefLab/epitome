@@ -417,6 +417,8 @@ def bedFile2Vector(bed_file, allpos_bed_file):
     results = pool.map(bedtools_intersect, bed_files)
     
     bed_file_peaks = list(zip(results[1][0], results[1][1]))
+    pool.close()
+    pool.join()
     
     return (results[0][1], results[1])
 
