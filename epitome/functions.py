@@ -473,3 +473,75 @@ def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights =
     func_ = lambda x: np.arange(x - radius/2, x + radius/2)
     surrounding = np.unique(list(map(func_, choice)))
     return surrounding[(surrounding > 0) & (surrounding < data_count)].astype(int)
+
+
+##################### Functions for parsing allpos.bed file ################
+def range_for_contigs(all_regions_file):
+    """
+    Traverses through feature_name_file to get contig ranges.
+    """
+    with open(all_regions_file) as f:
+        
+        contigs = {}
+        this_contig = "placeholder"
+        this_range = [0,0]
+        for num, line in enumerate(f, 0):
+            contig = line.split("\t")[0]
+            
+            if (this_contig != contig):
+                # update last contig and save information
+                this_range[1] = num + 1
+                contigs[this_contig] = this_range
+                
+                # reset contig to new
+                this_contig = contig
+                this_range = [0,0]
+                this_range[0] = num + 1
+            else:
+                continue
+                
+        # add last contig
+        this_range[1] = num + 1
+        contigs[this_contig] = this_range
+        
+        del contigs["placeholder"]
+                
+        return contigs
+
+def calculate_epitome_regions(all_regions_file):
+    """
+    Gets line numbers for train/valid/test boundaries.
+    
+    :param all_pos_file: bed file containing a row for each genomic region.
+    Assumes that chr7,8,9 are all in a row (only true if sex chrs are removed).
+    """
+    
+    contig_ranges = range_for_contigs(all_regions_file)
+    
+    EPITOME_VALID_REGIONS = contig_ranges["chr7"]
+    # 227512 for test (chr8 and chr9) 
+    chr8_start = contig_ranges["chr8"][0]
+    chr9_end = contig_ranges["chr9"][1]
+    EPITOME_TEST_REGIONS  = [chr8_start, chr9_end] # chr 8 and 9
+
+    EPITOME_TRAIN_REGIONS = [[0,EPITOME_VALID_REGIONS[0]],
+                             [EPITOME_TEST_REGIONS[1],contig_ranges["chr21"][1]]]
+    
+    
+    return(EPITOME_TRAIN_REGIONS, EPITOME_VALID_REGIONS, EPITOME_TEST_REGIONS)
+
+
+def concatenate_all_data(data):
+    """
+    Puts data back in correct order to be indexed by the allpos file.
+    Numbers come from range_for_contigs(EPITOME_ALLTFS_BEDFILE)['chr6'] in functions.py. 
+    But the range_for_contigs takes a while, so we hardcode the numbers.
+    
+    Args:
+        :param data: data dictionary of train, valid and test
+    """
+    
+    return np.concatenate([data[Dataset.TRAIN][:,0:1327578], # chr 1-6
+                           data[Dataset.VALID], # chr7
+                           data[Dataset.TEST], # chr 8 and 9
+                           data[Dataset.TRAIN][:,1327578:]],axis=1) # all the rest of the chromosomes

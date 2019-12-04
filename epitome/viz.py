@@ -15,7 +15,8 @@ def joint_plot(dict_model1,
                metric = "AUC", 
                model1_name = "model1", 
                model2_name = "model2",
-               outlier_filter = None):
+               outlier_filter = None
+              ):
     """
     Returns seaborn joint plot of two models.
     
@@ -26,6 +27,8 @@ def joint_plot(dict_model1,
     :param model2_name: string for model 2 name, shown on y axis.
     :param outlier_filter: string filter to label. Defaults to no labels.
     """
+    sns.set(style="whitegrid", color_codes=True)
+    
     df1 = pd.DataFrame.from_dict(dict_model1).T
     df2 = pd.DataFrame.from_dict(dict_model2).T
 
@@ -33,8 +36,10 @@ def joint_plot(dict_model1,
     # select metric
     dataframe = dataframe_joined[metric]
     dataframe.columns=[model1_name, model2_name]
+    dataframe = dataframe.dropna()
 
-    ax = sns.jointplot(model1_name, model2_name, data=dataframe, kind="reg", color='k', stat_func=None)
+    ax = sns.jointplot(x=list(dataframe[model1_name]), y=list(dataframe[model2_name]), kind="reg", stat_func=None)
+    
     ax.ax_joint.cla()
     ax.set_axis_labels(model1_name, model2_name)
     ax.fig.suptitle(metric) 
@@ -58,6 +63,7 @@ def joint_plot(dict_model1,
         ax.ax_joint.plot(row[model1_name], row[model2_name], color=color, marker='o')
         
     return ax
+
 
 
 def plot_assay_heatmap(assaymap, matrix, cellmap):

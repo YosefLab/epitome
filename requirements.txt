@@ -10,5 +10,7 @@ pytabix==0.1
 numba # for closing gpu resources
 sphinx==2.1.1 # documentaiton
 sphinx_rtd_theme==0.4.3
+# do we need this? tensorflow==2.0.0b1  
 tfp-nightly==0.8.0.dev20190729 # need tensorflow-probability version that works with tf 2.0
+gast==0.2.2 # for tfp-nightly, which uses deprecated gast
 h5sparse==0.0.5

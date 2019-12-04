@@ -10,6 +10,7 @@ import epitome.iio as iio
 import glob
 
 ######################### Original Data Generator: Only peak based #####################
+np.random.seed(0) # to keep np.random.choice consistent
 
 def load_data(data, 
                  label_cell_types,  # used for labels. Should be all for train/eval and subset for test
@@ -56,7 +57,48 @@ def load_data(data,
     if (not isinstance(indices, np.ndarray) and not isinstance(indices, list)):
         # model performs better when there are less 0s
         if mode == Dataset.TRAIN:
-            indices = np.where(np.sum(data, axis=0) > 10)[0]
+            feature_indices = np.concatenate(list(map(lambda c: get_y_indices_for_cell(matrix, cellmap, c), 
+                                     list(cellmap))))
+            feature_indices = feature_indices[feature_indices != -1]
+
+            # need to re-proportion the indices to equalize positives
+            if (len(list(assaymap)) > 2):
+
+                # get sums for each feature in the dataset
+                rowsums = np.sum(data[feature_indices,:], axis=1) 
+
+                # multiply data by row scaling factor
+                scale_factor = 1/rowsums
+                scaled = data[feature_indices,:] * scale_factor[:, np.newaxis] 
+
+                # indices where sum > 0
+                indices_zero = np.where(np.sum(scaled, axis=0) > 0)[0]
+                # then filter indices by probabilities inversely proportional to frequency
+                indices = np.random.choice(indices_zero, int(indices_zero.shape[0] * 0.4), p=(np.sum(scaled, axis=0)/np.sum(scaled))[indices_zero])
+
+            else:
+                # single TF model
+                feature_indices = np.concatenate(list(map(lambda c: get_y_indices_for_cell(matrix, cellmap, c), 
+                                                     list(cellmap))))
+
+                # chop of DNase
+                TF_indices = feature_indices.reshape([len(cellmap),len(assaymap)])[:,1]
+                
+                TF_indices =  TF_indices[TF_indices != -1]
+                feature_indices = feature_indices[feature_indices != -1]
+
+                # sites where TF is in at least 1 cell line
+                positive_indices = np.where(np.sum(data[TF_indices,:], axis=0) > 1)[0]
+
+                indices_probs = np.ones([data.shape[1]])
+                indices_probs[positive_indices] = 0
+                indices_probs = indices_probs/np.sum(indices_probs, keepdims=1)
+
+                # randomly select 10 fold sites where TF is not in any cell line
+                negative_indices = np.random.choice(np.arange(0,data.shape[1]), positive_indices.shape[0] * 10,p=indices_probs)
+                indices = np.sort(np.concatenate([negative_indices, positive_indices]))
+
+                
         else:
             indices = range(0, data.shape[-1]) # if not defined, set to all points
     
@@ -91,7 +133,6 @@ def load_data(data,
         [eval_cell_types.remove(i[0]) for i in cell_assay_counts[0:len(label_cell_types)]]
         del tmp
         del cell_assay_counts
-        
         
     def g():
         for i in indices: # for all records specified

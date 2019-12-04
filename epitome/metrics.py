@@ -4,6 +4,7 @@
 
 import sklearn.metrics
 import numpy as np
+import tensorflow as tf
 
 # disable sklearn warnings when training
 import warnings
@@ -12,16 +13,16 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 def gini(actual, pred, sample_weight):                                                 
     # sort by preds
-    df = np.vstack([actual,pred])
-    df = df[:,(-pred).argsort()]
-    random = ( np.arange(df.shape[1]) + 1 )/ float(df.shape[1])    
+    df = tf.stack([actual,pred], axis = 0)
+    df = tf.gather(df, tf.argsort(pred, direction='DESCENDING'), axis=1)
+    linsp = tf.divide(tf.range(1,df.shape[1]+1), df.shape[1])
+    linsp = tf.cast(linsp, tf.float32)
     # sum of actual
-    totalPos = np.sum(actual)     
-    cumPosFound = np.cumsum(df[0])       
-    Lorentz = cumPosFound / totalPos
-    Gini = Lorentz - random
-    Gini[np.where(sample_weight == 0)[0]] = 0
-    return np.sum(Gini)    
+    totalPos = tf.math.reduce_sum(actual)     
+    cumPosFound = tf.math.cumsum(df[0])       
+    Lorentz = tf.divide(cumPosFound,totalPos)
+    Gini = Lorentz - linsp
+    return tf.reduce_sum(tf.boolean_mask(Gini, sample_weight)).numpy()
 
 def gini_normalized(actual, pred, sample_weight = None):              
     normalized_gini = gini(actual, pred, sample_weight)/gini(actual, actual, sample_weight)      
