@@ -420,9 +420,9 @@ def save_epitome_numpy_data(download_dir, output_path):
         # save files
         print("saving sparse train.npz, valid.npz and test.npyz to %s" % output_path)
 
-        scipy.sparse.save_npz(train_output_np, scipy.sparse.csc_matrix(train_data))
-        scipy.sparse.save_npz(valid_output_np, scipy.sparse.csc_matrix(valid_data))
-        scipy.sparse.save_npz(test_output_np, scipy.sparse.csc_matrix(test_data))
+        scipy.sparse.save_npz(train_output_np, scipy.sparse.csc_matrix(train_data,dtype=np.int8))
+        scipy.sparse.save_npz(valid_output_np, scipy.sparse.csc_matrix(valid_data, dtype=np.int8))
+        scipy.sparse.save_npz(test_output_np, scipy.sparse.csc_matrix(test_data, dtype=np.int8))
         
         # To load back in sparse matrices, use:
         # > sparse_matrix = scipy.sparse.load_npz(train_output_np)
