@@ -1,16 +1,14 @@
 numpy
-# pypandoc==1.4 TODO used in setup.py, requires different urlib3 than tf
+pyyaml
+pypandoc==1.4 # TODO used in setup.py, requires different urlib3 than tf
 seaborn==0.9.0
 matplotlib==3.0.0
 sklearn
-kipoi>=0.6.9
-kipoiseq
-# torch idk if we really need this
 pytabix==0.1
-numba # for closing gpu resources
-sphinx==2.1.1 # documentaiton
+sphinx==2.1.1 # documentation
 sphinx_rtd_theme==0.4.3
-# do we need this? tensorflow==2.0.0b1  
+tensorflow==2.0.0b1  
 tfp-nightly==0.8.0.dev20190729 # need tensorflow-probability version that works with tf 2.0
-gast==0.2.2 # for tfp-nightly, which uses deprecated gast
+# TODO RM: gast==0.2.2 # for tfp-nightly, which uses deprecated gast
+tqdm
 h5sparse==0.0.5

@@ -2,7 +2,7 @@
 
 # ## Download DNase from ENCODE
 # 
-# This script uses files.txt and ENCODE metadata to download DNAse for hg38 for specific cell types.
+# This script uses files.txt and ENCODE metadata to download DNAse for hg19 for specific cell types.
 # Because ENCODE does not have hg19 data for ATAC-seq, we have to re-align it from scratch.
 
 
@@ -21,7 +21,8 @@ import h5py
 from itertools import islice
 import scipy.sparse
 from epitome.functions import *
-
+import sys
+import shutil
 # number of threads
 threads = multiprocessing.cpu_count()
 print("%i threads available for processing" % threads)
@@ -71,21 +72,44 @@ parser = argparse.ArgumentParser(description='Downloads ENCODE data from a metad
 
 parser.add_argument('download_path', help='Temporary path to download bed/bigbed files to.', type=str)
 parser.add_argument('assembly', help='assembly to filter files in metadata.tsv file by.', choices=['hg19','mm10','GRCh38'], type=str)
+
+
+
 parser.add_argument('bigBedToBed', help='Path to bigBedToBed executable, downloaded from http://hgdownload.cse.ucsc.edu/admin/exe/', type=str) 
+
 parser.add_argument('output_path', help='path to save file data to', type=str)
+
+parser.add_argument('--metadata_url',type=str, default="http://www.encodeproject.org/metadata/type%3DExperiment%26assay_title%3DTF%2BChIP-seq%26assay_title%3DHistone%2BChIP-seq%26assay_title%3DDNase-seq%26assay_title%3DATAC-seq%26assembly%3Dhg19%26files.file_type%3DbigBed%2BnarrowPeak/metadata.tsv",
+                    help='ENCODE metadata URL.')
+
+parser.add_argument('--min_chip_per_cell', help='Minimum ChIP-seq experiments for each cell type.', type=int, default=10)
+parser.add_argument('--regions_file', help='File to read regions from', type=str, default=None)
+
 
 download_path = parser.parse_args().download_path
 assembly = parser.parse_args().assembly
 bigBedToBed = parser.parse_args().bigBedToBed
 output_path = parser.parse_args().output_path
+metadata_path = parser.parse_args().metadata_url
+min_chip_per_cell = parser.parse_args().min_chip_per_cell
+all_regions_file = parser.parse_args().regions_file
 
-# path to save regions to. must be defined before loj_overlap function
-all_regions_file = os.path.join(output_path,"all.pos.bed")
 
 
-# download metadata if it does not exist for this assembly
-metadata_path = "http://v88x0-test-master.instance.encodedcc.org/metadata/type%%3DExperiment%%26assay_title%%3DTF%%2BChIP-seq%%26assay_title%%3DHistone%%2BChIP-seq%%26assay_title%%3DDNase-seq%%26assay_title%%3DATAC-seq%%26assembly%%3D%s%%26files.file_type%%3DbigBed%%2BnarrowPeak/metadata.tsv" % assembly
-
+# make paths if they do not exist
+if not os.path.exists(download_path):
+    os.makedirs(download_path)
+if not os.path.exists(output_path):
+    os.makedirs(output_path)
+    
+if all_regions_file is None:
+    # path to save regions to. must be defined before loj_overlap function
+    all_regions_file = os.path.join(output_path,"all.pos.bed")
+else: 
+    # copy all regions file to output path if not already there
+    if os.path.normpath(os.path.dirname(all_regions_file)) != os.path.normpath(output_path):
+        shutil.copyfile(all_regions_file, os.path.join(output_path, "all.pos.bed"))
+    
 
 # download metadata for this assembly if it does not exist
 metadata_file = os.path.join(download_path, 'metadata_%s.tsv' % assembly)
@@ -99,34 +123,41 @@ files = pd.read_csv(metadata_file, sep="\t")
 ######### get all files that are peak files for histone marks or TF ChiP-seq #################
 ##############################################################################################
 
-filtered_files = files[(files["Biosample type"] == "cell line") & 
-                  (files["Assembly"] == assembly) & 
-                  (files["Biosample genetic modifications targets"].isnull())] # or conservative idr thresholded peaks?
+filtered_files = files[(files["Assembly"] == assembly) & 
+                  (files["Biosample genetic modifications targets"].isnull()) & 
+                  (files["Audit ERROR"].isnull()) &
+                  (files["Biosample treatments"].isnull())]
 
-# TODO: make sure no treatment!
-# get unique dnase experiements
+
+# get unique dnase experiments
 dnase_files = filtered_files[((filtered_files["Output type"] == "peaks") & (filtered_files["Assay"] == "DNase-seq"))]
-dnase_files.drop_duplicates(subset=["Biosample term name"] , keep='first', inplace=True)
+# chose DNase files without errors, if possible
+dnase_files = dnase_files.sort_values(by=['Audit WARNING','Audit NOT_COMPLIANT'])
+filtered_dnase = dnase_files.drop_duplicates(subset=["Biosample term name"] , keep='last')
 
-chip_files = filtered_files[((filtered_files["Output type"] == "optimal idr thresholded peaks") & (filtered_files["Assay"] == "ChIP-seq"))] # or conservative idr thresholded peaks?
-
+chip_files = filtered_files[(((filtered_files["Output type"] == "replicated peaks") | (filtered_files["Output type"] == "optimal IDR thresholded peaks"))
+                             & (filtered_files["Assay"] == "ChIP-seq"))] # or conservative idr thresholded peaks?
 
 # only want ChIP-seq from cell lines that have DNase
-filtered_chip = chip_files[(chip_files["Biosample term name"].isin(dnase_files["Biosample term name"]))]
+filtered_chip = chip_files[(chip_files["Biosample term name"].isin(filtered_dnase["Biosample term name"]))]
+# select first assay without audit warning
+filtered_chip = filtered_chip.sort_values(by=['Audit WARNING','Audit NOT_COMPLIANT'])
+filtered_chip = filtered_chip.drop_duplicates(subset=["Biosample term name","Experiment target"] , keep='last')
 
-# only want cells that have more than 10 epigenetic marks
-filtered_chip = filtered_chip.groupby("Biosample term name").filter(lambda x: len(x) > 10)
-
-# only want assays that are shared between more than 2 cells
+# only want assays that are shared between more than 3 cells
 filtered_chip = filtered_chip.groupby("Experiment target").filter(lambda x: len(x) > 2)
 
-# only want DNase from cell lines that have Chip-seq
-filtered_dnase = dnase_files[(dnase_files["Biosample term name"].isin(filtered_chip["Biosample term name"]))]
+# only want cells that have more than min_chip_per_cell epigenetic marks
+filtered_chip = filtered_chip.groupby("Biosample term name").filter(lambda x: len(x) >= min_chip_per_cell)
+
+# only filter if use requires at least one chip experiment for a cell type.
+if min_chip_per_cell > 0:
+    # only want DNase that has chip.
+    filtered_dnase = filtered_dnase[(filtered_dnase["Biosample term name"].isin(filtered_chip["Biosample term name"]))]
 
 # combine dataframes
 filtered_files = filtered_dnase.append(filtered_chip)
 print("Processing %i files..." % len(filtered_files))
-
 
 ##############################################################################################
 ##################################### download all files #####################################
@@ -135,30 +166,45 @@ print("Processing %i files..." % len(filtered_files))
 def download_url(f):
     path = f["File download URL"]
     ext = path.split(".")[-1]
+    if (ext == "gz" and path.split(".")[-2]  == 'bed'):
+        ext = "bed.gz"
+
     id = f["File accession"]
     # file name == accession__target-species__cellline.bigbed
     target = f["Assay"] if str(f["Experiment target"]) == "nan" else f["Experiment target"]
     if (target == "DNase-seq"):
         target = "DNase" # strip for consistency
         
-    base_file = os.path.join(download_path, "%s_%s_%s" % (id, target, f["Biosample term name"]))
+    base_file = os.path.join(download_path, "%s_%s_%s" % (id, target, f["Biosample term name"].replace('/','-'))) # issue with filename
+    base_file = base_file.replace(' ','-') # remove spaces
+    base_file = base_file.replace(',','') # remove commas
+    
+    
     outname_bb = "%s.%s" % (base_file, ext)
     outname_bed = "%s.%s" % (base_file, "bed")
     
     # make sure file does not exist before downloading
     if not os.path.exists(outname_bed):
-        # TODO python 3
-        # urllib.request.urlretrieve(path, filename=outname_bb)
-        # python 2
-        urllib.urlretrieve(path, filename=outname_bb)
-        subprocess.check_call([bigBedToBed, outname_bb, outname_bed])
+
+        # download if not yet downloaded
+        if not os.path.exists(outname_bb):
+            if sys.version_info[0] < 3:
+                # python 2
+                urllib.urlretrieve(path, filename=outname_bb)
+            else:
+                # python 3
+                urllib.request.urlretrieve(path, filename=outname_bb)
+
+        if (ext == "bed.gz"):
+            subprocess.check_call(["gunzip","-f",outname_bb])
+        elif (ext == "bigBed"):
+            subprocess.check_call([bigBedToBed, outname_bb, outname_bed])
+            os.remove(outname_bb)
     
 # download all files
 rows = list(map(lambda x: x[1], filtered_files.iterrows()))
 pool = multiprocessing.Pool(processes=threads)
 pool.map(download_url, rows)
-
-print("Completed download")
 
 ##############################################################################################
 ############################# window chromsizes into 200bp ###################################
@@ -188,7 +234,7 @@ if not os.path.exists(all_regions_file):
 if not os.path.exists(all_regions_file + ".gz"):
     
     stdout = open(all_regions_file + ".gz","wb")
-    subprocess.call(["bgzip", "--index", "-c", all_regions_file],stdout=stdout)
+    subprocess.call(["/data/yosef/users/akmorrow/miniconda3/bin/bgzip", "--index", "-c", all_regions_file],stdout=stdout)
     stdout.close()
 
 
@@ -200,11 +246,14 @@ print("Completed windowing genome with %i regions" % nregions)
 ################################# save all files to matrix ###################################
 ##############################################################################################
 
-# read in already written features
+# read in already written features if they exist
 feature_name_file = os.path.join(output_path,"feature_name")
-with open(feature_name_file) as f:
-    written_features = f.readlines()
-written_features = [x.strip() for x in written_features] 
+if os.path.exists(feature_name_file):
+    with open(feature_name_file) as f:
+        written_features = f.readlines()
+    written_features = [x.strip() for x in written_features] 
+else:
+    written_features = []
 
 # open feature file and write first row
 feature_name_handle = open(feature_name_file, 'a+')
@@ -252,7 +301,11 @@ for b in chunk(enumerate(bed_files), threads):
             
 
     print("writing into matrix at positions %i:%i" % (indices[0], indices[-1]+1))
-    matrix[indices[0]:indices[-1]+1,:] = np.reshape(pool.map(loj_overlap, files), [len(files),-1])
+    
+    # Should not parallelize bedtools. Gives non-deterministic results.
+    for j, file in enumerate(files):
+        matrix[indices[j],:] = loj_overlap(file)
+        print("writing file %s to index %i. Sum = %i" % (file, indices[j], np.sum(matrix[indices[j],:])))
     
     for feature_name in feature_names:
         
@@ -273,19 +326,18 @@ print("Done saving data")
 # > tmp = h5py.File(os.path.join(download, 'train.h5'), "r")
 # > tmp['data']
 
+
+
 ######################################################################################
 ###################### LOAD DATA BACK IN AND SAVE AS NUMPY ###########################
 ######################################################################################
 
-
-
-
-def save_epitome_numpy_data(data_dir, output_path):
+def save_epitome_numpy_data(download_dir, output_path):
     """
     Saves epitome labels as numpy arrays, filtering out training data for 0 vectors.
     
     Args:
-        :param data_dir: Directory containing train.h5, all.pos.bed file and feature_name file.
+        :param download_dir: Directory containing train.h5, all.pos.bed file and feature_name file.
         :param output_path: new output path. saves as numpy files.
 
     """
@@ -294,13 +346,13 @@ def save_epitome_numpy_data(data_dir, output_path):
     new_regions_file = os.path.join(output_path, name)
     matrix_path = os.path.join(output_path, 'train.h5')
     
-    if not os.path.exists(new_regions_file) and not os.path.exists(matrix_path):
+    if not os.path.exists(new_regions_file) or not os.path.exists(matrix_path):
         
         if not os.path.exists(output_path):
             os.mkdir(output_path)
             print("%s Created " % output_path)
 
-        h5_path = os.path.join(data_dir, "train.h5")
+        h5_path = os.path.join(download_dir, "train.h5")
         h5_data = h5py.File(h5_path, "r")['data']
         print("loaded data..")
 
@@ -340,7 +392,7 @@ def save_epitome_numpy_data(data_dir, output_path):
         matrix[:,:] = nonzero_data
         print("done saving matrix")
         
-        h5_data.close()
+        h5_file.close()
         
         
     train_output_np = os.path.join(output_path, "train.npz")
@@ -348,7 +400,6 @@ def save_epitome_numpy_data(data_dir, output_path):
     test_output_np = os.path.join(output_path, "test.npz")
     
     if not os.path.exists(test_output_np):
-        
         h5_file = h5py.File(matrix_path, "r")
         h5_data = h5_file['data']
     
@@ -368,7 +419,7 @@ def save_epitome_numpy_data(data_dir, output_path):
 
         # save files
         print("saving sparse train.npz, valid.npz and test.npyz to %s" % output_path)
-    
+
         scipy.sparse.save_npz(train_output_np, scipy.sparse.csc_matrix(train_data))
         scipy.sparse.save_npz(valid_output_np, scipy.sparse.csc_matrix(valid_data))
         scipy.sparse.save_npz(test_output_np, scipy.sparse.csc_matrix(test_data))
@@ -386,3 +437,8 @@ def save_epitome_numpy_data(data_dir, output_path):
     
 # finally, save outputs
 save_epitome_numpy_data(download_path, output_path)
+
+if not os.path.exists(all_regions_file + ".gz"):
+    stdout = open(all_regions_file + ".gz","wb")
+    subprocess.call(["/data/yosef/users/akmorrow/miniconda3/bin/bgzip", "--index", "-c", all_regions_file],stdout=stdout)
+    stdout.close()

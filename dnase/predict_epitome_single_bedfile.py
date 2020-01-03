@@ -15,7 +15,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sklearn.metrics
 import os
-import pybedtools
 import torch
 import h5sparse
 import datetime

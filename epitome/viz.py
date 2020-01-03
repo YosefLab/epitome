@@ -66,7 +66,7 @@ def joint_plot(dict_model1,
 
 
 
-def plot_assay_heatmap(assaymap, matrix, cellmap):
+def plot_assay_heatmap(matrix, cellmap, assaymap):
     nv_assaymap = {v: k for k, v in assaymap.items()}
 
     fig = plt.figure(figsize = (20,10))

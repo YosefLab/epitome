@@ -97,7 +97,8 @@ class PeakModel():
                                                 matrix,
                                                 assaymap,
                                                 cellmap,
-                                                radii = radii, mode = Dataset.TRAIN),
+                                                radii = radii, 
+                                                mode = Dataset.TRAIN),
                                                 batch_size, shuffle_size, prefetch_size)
 
         _,            self.valid_iter = generator_to_tf_dataset(load_data(valid_data, 
@@ -106,7 +107,8 @@ class PeakModel():
                                                 matrix,
                                                 assaymap,
                                                 cellmap,
-                                                radii = radii, mode = Dataset.VALID), 
+                                                radii = radii, 
+                                                mode = Dataset.VALID), 
                                                 batch_size, 1, prefetch_size)
 
         # can be empty if len(test_celltypes) == 0
@@ -116,7 +118,8 @@ class PeakModel():
                                                matrix,
                                                assaymap,
                                                cellmap,
-                                               radii = radii, mode = Dataset.TEST),
+                                               radii = radii,
+                                               mode = Dataset.TEST),
                                                batch_size, 1, prefetch_size)
 
         self.num_outputs = self.output_shape[0]
@@ -842,14 +845,15 @@ class VariationalPeakModel():
         # and their indices are stored in missing_idx for future use
         peak_vector_chromatin, _ = bedFile2Vector(chromatin_peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
 
-        liRegions = load_bed_regions(EPITOME_ALLTFS_BEDFILE + ".gz")
+        liRegions = enumerate(load_bed_regions(EPITOME_ALLTFS_BEDFILE + ".gz"))
         
-        # TODO filter liRegions by chrs
+        # filter liRegions by chrs
         if chrs is not None:
-            liRegions = [i for i in liRegions if i.chrom in chrs]
+            liRegions = [i for i in liRegions if i[1].chrom in chrs]
 
-        # only select peaks to score
-        idx = np.arange(len(liRegions))
+        # get indices to score
+        idx = np.array([i[0] for i in liRegions])
+        liRegions = [i[1] for i in liRegions]
 
         print("scoring %i regions" % idx.shape[0])
 
