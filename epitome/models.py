@@ -1,14 +1,13 @@
 """
 Functions and classes for model specifications.
 """
-
-import sklearn.metrics
-
+# import sklearn.metrics
 
 import tensorflow as tf
 from .constants import *
 from .functions import *
 from .generators import *
+from .metrics import *
 import numpy as np
 
 import tqdm 
@@ -18,9 +17,9 @@ import tensorflow_probability as tfp
 import pickle
 from operator import itemgetter
 
-# disable sklearn warnings when training
-import warnings
-warnings.filterwarnings("ignore", category=sklearn.exceptions.UndefinedMetricWarning)
+# # disable sklearn warnings when training
+# import warnings
+# warnings.filterwarnings("ignore", category=sklearn.exceptions.UndefinedMetricWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 ################### Simple DNase peak based distance model ############
@@ -98,7 +97,8 @@ class PeakModel():
                                                 matrix,
                                                 assaymap,
                                                 cellmap,
-                                                radii = radii, mode = Dataset.TRAIN),
+                                                radii = radii, 
+                                                mode = Dataset.TRAIN),
                                                 batch_size, shuffle_size, prefetch_size)
 
         _,            self.valid_iter = generator_to_tf_dataset(load_data(valid_data, 
@@ -107,7 +107,8 @@ class PeakModel():
                                                 matrix,
                                                 assaymap,
                                                 cellmap,
-                                                radii = radii, mode = Dataset.VALID), 
+                                                radii = radii, 
+                                                mode = Dataset.VALID), 
                                                 batch_size, 1, prefetch_size)
 
         # can be empty if len(test_celltypes) == 0
@@ -117,7 +118,8 @@ class PeakModel():
                                                matrix,
                                                assaymap,
                                                cellmap,
-                                               radii = radii, mode = Dataset.TEST),
+                                               radii = radii,
+                                               mode = Dataset.TEST),
                                                batch_size, 1, prefetch_size)
 
         self.num_outputs = self.output_shape[0]
@@ -164,21 +166,6 @@ class PeakModel():
         fileObject.close()
         
         
-    def gini(self, actual, pred, sample_weight):                                                 
-        df = sorted(zip(actual, pred), key=lambda x : (x[1], x[0]),  reverse=True)
-        random = [float(i+1)/float(len(df)) for i in range(len(df))]                
-        totalPos = np.sum([x[0] for x in df])           
-        cumPosFound = np.cumsum([x[0] for x in df])                                     
-        Lorentz = [float(x)/totalPos for x in cumPosFound]                          
-        Gini = np.array([l - r for l, r in zip(Lorentz, random)])
-        # mask Gini with weights
-        Gini[np.where(sample_weight == 0)[0]] = 0
-        return np.sum(Gini)    
-
-    def gini_normalized(self, actual, pred, sample_weight = None):              
-        normalized_gini = self.gini(actual, pred, sample_weight)/self.gini(actual, actual, sample_weight)      
-        return normalized_gini       
-
     def body_fn(self):
         raise NotImplementedError()
         
@@ -340,52 +327,17 @@ class PeakModel():
             auPRC_vec = []
             GINI_vec =  []
 
-
             # try/accept for cases with only one class (throws ValueError)
-            assay_dict = {}
-
-            for j in range(preds.shape[1]): # for all assays
-                assay = inv_assaymap[j+1] 
-
-                roc_score = np.NAN
-
-                try:
-                    roc_score = sklearn.metrics.roc_auc_score(truth[:,j], preds[:,j], 
-                                                      average='macro', 
-                                                      sample_weight = sample_weight[:,j])
-
-                    auROC_vec.append(roc_score)
-
-                except ValueError:
-                    roc_score = np.NaN
-
-                try:
-                    pr_score = sklearn.metrics.average_precision_score(truth[:,j], preds[:,j], 
-                                                             sample_weight = sample_weight[:, j])
-
-                    auPRC_vec.append(pr_score)
-
-                except ValueError:
-                    pr_score = np.NaN
-
-                try:
-                    gini_score = self.gini_normalized(truth[:,j], preds[:,j], 
-                                                      sample_weight = sample_weight[:, j])
-
-                    GINI_vec.append(gini_score)
-
-                except ValueError:
-                    gini_score = np.NaN
-
-                assay_dict[assay] = {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
-
-
-            auROC = np.nanmean(auROC_vec)
-            auPRC = np.nanmean(auPRC_vec)
+            assay_dict = get_performance(self.assaymap, preds, truth, sample_weight)
+            
+            # calculate averages
+            auROC = np.nanmean(list(map(lambda x: x['AUC'],assay_dict.values())))
+            auPRC = np.nanmean(list(map(lambda x: x['auPRC'],assay_dict.values())))
+            avgGINI = np.nanmean(list(map(lambda x: x['GINI'],assay_dict.values())))
 
             tf.compat.v1.logging.info("macro auROC:     " + str(auROC))
             tf.compat.v1.logging.info("auPRC:     " + str(auPRC))
-            tf.compat.v1.logging.info("GINI:     " + str(np.nanmean(GINI_vec)))
+            tf.compat.v1.logging.info("GINI:     " + str(avgGINI))
         except ValueError as v:
             auROC = None
             auPRC = None
@@ -401,7 +353,7 @@ class PeakModel():
         }
 
         
-    def score_peak_file(self, peak_file):
+    def score_peak_file(self, atac_peak_file):
     
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
         # and their indices are stored in missing_idx for future use
@@ -414,7 +366,7 @@ class PeakModel():
         if len(idx) == 0:
             raise ValueError("No positive peaks found in %s" % peak_file)
 
-        all_data = np.concatenate((self.data[Dataset.TRAIN], self.data[Dataset.VALID], self.data[Dataset.TEST]), axis=1)
+        all_data = concatenate_all_data(data)
 
 
         # takes about 1.5 minutes for 100,000 regions TODO AM 4/3/2019 speed up generator
@@ -509,6 +461,8 @@ class MLP(PeakModel):
 #######################################################################
 #################### Variational Peak Model ###########################
 #######################################################################
+
+
 
 class VariationalPeakModel():
     def __init__(self,
@@ -648,22 +602,6 @@ class VariationalPeakModel():
         fileObject = open(os.path.join(checkpoint_path, "model_params.pickle"),'wb')
         pickle.dump(dict_,fileObject)   
         fileObject.close()
-        
-        
-    def gini(self, actual, pred, sample_weight):                                                 
-        df = sorted(zip(actual, pred), key=lambda x : (x[1], x[0]),  reverse=True)
-        random = [float(i+1)/float(len(df)) for i in range(len(df))]                
-        totalPos = np.sum([x[0] for x in df])           
-        cumPosFound = np.cumsum([x[0] for x in df])                                     
-        Lorentz = [float(x)/totalPos for x in cumPosFound]                          
-        Gini = np.array([l - r for l, r in zip(Lorentz, random)])
-        # mask Gini with weights
-        Gini[np.where(sample_weight == 0)[0]] = 0
-        return np.sum(Gini)    
-
-    def gini_normalized(self, actual, pred, sample_weight = None):              
-        normalized_gini = self.gini(actual, pred, sample_weight)/self.gini(actual, actual, sample_weight)      
-        return normalized_gini       
 
     def body_fn(self):
         raise NotImplementedError()
@@ -713,7 +651,7 @@ class VariationalPeakModel():
         for step, (inputs, labels, weights) in enumerate(self.train_iter.take(num_steps)): 
 
             loss = train_step(inputs, labels, weights)
-
+            
             if step % 1000 == 0:
                 
                 tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) + 
@@ -799,32 +737,40 @@ class VariationalPeakModel():
         batches = int(num_samples / self.batch_size)+1
         
         # empty arrays for concatenation
-        truth = np.empty((0,self.num_outputs))
-        preds_mean = np.empty((0,self.num_outputs))
-        preds_std = np.empty((0,self.num_outputs))
-        sample_weight = np.empty((0,self.num_outputs))
-        
-        for inputs_b, truth_b, weights_b in tqdm.tqdm(iter_.take(batches)): 
-            
+        truth = []
+        preds_mean = []
+        preds_std = []
+        sample_weight = []
+
+        @tf.function
+        def predict_step(inputs_b):
+            # sample n times by tiling batch by rows, running 
+            # predictions for each row
+            inputs_tiled = tf.tile(inputs_b, (samples, 1, 1))
+            y_pred = tf.sigmoid(self.model(inputs_tiled))[:,Features.FEATURE_IDX.value,:]
+            # split up batches into a third dimension and stack them in third dimension
+            preds = tf.stack(tf.split(y_pred, samples, axis=0), axis=0)
+            return tf.math.reduce_mean(preds, axis=0), tf.math.reduce_std(preds, axis=0)
+
+        for inputs_b, truth_b, weights_b in tqdm.tqdm(iter_.take(batches)):
+
             # Calculate epistemic uncertainty for batch by iterating over a certain number of times,
             # getting y_preds. You can then calculate the mean and sigma of the predictions, 
             # and use this to gather uncertainty: (see http://krasserm.github.io/2019/03/14/bayesian-neural-networks/)
             # inputs, truth, sample_weight
-            y_pred_list = []
+            preds_mean_b, preds_std_b = predict_step(inputs_b)
 
-            # sample n times by tiling batch by rows, running 
-            # predictions for each row
-            inputs_tiled = np.tile(inputs_b, (samples, 1, 1))
-            y_pred = tf.sigmoid(self.model(inputs_tiled))[:,Features.FEATURE_IDX.value,:]
-            # split up batches into a third dimension and stack them in third dimension
-            preds = np.stack(np.split(y_pred, samples, axis=0), axis=2)
- 
-            preds_mean = np.vstack([preds_mean, np.mean(preds, axis=2)])
-            preds_std = np.vstack([preds_std, np.std(preds, axis=2)])
-                    
-            truth = np.vstack([truth, truth_b])    
-            sample_weight = np.vstack([sample_weight, weights_b])
-        
+            preds_mean.append(preds_mean_b)
+            preds_std.append(preds_std_b)
+            truth.append(truth_b)
+            sample_weight.append(weights_b)
+
+        # concat all results
+        preds_mean = tf.concat(preds_mean, axis=0)
+        preds_std = tf.concat(preds_std, axis=0)
+
+        truth = tf.concat(truth, axis=0)    
+        sample_weight = tf.concat(sample_weight, axis=0)
         
         # trim off extra from last batch
         truth = truth[:num_samples, :]
@@ -849,64 +795,21 @@ class VariationalPeakModel():
                 'auPRC': None
             }
         
-        
         assert(preds_mean.shape == sample_weight.shape)
         
-
         try:
-            # Mean results because sample_weight mask can only work on 1 row at a time.
-            # If a given assay is not available for evaluation, sample_weights will all be 0 
-            # and the resulting roc_auc_score will be NaN.
-            auROC_vec = []
-            auPRC_vec = []
-            GINI_vec =  []
-
-
+            
             # try/accept for cases with only one class (throws ValueError)
-            assay_dict = {}
+            assay_dict = get_performance(self.assaymap, preds_mean, truth_reset, sample_weight)
 
-            for j in range(preds.shape[1]): # for all assays
-                assay = inv_assaymap[j+1] 
-
-                roc_score = np.NAN
-
-                try:
-                    roc_score = sklearn.metrics.roc_auc_score(truth_reset[:,j], preds_mean[:,j], 
-                                                      average='macro', 
-                                                      sample_weight = sample_weight[:,j])
-
-                    auROC_vec.append(roc_score)
-
-                except ValueError:
-                    roc_score = np.NaN
-
-                try:
-                    pr_score = sklearn.metrics.average_precision_score(truth_reset[:,j], preds_mean[:,j], 
-                                                             sample_weight = sample_weight[:, j])
-
-                    auPRC_vec.append(pr_score)
-
-                except ValueError:
-                    pr_score = np.NaN
-
-                try:
-                    gini_score = self.gini_normalized(truth_reset[:,j], preds_mean[:,j], 
-                                                      sample_weight = sample_weight[:, j])
-
-                    GINI_vec.append(gini_score)
-
-                except ValueError:
-                    gini_score = np.NaN
-
-                assay_dict[assay] = {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
-
-
-            auROC = np.nanmean(auROC_vec)
-            auPRC = np.nanmean(auPRC_vec)
+            # calculate averages
+            auROC = np.nanmean(list(map(lambda x: x['AUC'],assay_dict.values())))
+            auPRC = np.nanmean(list(map(lambda x: x['auPRC'],assay_dict.values())))
+            avgGINI = np.nanmean(list(map(lambda x: x['GINI'],assay_dict.values())))
 
             tf.compat.v1.logging.info("macro auROC:     " + str(auROC))
             tf.compat.v1.logging.info("auPRC:     " + str(auPRC))
-            tf.compat.v1.logging.info("GINI:     " + str(np.nanmean(GINI_vec)))
+            tf.compat.v1.logging.info("GINI:     " + str(avgGINI))
         except ValueError as v:
             auROC = None
             auPRC = None
@@ -922,62 +825,138 @@ class VariationalPeakModel():
             'auPRC': auPRC
         }
     
-        
-    def score_peak_file(self, peak_file):
-    
+    def score_whole_genome(self, chromatin_peak_file, 
+                       file_prefix,
+                       chrs=None,
+                       all_data = None):
+        """
+        Runs a whole genome scan for all available genomic regions in the dataset (about 3.2Million regions)
+        Takes about 1 hour.
+
+        Args:
+            :param chromatin_peak_file: narrowpeak or bed file containing chromatin accessibility to score
+            :param file_prefix: path to save compressed numpy file to. Adds '.npz' extension.
+            :param chroms: list of chromosome names to score. If none, scores all chromosomes.
+            :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
+
+        """
+
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
         # and their indices are stored in missing_idx for future use
-        peak_vector, all_peaks = bedFile2Vector(peak_file)
-        print("finished loading peak file")
+        peak_vector_chromatin, _ = bedFile2Vector(chromatin_peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
+
+        liRegions = enumerate(load_bed_regions(EPITOME_ALLTFS_BEDFILE + ".gz"))
+        
+        # filter liRegions by chrs
+        if chrs is not None:
+            liRegions = [i for i in liRegions if i[1].chrom in chrs]
+
+        # get indices to score
+        idx = np.array([i[0] for i in liRegions])
+        liRegions = [i[1] for i in liRegions]
+
+        print("scoring %i regions" % idx.shape[0])
+
+        if all_data is None:
+            all_data = concatenate_all_data(self.data)
+
+        # tuple of means and stds
+        predictions = self.eval_vector(all_data, peak_vector_chromatin, idx) 
+        print("finished predictions...", predictions[0].shape)
+
+        # zip together means and stdevs for each position in idx
+
+        # return matrix of region, TF information
+        npRegions = np.array(list(map(lambda x: np.array([x.chrom, x.start, x.end]),liRegions)))
+        # TODO turn into right types (all strings right now)
+        means = np.concatenate([npRegions, predictions[0]], axis=1)
+        stds = np.concatenate([npRegions, predictions[1]], axis=1)
+
+        # can load back in using:
+        # > loaded = np.load('file_prefix.npz')
+        # > loaded['means'], loaded['stds']
+        np.savez_compressed(file_prefix, means = means, stds=stds, 
+                            names=np.array(['chr','start','end'] + list(self.assaymap)[1:])) 
+
+        print("columns for matrices are chr, start, end, %s" % ", ".join(list(self.assaymap)[1:])) 
+    
+    def score_peak_file(self, 
+                        chromatin_peak_file, 
+                        regions_peak_file, 
+                        peak_vector_regions = None,
+                        all_peaks_regions = None,
+                        all_data = None):
+
+        # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
+        # and their indices are stored in missing_idx for future use
+        peak_vector_chromatin, _ = bedFile2Vector(chromatin_peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
+        
+        if peak_vector_regions == None or all_peaks_regions == None:
+            peak_vector_regions, all_peaks_regions = bedFile2Vector(regions_peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
 
         # only select peaks to score
-        idx = np.where(peak_vector == 1)[0]
-        
+        idx = np.where(peak_vector_regions == True)[0]
+
+        print("scoring %i regions" % idx.shape[0])
+
         if len(idx) == 0:
-            raise ValueError("No positive peaks found in %s" % peak_file)
+            raise ValueError("No positive peaks found in %s" % regions_peak_file)
 
-        all_data = np.concatenate((self.data[Dataset.TRAIN], self.data[Dataset.VALID], self.data[Dataset.TEST]), axis=1)
+        if all_data is None:
+            all_data = concatenate_all_data(self.data)
 
-        # takes about 1.5 minutes for 100,000 regions TODO AM 4/3/2019 speed up generator
-        predictions = self.eval_vector(all_data, peak_vector, idx)
+        # tuple of means and stds
+        predictions = self.eval_vector(all_data, peak_vector_chromatin, idx)
+        # zip together meands and stdevs for each position in idx
+        # shape of predictions is (# available predictions, 2 [mean, std], #TFs )
+        predictions = np.array(list(zip(predictions[0], predictions[1])))
         print("finished predictions...", predictions.shape)
 
-
-        # get number of factors to fill in if values are missing
-        num_factors = predictions[0].shape[0]
+        # # get number of factors to fill in if values are missing
+        num_factors = predictions.shape[-1]
 
         # map predictions with genomic position 
-        liRegions = load_allpos_regions()
+        liRegions = load_bed_regions(EPITOME_ALLTFS_BEDFILE + ".gz")
         prediction_positions = itemgetter(*idx)(liRegions)
+        # list of (region, mean, stdev) for each prediction
         zipped = list(zip(prediction_positions, predictions))
 
-        # for each all_peaks, if 1, reduce means for all overlapping peaks in positions
-        # else, set to 0s
-
+        # # for each all_peaks, if 1, reduce means for all overlapping peaks in positions
+        # # else, set to 0s
         def reduceMeans(peak):
-            if (peak[1] == 1):
+
+            if (peak[1]):
                 # parse region
 
-                # filter overlapping predictions for this peak and take mean      
-                res = map(lambda k: k[1], filter(lambda x: peak[0].overlaps(x[0], 100), zipped))
-                arr = np.concatenate(list(map(lambda x: np.matrix(x), res)), axis = 0)
-                return(peak[0], np.mean(arr, axis = 0))
+                # filter overlapping predictions for this peak and take mean  
+                res = np.array(list(map(lambda k: k[1][0], filter(lambda x: Region.overlaps(peak[0], x[0], 1), zipped))))
+                mean = np.mean(res, axis = 0)
+                # TODO: there are some cases with no peaks
+                if res.shape[0] == 0:
+                    return(peak[0], np.zeros(num_factors))  
+                else:
+                    return(peak[0], mean)
+
             else:
                 return(peak[0], np.zeros(num_factors)) 
 
-        grouped = list(map(lambda x: np.matrix(reduceMeans(x)[1]), all_peaks))
-
+        # zip together all intervals being evalutated (all_peaks_regions[0]) and whether or 
+        # not each evaluated region is present (all_peaks_regions[1])
+        #
+        # for each evaluated region, reduce means
+        grouped = list(map(lambda x: np.matrix(reduceMeans(x)[1]), zip(all_peaks_regions[0], all_peaks_regions[1])))
         final = np.concatenate(grouped, axis=0)
 
         df = pd.DataFrame(final, columns=list(self.assaymap)[1:])
 
+
         # load in peaks to get positions and could be called only once
         # TODO why are you reading this in twice?
-        df_pos = pd.read_csv(peak_file, sep="\t", header = None)[[0,1,2]]
+        df_pos = pd.read_csv(regions_peak_file, sep="\t", header = None)[[0,1,2]]
         final_df = pd.concat([df_pos, df], axis=1)
 
         return final_df
-            
+
 
 class VLP(VariationalPeakModel):
     def __init__(self,
@@ -985,7 +964,7 @@ class VLP(VariationalPeakModel):
              **kwargs):
 
         """ To resume model training, call:
-            model2 = MLP(data = data, checkpoint="/home/eecs/akmorrow/epitome/out/models/test_model")
+            model2 = VLP(data = data, checkpoint="/home/eecs/akmorrow/epitome/out/models/test_model")
         """
         self.layers = 4
         self.num_units = [100, 100, 100, 50]
@@ -1016,4 +995,3 @@ class VLP(VariationalPeakModel):
                                           activity_regularizer=tf.keras.regularizers.l1_l2(self.l1, self.l2)))
         
         return model
-

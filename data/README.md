@@ -1,24 +1,15 @@
-# Folder contents
+# Creating a dataset
+ 
+An Epitome dataset consists of a large n by k matrix, where n is the number of celltype/assay combinations and k is the number of 200bp regions in the genome.
+
+You can create an Epitome dataset for the hg19, GRCh38 or mm10 genome. To create a dataset, run:
+
+```
+python data/download_encode/download_encode.py bed_download_path hg19 path_to_bigBedToBed output_dir
+
+```
+
+where path_to_bigBedToBed is a path to the UCSC bigBedToBed executable, which can be downloaded from 
+http://hgdownload.cse.ucsc.edu/admin/exe/.
 
 
-## DeepSEA related files
-
-### allTFs.pos.README
-README for indices of DeepSEA data. 
-Downloaded from http://deepsea.princeton.edu/media/code/allTFs.pos.bed.tar.gz.
-
-### allTFs.pos.bed.zip
-Bed file containing DeepSEA training locations for training data. 
-Downloaded from http://deepsea.princeton.edu/media/code/allTFs.pos.bed.tar.gz.
-
-### feature_name
-Ordered list of feature names for DeepSEA (919 features).
-
-## Correlation related files
-These files contain TF correlation information and were computed from DeepSEA training data.
-
-### tf_correlation.png
-Image of TF correlations.
-
-### correlation_matrix.csv
-CSV file containing TF correlation values.

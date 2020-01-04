@@ -42,15 +42,16 @@ usage: get_deepsea_data.py [-h] --output_path OUTPUT_PATH
 ## Training a Model
 
 ```python
-from epitome.models import *
-model = MLP(data
+
+    from epitome.models import *
+    model = VLP(data
             test_celltypes,
             matrix,
             assaymap,
             cellmap,
             shuffle_size=2, 
             batch_size=64)
-model.train(10000)
+    model.train(10000)
 ```
 
 
