@@ -9,6 +9,8 @@ sphinx==2.1.1 # documentation
 sphinx_rtd_theme==0.4.3
 tensorflow==2.0.0b1  
 tfp-nightly==0.8.0.dev20190729 # need tensorflow-probability version that works with tf 2.0
+tensorflow-estimator-2.0-preview==1.14.0.dev2019072900
+pybedtools
 # TODO RM: gast==0.2.2 # for tfp-nightly, which uses deprecated gast
 tqdm
 h5sparse==0.0.5

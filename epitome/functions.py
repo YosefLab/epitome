@@ -218,7 +218,7 @@ def load_epitome_data(data_dir):
     npz_files = list(filter(lambda x: x.endswith(".npz"), required_paths))
 
     sparse_matrices = [scipy.sparse.load_npz(x).toarray() for x in npz_files]
-    return sparse_matrices
+    return {Dataset.TRAIN: sparse_matrices[0], Dataset.VALID: sparse_matrices[1], Dataset.TEST: sparse_matrices[2]}
 
 def get_epitome_indices_deepsea_validation(epitome_allpos_file):
     """ Gets new indices matching DeepSEA's validation set (chr7: 30508800-35296600)
