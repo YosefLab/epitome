@@ -1,6 +1,5 @@
 # imports
 import h5py
-from pybedtools import BedTool
 from scipy.io import savemat
 
 import pandas as pd
@@ -12,6 +11,7 @@ from itertools import groupby
 from scipy.io import loadmat
 from .constants import *
 import scipy.sparse
+import pyranges as pr
 
 from operator import itemgetter
 import gzip
@@ -375,6 +375,7 @@ def get_assays_from_feature_file(feature_name_file,
 
 ################### Parsing data from bed file ########################
 
+
 def bed2Pyranges(bed_file):
     """
     Loads bed file in as a pyranges object.
@@ -392,14 +393,43 @@ def bed2Pyranges(bed_file):
     p.columns = ['Chromosome', 'Start','End','idx']
     return pr.PyRanges(p).sort()
 
-def bedtools_intersect(file_tuple):
-    return_peaks = file_tuple[2]
-    bed = pybedtools.BedTool(file_tuple[0])
-    res =  bed.intersect(file_tuple[1], c=True)
-    overlap_vector = np.array(list(map(lambda x: int(x.fields[-1])>0, res)))
 
-    l = list(bed) if return_peaks else None
-    return (l, overlap_vector)
+def bedtools_intersect(file_triple):
+    """
+    Runs intersection between 2 bed files and returns a vector of 0/1s
+    indicating absense or presense of overlap.
+
+    Args:
+        :param file_triple: triple of (bed_file_1, bed_file_2, boolean).
+            bed_file_1: bed file to run intersection against.
+            bed_file_2: bed file to check for overlaps with bed_file_1.
+            boolean: boolean determines wheather to return
+                     original peaks from bed_file_1.
+
+    Returns:
+        tuple of (bed_file_1 peaks, vector of 0/1s) whose length is len(bed_file_1).
+        1s in vector indicate overlap of bed_file_1 and bed_file_2).
+
+    """
+    bed1 = bed2Pyranges(file_triple[0])
+    bed2 = bed2Pyranges(file_triple[1])
+
+    res = bed1.join(bed2, how='left')
+    overlap_vector = np.zeros(len(bed1),dtype=bool)
+
+    # get regions with overlap and set to 1
+    res_df = res.df
+    if not res_df.empty: # throws error if empty because no columns
+        overlap_vector[res_df[res_df['Start_b'] != -1]['idx']] = 1
+
+    if (file_triple[2]):
+        # for some reason chaining takes a lot longer, so we run ops separately.
+        t1 = bed1.df.sort_values(by='idx')[['Chromosome','Start','End']]
+        t2 = t1.values
+        t3 = t2.tolist()
+        return (list(map(lambda x: Region(x[0],x[1],x[2]), t3)), overlap_vector)
+    else:
+        return (None, overlap_vector)
 
 def bedFile2Vector(bed_file, allpos_bed_file):
     """
@@ -426,7 +456,6 @@ def bedFile2Vector(bed_file, allpos_bed_file):
     pool.join()
 
     return (results[0][1], results[1])
-
 
 def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights = None):
     """
@@ -545,7 +574,9 @@ def concatenate_all_data(data):
     Args:
         :param data: data dictionary of train, valid and test
     """
-    return np.concatenate([data[Dataset.TRAIN][:,0:1327577], # chr 1-6, range_for_contigs is 1 based
+    # TODO: DO NOT hard code this. call range_for_contigs(EPITOME_ALLTFS_BEDFILE)['chr6'][1] to get number
+    # it takes about 3 s, but is better than hard coding!
+    return np.concatenate([data[Dataset.TRAIN][:,0:3637333], # chr 1-6, range_for_contigs is 1 based
                            data[Dataset.VALID], # chr7
                            data[Dataset.TEST], # chr 8 and 9
-                           data[Dataset.TRAIN][:,1327577:]],axis=1) # all the rest of the chromosomes
+                           data[Dataset.TRAIN][:,3637333:]],axis=1) # all the rest of the chromosomes
