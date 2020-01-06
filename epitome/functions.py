@@ -17,7 +17,6 @@ from operator import itemgetter
 import gzip
 
 # to load in positions file
-import pybedtools
 import multiprocessing
 
 ################### CLASSES ##########################
@@ -565,7 +564,7 @@ def calculate_epitome_regions(all_regions_file):
     return(EPITOME_TRAIN_REGIONS, EPITOME_VALID_REGIONS, EPITOME_TEST_REGIONS)
 
 
-def concatenate_all_data(data):
+def concatenate_all_data(data, region_file = None):
     """
     Puts data back in correct order to be indexed by the allpos file.
     Numbers come from range_for_contigs(EPITOME_ALLTFS_BEDFILE)['chr6'] in functions.py.
@@ -573,10 +572,14 @@ def concatenate_all_data(data):
 
     Args:
         :param data: data dictionary of train, valid and test
+        :param : optional file containg regions of train, valid and test.
     """
-    # TODO: DO NOT hard code this. call range_for_contigs(EPITOME_ALLTFS_BEDFILE)['chr6'][1] to get number
-    # it takes about 3 s, but is better than hard coding!
-    return np.concatenate([data[Dataset.TRAIN][:,0:3637333], # chr 1-6, range_for_contigs is 1 based
+    if region_file == None:
+        region_file = EPITOME_ALLTFS_BEDFILE
+
+    # Get chr6 cutoff. takes about 3s.
+    chr6_end = range_for_contigs(region_file)['chr6'][1]
+    return np.concatenate([data[Dataset.TRAIN][:,0:chr6_end], # chr 1-6, range_for_contigs is 1 based
                            data[Dataset.VALID], # chr7
                            data[Dataset.TEST], # chr 8 and 9
-                           data[Dataset.TRAIN][:,3637333:]],axis=1) # all the rest of the chromosomes
+                           data[Dataset.TRAIN][:,chr6_end:]],axis=1) # all the rest of the chromosomes
