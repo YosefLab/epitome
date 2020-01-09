@@ -45,10 +45,26 @@ except OSError:
 setup(
     name='epitome',
     version=this_version,
-    description='epigenetic learning',
-    author='Alyssa Morrow',
+    description='ML model for predicting ChIP-seq peaks in new cell types from ENCODE cell lines',
+    author='Alyssa Kramer Morrow',
     author_email='akmorrow@berkeley.edu',
-    url="https://github.com/akmorrow13/epitome",
+    project_urls={
+        'Documentation': 'https://readthedocs.org', # TODO
+        'Source': 'https://github.com/akmorrow13/epitome'
+    },
+    classifiers=[
+        'Topic :: Scientific/Engineering :: Bio-Informatics',
+        # Pick your license as you wish (should match "license" above)
+         'License :: OSI Approved :: Apache Software License',
+        # Python versions supported
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8'
+    ],
+    license="Apache License, Version 2.0",
+    keywords='ENCODE ChIP-seq_peaks prediction histone transcription_factor',
     install_requires=reqs,
     long_description=long_description,
-    packages=find_packages(exclude=['*.test.*']))
+    packages=find_packages(exclude=['*.test.*']),
+    python_requires='>=3'
+)
+ 

@@ -357,7 +357,7 @@ class PeakModel():
     
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
         # and their indices are stored in missing_idx for future use
-        peak_vector, all_peaks = bedFile2Vector(peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
+        peak_vector, all_peaks = bedFile2Vector(peak_file, EPITOME_ALLTFS_BEDFILE)
         print("finished loading peak file")
 
         # only select peaks to score
@@ -366,7 +366,7 @@ class PeakModel():
         if len(idx) == 0:
             raise ValueError("No positive peaks found in %s" % peak_file)
 
-        all_data = concatenate_all_data(data)
+        all_data = concatenate_all_data(data, self.regionsFile)
 
 
         # takes about 1.5 minutes for 100,000 regions TODO AM 4/3/2019 speed up generator
@@ -394,7 +394,7 @@ class PeakModel():
             return list(map(lambda x: fromString(x), liPositions))
 
         # map predictions with genomic position
-        liRegions = load_bed_regions(EPITOME_ALLTFS_BEDFILE + ".gz")
+        liRegions = load_bed_regions(EPITOME_ALLTFS_BEDFILE)
         prediction_positions = itemgetter(*idx)(liRegions)
         zipped = list(zip(prediction_positions, predictions))
 
@@ -466,7 +466,7 @@ class MLP(PeakModel):
 
 class VariationalPeakModel():
     def __init__(self,
-                 data,
+                 data_path,
                  test_celltypes,
                  matrix,
                  assaymap,
@@ -479,11 +479,12 @@ class VariationalPeakModel():
                  l2=0.,
                  lr=1e-3,
                  radii=[1,3,10,30], 
-                 train_indices = None):
+                 train_indices = None,
+                 data = None):
         
         """
         Peak Model
-        :param data: either a path to TF records OR a dictionary of TRAIN, VALID, and TEST data
+        :param data_path: path to data. Directory should contain all.pos.bed.gz, feature_name,test.npz,train.npz,valid.npz
         :param test_celltypes
         :param matrix
         :param assaymap
@@ -497,6 +498,7 @@ class VariationalPeakModel():
         :param lr
         :param radii
         :param train_indices: option numpy array of indices to train from data[Dataset.TRAIN]
+        :param data: data loaded from datapath. This option is mostly for testing, so users dont have to load in data for each model.
         """
         
         tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
@@ -509,8 +511,17 @@ class VariationalPeakModel():
         self.test_celltypes = test_celltypes
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
         print("eval cell types", self.eval_cell_types)
+        
+        
+        # load in data, if the user has not specified it
+        if data is not None:
+            self.data = data
+        else:
+            self.data = load_epitome_data(data_path)
+        
+        self.regionsFile = next(filter(lambda x: os.path.basename(x) == REGIONS_FILENAME, glob.glob(os.path.join(data_path, '*'))))
 
-        self.output_shape, self.train_iter = generator_to_tf_dataset(load_data(data[Dataset.TRAIN],  
+        self.output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.data[Dataset.TRAIN],  
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
                                                 matrix,
@@ -519,7 +530,7 @@ class VariationalPeakModel():
                                                 radii = radii, mode = Dataset.TRAIN),
                                                 batch_size, shuffle_size, prefetch_size)
 
-        _,            self.valid_iter = generator_to_tf_dataset(load_data(data[Dataset.VALID], 
+        _,            self.valid_iter = generator_to_tf_dataset(load_data(self.data[Dataset.VALID], 
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
                                                 matrix,
@@ -529,7 +540,7 @@ class VariationalPeakModel():
                                                 batch_size, 1, prefetch_size)
 
         # can be empty if len(test_celltypes) == 0
-        _,            self.test_iter = generator_to_tf_dataset(load_data(data[Dataset.TEST], 
+        _,            self.test_iter = generator_to_tf_dataset(load_data(self.data[Dataset.TEST], 
                                                self.test_celltypes, 
                                                self.eval_cell_types,
                                                matrix,
@@ -555,7 +566,6 @@ class VariationalPeakModel():
         self.matrix = matrix
         self.assaymap= assaymap 
         self.cellmap = cellmap
-        self.data = data
         
     def get_weight_parameters(self):
         """
@@ -843,9 +853,9 @@ class VariationalPeakModel():
 
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
         # and their indices are stored in missing_idx for future use
-        peak_vector_chromatin, _ = bedFile2Vector(chromatin_peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
+        peak_vector_chromatin, _ = bedFile2Vector(chromatin_peak_file, self.regionsFile)
 
-        liRegions = enumerate(load_bed_regions(EPITOME_ALLTFS_BEDFILE + ".gz"))
+        liRegions = enumerate(load_bed_regions(self.regionsFile))
         
         # filter liRegions by chrs
         if chrs is not None:
@@ -858,7 +868,7 @@ class VariationalPeakModel():
         print("scoring %i regions" % idx.shape[0])
 
         if all_data is None:
-            all_data = concatenate_all_data(self.data)
+            all_data = concatenate_all_data(self.data, self.regionsFile)
 
         # tuple of means and stds
         predictions = self.eval_vector(all_data, peak_vector_chromatin, idx) 
@@ -889,10 +899,10 @@ class VariationalPeakModel():
 
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
         # and their indices are stored in missing_idx for future use
-        peak_vector_chromatin, _ = bedFile2Vector(chromatin_peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
+        peak_vector_chromatin, _ = bedFile2Vector(chromatin_peak_file, self.regionsFile)
         
         if peak_vector_regions == None or all_peaks_regions == None:
-            peak_vector_regions, all_peaks_regions = bedFile2Vector(regions_peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
+            peak_vector_regions, all_peaks_regions = bedFile2Vector(regions_peak_file, self.regionsFile)
 
         # only select peaks to score
         idx = np.where(peak_vector_regions == True)[0]
@@ -903,7 +913,7 @@ class VariationalPeakModel():
             raise ValueError("No positive peaks found in %s" % regions_peak_file)
 
         if all_data is None:
-            all_data = concatenate_all_data(self.data)
+            all_data = concatenate_all_data(self.data, self.regionsFile)
 
         # tuple of means and stds
         predictions = self.eval_vector(all_data, peak_vector_chromatin, idx)
@@ -916,7 +926,7 @@ class VariationalPeakModel():
         num_factors = predictions.shape[-1]
 
         # map predictions with genomic position 
-        liRegions = load_bed_regions(EPITOME_ALLTFS_BEDFILE + ".gz")
+        liRegions = load_bed_regions(self.regionsFile)
         prediction_positions = itemgetter(*idx)(liRegions)
         # list of (region, mean, stdev) for each prediction
         zipped = list(zip(prediction_positions, predictions))
@@ -964,7 +974,7 @@ class VLP(VariationalPeakModel):
              **kwargs):
 
         """ To resume model training, call:
-            model2 = VLP(data = data, checkpoint="/home/eecs/akmorrow/epitome/out/models/test_model")
+            model2 = VLP(data_path = data_path, checkpoint="/home/eecs/akmorrow/epitome/out/models/test_model")
         """
         self.layers = 4
         self.num_units = [100, 100, 100, 50]
@@ -973,12 +983,12 @@ class VLP(VariationalPeakModel):
         if "checkpoint" in kwargs.keys():
             fileObject = open(kwargs["checkpoint"] + "/model_params.pickle" ,'rb')
             metadata = pickle.load(fileObject)
-            VariationalPeakModel.__init__(self, kwargs["data"], **metadata)
-            self.training_size = kwargs["data"][Dataset.TRAIN].shape[1]
+            VariationalPeakModel.__init__(self, kwargs["data_path"], **metadata)
+#             self.training_size = self.data[Dataset.TRAIN].shape[1] TODO do we need this??
             self.model = tf.keras.models.load_model(kwargs["checkpoint"])
             
         else: 
-            self.training_size =( args[0][Dataset.TRAIN]).shape[1]
+#             self.training_size =( args[0][Dataset.TRAIN]).shape[1] TODO do we need this??
             VariationalPeakModel.__init__(self, *args, **kwargs)
             
     def create_model(self):

@@ -15,6 +15,7 @@ import pyranges as pr
 
 from operator import itemgetter
 import gzip
+import gzip
 
 # to load in positions file
 import multiprocessing
@@ -204,14 +205,14 @@ def load_epitome_data(data_dir):
 
     Args:
         :param data_dir: Directory containing train.npz, valid.npz, test.npz,
-        all.pos.bed file and feature_name files saved by data/download_encode.py script.
+        all.pos.bed.gz file and feature_name files saved by data/download_encode.py script.
 
     :returns: train_data, valid_data, and test_data
         3 numpy ndarrays for train, valid and test
     """
 
     # make sure all required files exist
-    required_files = ["all.pos.bed","all.pos.bed.gz","train.npz","valid.npz", "feature_name","test.npz"]
+    required_files = ["all.pos.bed.gz","train.npz","valid.npz", "feature_name","test.npz"]
     required_paths = [os.path.join(data_dir, x) for x in required_files]
     assert(np.all([os.path.exists(x) for x in required_paths]))
     npz_files = list(filter(lambda x: x.endswith(".npz"), required_paths))
@@ -513,7 +514,7 @@ def range_for_contigs(all_regions_file):
     """
     Traverses through feature_name_file to get contig ranges.
     """
-    with open(all_regions_file) as f:
+    with gzip.open(all_regions_file,'rt') as f:
 
         contigs = {}
         this_contig = "placeholder"
@@ -564,18 +565,14 @@ def calculate_epitome_regions(all_regions_file):
     return(EPITOME_TRAIN_REGIONS, EPITOME_VALID_REGIONS, EPITOME_TEST_REGIONS)
 
 
-def concatenate_all_data(data, region_file = None):
+def concatenate_all_data(data, region_file):
     """
     Puts data back in correct order to be indexed by the allpos file.
-    Numbers come from range_for_contigs(EPITOME_ALLTFS_BEDFILE)['chr6'] in functions.py.
-    But the range_for_contigs takes a while, so we hardcode the numbers.
 
     Args:
         :param data: data dictionary of train, valid and test
         :param : optional file containg regions of train, valid and test.
     """
-    if region_file == None:
-        region_file = EPITOME_ALLTFS_BEDFILE
 
     # Get chr6 cutoff. takes about 3s.
     chr6_end = range_for_contigs(region_file)['chr6'][1]
