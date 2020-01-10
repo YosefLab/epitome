@@ -1,3 +1,23 @@
+r"""
+================
+Helper functions
+================
+.. currentmodule:: epitome.functions
+
+.. autosummary::
+  :toctree: _generate/
+
+  load_epitome_data
+  load_bed_regions
+  get_assays_from_feature_file
+  bed2Pyranges
+  bedtools_intersect
+  bedFile2Vector
+  range_for_contigs
+  calculate_epitome_regions
+  concatenate_all_data
+"""
+
 # imports
 import h5py
 from scipy.io import savemat
@@ -251,7 +271,11 @@ def load_bed_regions(bedfile):
     regions that have no data (the regions between valid/test
     and chromosomes X/Y).
 
-    :return list of genomic Regions the size of train/valid/test data.
+    Args:
+        :param bedfile: path to bed file
+
+    Returns:
+        :return list of genomic Regions the size of train/valid/test data.
     '''
 
     with gzip.open(bedfile, 'r') as f:
@@ -277,7 +301,8 @@ def get_assays_from_feature_file(feature_name_file,
         :param eligible_cells: list of cells to filter by (ie ["HepG2", "GM12878", ..]). If None, then returns all cell types.
         :param min_cells_per_assay: number of cell types an assay must have to be considered
         :param min_assays_per_cell: number of assays a cell type must have to be considered. Includes DNase.
-    Returns
+
+    Returns:
         matrix: cell type by assay matrix
         cellmap: index of cells
         assaymap: index of assays
@@ -382,7 +407,7 @@ def bed2Pyranges(bed_file):
     Preserves ordering of bed lines.
 
     Args:
-        bed_file: absolute path to bed file
+        :param bed_file: absolute path to bed file
     Returns:
         indexed pyranges object
     """
@@ -404,7 +429,7 @@ def bedtools_intersect(file_triple):
             bed_file_1: bed file to run intersection against.
             bed_file_2: bed file to check for overlaps with bed_file_1.
             boolean: boolean determines wheather to return
-                     original peaks from bed_file_1.
+            original peaks from bed_file_1.
 
     Returns:
         tuple of (bed_file_1 peaks, vector of 0/1s) whose length is len(bed_file_1).
@@ -439,13 +464,15 @@ def bedFile2Vector(bed_file, allpos_bed_file):
     Most likely, the bed file will be the output of the IDR function, which detects peaks based on the
     reproducibility of multiple samples.
 
-    :param bed_file: bed file containing peaks
-    :param allpos_bed_file: bed file containing all positions in the dataset
+    Args:
+        :param bed_file: bed file containing peaks
+        :param allpos_bed_file: bed file containing all positions in the dataset
 
-    :return: tuple (numpy_train_array, (bed_peaks, numpy_bed_array).
-    numpy_train_array: boolean numpy array indicating overlap of training data with peak file (length of training data).
-    bed_peaks: a list of intervals loaded from bed_file.
-    numpy_bed_array: boolean numpy array indicating presence or absense of each bed_peak region in the training dataset.
+    Returns:
+        :return: tuple (numpy_train_array, (bed_peaks, numpy_bed_array).
+        numpy_train_array: boolean numpy array indicating overlap of training data with peak file (length of training data).
+        bed_peaks: a list of intervals loaded from bed_file.
+        numpy_bed_array: boolean numpy array indicating presence or absense of each bed_peak region in the training dataset.
     """
 
     bed_files = [(allpos_bed_file, bed_file, False), (bed_file, allpos_bed_file, True)]
@@ -513,6 +540,12 @@ def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights =
 def range_for_contigs(all_regions_file):
     """
     Traverses through feature_name_file to get contig ranges.
+
+    Args:
+        :param all_regions_file: path to bed file of genomic regions
+
+    Returns:
+        list of contigs and their start/end position all_regions_file
     """
     with gzip.open(all_regions_file,'rt') as f:
 
@@ -545,9 +578,14 @@ def range_for_contigs(all_regions_file):
 def calculate_epitome_regions(all_regions_file):
     """
     Gets line numbers for train/valid/test boundaries.
-
-    :param all_pos_file: bed file containing a row for each genomic region.
     Assumes that chr7,8,9 are all in a row (only true if sex chrs are removed).
+
+
+    Args:
+        :param all_pos_file: bed file containing a row for each genomic region.
+
+    Returns:
+        triple of train,valid,test regions
     """
 
     contig_ranges = range_for_contigs(all_regions_file)
@@ -571,7 +609,10 @@ def concatenate_all_data(data, region_file):
 
     Args:
         :param data: data dictionary of train, valid and test
-        :param : optional file containg regions of train, valid and test.
+        :param regions_file: bed file containg regions of train, valid and test.
+
+    Returns:
+        np matrix of concatenated data
     """
 
     # Get chr6 cutoff. takes about 3s.

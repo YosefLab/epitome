@@ -32,15 +32,8 @@ except:
 
 reqs.append(tf_req)
 
-long_description = "!!!!! missing pandoc do not upload to PyPI !!!!"
-try:
-    import pypandoc
-    # TODO needs pandoc installed
-    long_description = pypandoc.convert('README.md', 'rst')
-except ImportError:
-    print("Could not import pypandoc - required to package epitome", file=sys.stderr)
-except OSError:
-    print("Could not convert - pandoc is not installed", file=sys.stderr)
+with open("README.md", "r") as fh:
+    long_description = fh.read()
 
 setup(
     name='epitome',

@@ -17,10 +17,43 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
-import sphinx_rtd_theme
+import os
+import sys
+import mock
+
+# These lines added to enable Sphinx autodocumentation in Epitome.
+MOCK_MODULES = [
+    "tensorflow",
+    "tensorflow_probability",
+    "numpy",
+    "h5py",
+    "scipy",
+    "scipy.io",
+    "scipy.sparse",
+    "pyranges",
+    "sklearn",
+    "sklearn.metrics",
+    "pandas",
+    "tqdm",
+    "seaborn",
+    "matplotlib",
+    "matplotlib.pyplot",
+    "matplotlib.backends",
+    "matplotlib.lines",
+    "matplotlib.transforms"
+
+
+]
+
+for mod_name in MOCK_MODULES:
+    sys.modules[mod_name] = mock.Mock()
+
+# If extensions (or modules to document with autodoc) are in another directory,
+# add these directories to sys.path here. If the directory is relative to the
+# documentation root, use os.path.abspath to make it absolute, like shown here.
+this_dir = os.path.dirname(os.path.abspath(__file__))
+epitome_dir = os.path.abspath(os.path.join(this_dir, '..'))
+sys.path.insert(0, epitome_dir)
 
 # -- General configuration ------------------------------------------------
 
@@ -31,7 +64,24 @@ import sphinx_rtd_theme
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.autodoc']
+extensions = [
+    'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',
+]
+
+def skip(app, what, name, obj, skip, options):
+    return name != '__init__' and (skip
+                                   or inspect.isclass(obj)
+                                   or name.startswith('_') and not inspect.ismodule(obj))
+
+def setup(app):
+    app.connect('autodoc-skip-member', skip)
+
+# Include doc string for __init__ method in the documentation
+autosummary_generate = True
+
+autoclass_content = 'class'
+autodoc_member_order = 'bysource'
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -89,7 +139,15 @@ html_theme = 'sphinx_rtd_theme'
 # further.  For a list of options available for each theme, see the
 # documentation.
 #
-# html_theme_options = {}
+html_theme_options = {
+    'collapse_navigation': True,
+}
+
+extlinks = {
+    'issue': ('https://github.com/akmorrow13/epitome/issues/%s', '#'),
+    'pr': ('https://github.com/akmorrow13/epitome/pull/%s', 'PR #'),
+}
+
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -152,6 +210,3 @@ texinfo_documents = [
      author, 'epitome', 'One line description of project.',
      'Miscellaneous'),
 ]
-
-
-
