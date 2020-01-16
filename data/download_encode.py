@@ -72,11 +72,6 @@ parser = argparse.ArgumentParser(description='Downloads ENCODE data from a metad
 
 parser.add_argument('download_path', help='Temporary path to download bed/bigbed files to.', type=str)
 parser.add_argument('assembly', help='assembly to filter files in metadata.tsv file by.', choices=['hg19','mm10','GRCh38'], type=str)
-
-
-
-parser.add_argument('bigBedToBed', help='Path to bigBedToBed executable, downloaded from http://hgdownload.cse.ucsc.edu/admin/exe/', type=str) 
-
 parser.add_argument('output_path', help='path to save file data to', type=str)
 
 parser.add_argument('--metadata_url',type=str, default="http://www.encodeproject.org/metadata/type%3DExperiment%26assay_title%3DTF%2BChIP-seq%26assay_title%3DHistone%2BChIP-seq%26assay_title%3DDNase-seq%26assay_title%3DATAC-seq%26assembly%3Dhg19%26files.file_type%3DbigBed%2BnarrowPeak/metadata.tsv",
@@ -84,6 +79,8 @@ parser.add_argument('--metadata_url',type=str, default="http://www.encodeproject
 
 parser.add_argument('--min_chip_per_cell', help='Minimum ChIP-seq experiments for each cell type.', type=int, default=10)
 parser.add_argument('--regions_file', help='File to read regions from', type=str, default=None)
+parser.add_argument('--bgzip', help='Path to bgzip executable', type=str, default='bgzip')
+parser.add_argument('--bigBedToBed', help='Path to bigBedToBed executable, downloaded from http://hgdownload.cse.ucsc.edu/admin/exe/', type=str, default='bigBedToBed') 
 
 
 download_path = parser.parse_args().download_path
@@ -93,6 +90,7 @@ output_path = parser.parse_args().output_path
 metadata_path = parser.parse_args().metadata_url
 min_chip_per_cell = parser.parse_args().min_chip_per_cell
 all_regions_file = parser.parse_args().regions_file
+bgzip = parser.parse_args().bgzip
 
 
 
@@ -234,7 +232,7 @@ if not os.path.exists(all_regions_file):
 if not os.path.exists(all_regions_file + ".gz"):
     
     stdout = open(all_regions_file + ".gz","wb")
-    subprocess.call(["/data/yosef/users/akmorrow/miniconda3/bin/bgzip", "--index", "-c", all_regions_file],stdout=stdout)
+    subprocess.call([bgzip, "--index", "-c", all_regions_file],stdout=stdout)
     stdout.close()
 
 
@@ -440,5 +438,5 @@ save_epitome_numpy_data(download_path, output_path)
 
 if not os.path.exists(all_regions_file + ".gz"):
     stdout = open(all_regions_file + ".gz","wb")
-    subprocess.call(["/data/yosef/users/akmorrow/miniconda3/bin/bgzip", "--index", "-c", all_regions_file],stdout=stdout)
+    subprocess.call([bgzip, "--index", "-c", all_regions_file],stdout=stdout)
     stdout.close()

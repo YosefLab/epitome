@@ -241,7 +241,17 @@ def calibration_plot(truth, preds, assay_dict, list_assaymap):
 
 def plot_weight_posteriors(names, qm_vals, qs_vals, fname=None):
     """Save a PNG plot with histograms of weight means and stddevs.
-    From https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py
+    From https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py.
+    Requires that model has been trained for at least 1 iteration to correctly instantiate kernel posterior.
+    To collect parameters, run:
+    
+    ```python
+    
+    model = VLP(...)
+    names, means, stds = model.get_weight_parameters()
+    
+    ```
+    
     Args:
     names: A Python `iterable` of `str` variable names.
     qm_vals: A Python `iterable`, the same length as `names`,
@@ -252,8 +262,7 @@ def plot_weight_posteriors(names, qm_vals, qs_vals, fname=None):
       posterior standard deviations of weight varibles.
     fname: Python `str` filename to save the plot to.
     """
-    fig = figure.Figure(figsize=(6, 3))
-    canvas = backend_agg.FigureCanvasAgg(fig)
+    fig = plt.figure(figsize=(6, 3))
 
     ax = fig.add_subplot(1, 2, 1)
     for n, qm in zip(names, qm_vals):
@@ -270,7 +279,7 @@ def plot_weight_posteriors(names, qm_vals, qs_vals, fname=None):
 
     fig.tight_layout()
     if fname != None:
-        canvas.print_figure(fname, format="png")
+        fig.savefig(fname)
         print("saved {}".format(fname))
 
     return fig

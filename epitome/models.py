@@ -1038,21 +1038,21 @@ class VLP(VariationalPeakModel):
             fileObject = open(kwargs["checkpoint"] + "/model_params.pickle" ,'rb')
             metadata = pickle.load(fileObject)
             VariationalPeakModel.__init__(self, kwargs["data_path"], **metadata)
-#             self.training_size = self.data[Dataset.TRAIN].shape[1] TODO do we need this??
             self.model = tf.keras.models.load_model(kwargs["checkpoint"])
 
         else:
-#             self.training_size =( args[0][Dataset.TRAIN]).shape[1] TODO do we need this??
             VariationalPeakModel.__init__(self, *args, **kwargs)
 
     def create_model(self):
         """ Create a sequential keras model with dense flipout layers.
         """
 
+        # create a linear stack of layers
         model = tf.keras.Sequential()
 
         if not isinstance(self.num_units, collections.Iterable):
             self.num_units = [self.num_units] * self.layers
+        # Add densely-connected layer class with Flipout estimator to model
         for i in range(self.layers):
             model.add(tfp.layers.DenseFlipout(self.num_units[i], activation = self.activation))
 
