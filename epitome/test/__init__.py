@@ -3,15 +3,13 @@ import sys
 import tempfile
 import unittest
 from epitome.models import *
+from epitome import GET_DATA_PATH
 
 class EpitomeTestCase(unittest.TestCase):
 
-	def dataPath(self):
-		return os.path.join(os.getcwd(), "data/EPITOME_DATA")
-
 	def makeSmallModel(self):
 
-		data_path = self.dataPath()
+		data_path = GET_DATA_PATH()
 		x = os.path.join(data_path, 'valid.npz')
 		# load in small validation matrix for test
 		sparse_matrix = scipy.sparse.load_npz(x).toarray()

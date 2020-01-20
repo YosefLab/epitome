@@ -15,8 +15,6 @@ from enum import Enum
 import numpy as np
 import os
 
-REGIONS_FILENAME = 'all.pos.bed.gz'
-
 ######################################################
 ################### CONSTANTS ########################
 ######################################################

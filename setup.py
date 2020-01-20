@@ -58,6 +58,7 @@ setup(
     install_requires=reqs,
     long_description=long_description,
     packages=find_packages(exclude=['*.test.*']),
-    python_requires='>=3'
+    python_requires='>=3',
+    include_package_data=True
 )
  

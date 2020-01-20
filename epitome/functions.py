@@ -19,6 +19,7 @@ Helper functions
 """
 
 # imports
+from epitome import GET_DATA_PATH, FEATURE_NAME_FILE
 import h5py
 from scipy.io import savemat
 
@@ -39,6 +40,8 @@ import gzip
 
 # to load in positions file
 import multiprocessing
+
+DATA_PATH=GET_DATA_PATH()
 
 ################### CLASSES ##########################
 # TODO move to separate file
@@ -142,81 +145,7 @@ def get_missing_indices_for_cell(matrix, cellmap, cell):
 
 ################## LOADING DATA ######################
 
-def save_deepsea_label_data(deepsea_path, label_output_path):
-    """
-    Saves just deepsea labels, easier to access and much smaller dataset that can be loaded quicker.
-
-    Args:
-        :param deepsea_path: path to .mat data, downloaded from script ./bin/download_deepsea_data
-        :param label_output_path: new output path to save labels. saves as numpy files.
-
-    """
-    if not os.path.exists(label_output_path):
-        os.mkdir(label_output_path)
-        print("%s Created " % label_output_path)
-
-    tmp = h5py.File(os.path.join(deepsea_path, "train.mat"))
-    train_data = np.matrix(tmp["traindata"][:,0:int(tmp["traindata"].shape[1]/2)])
-
-    tmp = loadmat(os.path.join(deepsea_path, "valid.mat"))
-    valid_data = np.matrix(tmp['validdata'][0:int(tmp['validdata'].shape[0]/2),:].T)
-
-    tmp = loadmat(os.path.join(deepsea_path, "test.mat"))
-    test_data = np.matrix(tmp['testdata'][0:int(tmp['testdata'].shape[0]/2),:].T)
-
-    print(train_data.shape, valid_data.shape, test_data.shape)
-
-    # save files
-    print("saving train.npy, valid.npy and test.npy to %s" % label_output_path)
-    np.save(os.path.join(label_output_path, "train"), train_data)
-    np.save(os.path.join(label_output_path, "valid"), valid_data)
-    np.save(os.path.join(label_output_path, "test"), test_data)
-
-
-def load_deepsea_label_data(deepsea_path):
-    """
-    Loads just deepsea labels, saved from save_deepsea_label_data function
-
-    Args:
-        :param deepsea_path: path to .npy data, saved by save_deepsea_label_data function
-
-    :returns: train_data, valid_data, and test_data
-        3 numpy ndarrays for train, valid and test
-    """
-
-    train_data = np.load(os.path.join(deepsea_path, "train.npy"))
-
-    valid_data = np.load(os.path.join(deepsea_path, "valid.npy"))
-
-
-    test_data = np.load(os.path.join(deepsea_path, "test.npy"))
-
-    return train_data, valid_data, test_data
-
-
-def load_deepsea_data(deepsea_path):
-    tmp = h5py.File(os.path.join(deepsea_path, "train.mat"))
-    train_data = {
-        "x": tmp["trainxdata"][()].transpose([2,1,0]),
-        "y": tmp["traindata"][()]
-    }
-
-    tmp = loadmat(os.path.join(deepsea_path, "valid.mat"))
-    valid_data = {
-        "x": tmp['validxdata'],
-        "y": tmp['validdata'].T
-    }
-
-    tmp = loadmat(os.path.join(deepsea_path, "test.mat"))
-    test_data = {
-        "x": tmp['testxdata'],
-        "y": tmp['testdata'].T
-    }
-
-    return train_data, valid_data, test_data
-
-
-def load_epitome_data(data_dir):
+def load_epitome_data(data_dir=None):
     """
     Loads data processed using data/download_encode.py. This will load three sparse matrix files
     (.npz). One for train, valid (chr7) and test (chr 8 and 8).
@@ -226,10 +155,14 @@ def load_epitome_data(data_dir):
     Args:
         :param data_dir: Directory containing train.npz, valid.npz, test.npz,
         all.pos.bed.gz file and feature_name files saved by data/download_encode.py script.
+        Defaults to data in module.
 
     :returns: train_data, valid_data, and test_data
         3 numpy ndarrays for train, valid and test
     """
+    
+    if not data_dir:
+        data_dir = DATA_PATH
 
     # make sure all required files exist
     required_files = ["all.pos.bed.gz","train.npz","valid.npz", "feature_name","test.npz"]
@@ -240,30 +173,6 @@ def load_epitome_data(data_dir):
     sparse_matrices = [scipy.sparse.load_npz(x).toarray() for x in npz_files]
     return {Dataset.TRAIN: sparse_matrices[0], Dataset.VALID: sparse_matrices[1], Dataset.TEST: sparse_matrices[2]}
 
-def get_epitome_indices_deepsea_validation(epitome_allpos_file):
-    """ Gets new indices matching DeepSEA's validation set (chr7: 30508800-35296600)
-    Used to compare performance of Epitome model on DeepSEA's data vs processed data.
-
-    Args:
-        :param epitome_allpos_file: path to Epitome's allpos.bed file
-
-    Returns:
-        list of indices in Epitome's dataset that correspond to DeepSEA's
-
-    """
-    deepsea_valid_start = 30508800
-    deepsea_valid_stop = 35296600 # start of last region
-
-    with open(epitome_allpos_file) as f:
-        lines = f.readlines()
-
-    def split_line(f):
-        split = f.split("\t")
-        return (split[0], int(split[1]), int(split[2]))
-
-    filtered = enumerate([split_line(line) for line in lines if line.startswith("chr7")])
-    return [i[0] for i in filtered if i[1][1] >= deepsea_valid_start and i[1][1] <= deepsea_valid_stop]
-
 ################### Parsing Deepsea Files ########################
 
 def load_bed_regions(bedfile):
@@ -272,12 +181,12 @@ def load_bed_regions(bedfile):
     and chromosomes X/Y).
 
     Args:
-        :param bedfile: path to bed file
+        :param bedfile: path to bed file.
 
     Returns:
         :return list of genomic Regions the size of train/valid/test data.
     '''
-
+    
     with gzip.open(bedfile, 'r') as f:
             liPositions = f.readlines()
 
@@ -287,17 +196,48 @@ def load_bed_regions(bedfile):
 
     return list(map(lambda x: fromString(x), liPositions))
 
-def get_assays_from_feature_file(feature_name_file,
-                                 eligible_assays = None,
-                                 eligible_cells = None,
-                                 min_cells_per_assay= 3,
-                                 min_assays_per_cell = 2):
+
+def list_assays(feature_name_file = None):
+    
     ''' Parses a feature name file from DeepSea. File can be found in repo at ../data/feature_name.
     Returns at matrix of cell type/assays which exist for a subset of cell types.
 
     Args:
+        :param: feature_name_file. Path to file containing cell, ChIP metadata. Defaults to module data feature file.
+
+    Returns:
+        assays: list of assay names
+    '''
+    if not feature_name_file:
+        feature_name_file = os.path.join(DATA_PATH, FEATURE_NAME_FILE)    
+
+    with open(feature_name_file) as f:
+
+        assays=[]    # dict of {cell: {dict of indexed assays} }
+        for i,l in enumerate(f):
+            if (i == 0):
+                continue
+
+            # for example, split '8988T|DNase|None'
+            _, assay = l.split('\t')[1].split('|')[:2]
+            assays.append(assay)
+
+    return assays
+
+    
+
+def get_assays_from_feature_file(feature_name_file = None,
+                                 eligible_assays = None,
+                                 eligible_cells = None,
+                                 min_cells_per_assay= 3,
+                                 min_assays_per_cell = 2):
+    ''' Parses a feature name file. File can be found in repo at ../data/feature_name.
+    Returns at matrix of cell type/assays which exist for a subset of cell types.
+
+    Args:
+        :param: feature_name_file. Path to file containing cell, ChIP metadata. Defaults to module data feature file.
         :param eligible_assays: list of assays to filter by (ie ["CTCF", "EZH2", ..]). If None, then returns all assays.
-        Note that DNase will always be included in the factors, as it is required by the method.
+        Note that DNase will always be included in the factors, as it is required by Epitome.
         :param eligible_cells: list of cells to filter by (ie ["HepG2", "GM12878", ..]). If None, then returns all cell types.
         :param min_cells_per_assay: number of cell types an assay must have to be considered
         :param min_assays_per_cell: number of assays a cell type must have to be considered. Includes DNase.
@@ -307,6 +247,9 @@ def get_assays_from_feature_file(feature_name_file,
         cellmap: index of cells
         assaymap: index of assays
     '''
+    
+    if not feature_name_file:
+        feature_name_file = os.path.join(DATA_PATH, FEATURE_NAME_FILE)
 
     # check argument validity
     if (min_assays_per_cell < 2):
@@ -329,7 +272,7 @@ def get_assays_from_feature_file(feature_name_file,
                             % (eligible_cells, min_cells_per_assay, len(eligible_cells)+1, len(eligible_cells)))
 
 
-    # TODO want a dictionary of assay: {list of cells}
+    # Want a dictionary of assay: {list of cells}
     # then filter out assays with less than min_cells_per_assay cells
     # after this, there may be some unused cells so remove those as well
     with open(feature_name_file) as f:
