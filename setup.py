@@ -57,7 +57,7 @@ setup(
     keywords='ENCODE ChIP-seq_peaks prediction histone transcription_factor',
     install_requires=reqs,
     long_description=long_description,
-    'long_description_content_type': 'text/markdown',
+    long_description_content_type='text/markdown',
     packages=find_packages(exclude=['*.test.*']),
     python_requires='>=3',
     include_package_data=True
