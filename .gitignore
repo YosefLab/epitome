@@ -6,7 +6,7 @@ __pycache__
 
 # docs
 docs/_build/*
-
+_generate/
 # Setuptools distribution folder.
 /dist/
 
