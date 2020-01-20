@@ -35,7 +35,6 @@ import pyranges as pr
 
 from operator import itemgetter
 import gzip
-import gzip
 
 # to load in positions file
 import multiprocessing

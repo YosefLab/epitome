@@ -31,3 +31,10 @@ class EpitomeTestCase(unittest.TestCase):
             		cellmap,
             		shuffle_size=2, 
             		batch_size=64, data = data)
+
+
+	def tmpFile(self):
+
+		tempFile = tempfile.NamedTemporaryFile(delete=True)
+		tempFile.close()
+		return tempFile.name
