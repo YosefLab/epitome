@@ -10,15 +10,27 @@ Models
   VariationalPeakModel
   VLP
 """
-import tensorflow as tf
+
+import warnings
+
+from epitome import GET_DATA_PATH, POSITIONS_FILE
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore",category=FutureWarning)
+    import tensorflow as tf
+    import tensorflow_probability as tfp
+    from .functions import *
+    
 from .constants import *
-from .functions import *
 from .generators import *
 from .metrics import *
 import numpy as np
 
 import tqdm
-import tensorflow_probability as tfp
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore",category=FutureWarning)
+    import tensorflow as tf
+    import tensorflow_probability as tfp
 
 # for saving model
 import pickle
@@ -36,26 +48,27 @@ class VariationalPeakModel():
     """
 
     def __init__(self,
-                 data_path,
-                 test_celltypes,
-                 matrix,
-                 assaymap,
-                 cellmap,
+                 assays,
+                 test_celltypes = [],
+                 matrix = None,
+                 assaymap = None,
+                 cellmap = None,
                  debug = False,
-                 batch_size=64,
-                 shuffle_size=10,
-                 prefetch_size=10,
+                 batch_size = 64,
+                 shuffle_size = 10,
+                 prefetch_size = 10,
                  l1=0.,
                  l2=0.,
                  lr=1e-3,
                  radii=[1,3,10,30],
                  train_indices = None,
-                 data = None):
+                 data = None,
+                 data_path = None):
         """
         Initializes Peak Model
 
         Args:
-            :param data_path: path to data. Directory should contain all.pos.bed.gz, feature_name,test.npz,train.npz,valid.npz
+            :param assays: list of assays to train model on
             :param test_celltypes: list of cell types to hold out for test. Should be in cellmap
             :param matrix: numpy matrix of indices mapping assay and cell to index in data
             :param assaymap: map of assays mapping assay name to row in matrix
@@ -69,10 +82,27 @@ class VariationalPeakModel():
             :param lr: lr (default is 1e-3)
             :param radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30])
             :param train_indices: option numpy array of indices to train from data[Dataset.TRAIN]
-            :param data: data loaded from datapath. This option is mostly for testing, so users dont have to load in data for each model.
+            :param data: data loaded from datapath. This option is mostly for testing, so users dont have to load in data for 
+            :param data_path: path to data. Directory should contain all.pos.bed.gz, feature_name,test.npz,train.npz,valid.npz
+            each model.
         """
 
         tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
+                    
+        # user can provide their own assaymap information. 
+        if assaymap is not None:
+            assert matrix is not None and cellmap is not None, "matrix, cellmap, and assaymap must all be set"
+        if cellmap is not None:
+            assert matrix is not None and assaymap is not None, "matrix, cellmap, and assaymap must all be set"
+        if matrix is not None:
+            assert assaymap is not None and cellmap is not None, "matrix, cellmap, and assaymap must all be set"
+            
+        # get cell lines to train on if not specified
+        if assaymap is None:
+            # get list of TFs that have minimum number of cell lines
+            matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = assays)
+            assert len(assays) == len(list(assaymap))-1 
+                   
 
         assert (set(test_celltypes) < set(list(cellmap))), \
                 "test_celltypes %s must be subsets of available cell types %s" % (str(test_celltypes), str(list(cellmap)))
@@ -81,16 +111,17 @@ class VariationalPeakModel():
         self.eval_cell_types = list(cellmap).copy()
         self.test_celltypes = test_celltypes
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
-        print("eval cell types", self.eval_cell_types)
-
 
         # load in data, if the user has not specified it
         if data is not None:
             self.data = data
         else:
-            self.data = load_epitome_data(data_path)
+            self.data = load_epitome_data()
 
-        self.regionsFile = next(filter(lambda x: os.path.basename(x) == REGIONS_FILENAME, glob.glob(os.path.join(data_path, '*'))))
+        if not data_path:
+            data_path = DATA_PATH
+
+        self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
 
         self.output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.data[Dataset.TRAIN],
                                                 self.eval_cell_types,
@@ -129,7 +160,6 @@ class VariationalPeakModel():
         self.optimizer =tf.compat.v1.train.AdamOptimizer(learning_rate=self.lr)
 
         # set self
-        self.model = self.create_model()
         self.radii = radii
         self.debug = debug
         self.assaymap = assaymap
@@ -137,6 +167,7 @@ class VariationalPeakModel():
         self.matrix = matrix
         self.assaymap= assaymap
         self.cellmap = cellmap
+        self.model = self.create_model()
 
     def get_weight_parameters(self):
         """
@@ -168,9 +199,10 @@ class VariationalPeakModel():
         """
         # save keras model
         self.model.save(checkpoint_path)
-
+        
         # save model params to pickle file
-        dict_ = {'test_celltypes':self.test_celltypes,
+        dict_ = {'assays': list(self.assaymap),
+                         'test_celltypes':self.test_celltypes,
                          'matrix':self.matrix,
                          'assaymap':self.assaymap,
                          'cellmap':self.cellmap,
@@ -582,7 +614,7 @@ class VLP(VariationalPeakModel):
 
         """ Creates a new model with 4 layers with 100 unites each.
             To resume model training on an old model, call:
-            model = VLP(data_path = data_path, checkpoint=path_to_saved_model)
+            model = VLP(checkpoint=path_to_saved_model)
         """
         self.layers = 4
         self.num_units = [100, 100, 100, 50]
@@ -591,7 +623,7 @@ class VLP(VariationalPeakModel):
         if "checkpoint" in kwargs.keys():
             fileObject = open(kwargs["checkpoint"] + "/model_params.pickle" ,'rb')
             metadata = pickle.load(fileObject)
-            VariationalPeakModel.__init__(self, kwargs["data_path"], **metadata)
+            VariationalPeakModel.__init__(self, **metadata)
             self.model = tf.keras.models.load_model(kwargs["checkpoint"])
 
         else:
