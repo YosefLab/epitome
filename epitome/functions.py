@@ -19,7 +19,7 @@ Helper functions
 """
 
 # imports
-from epitome import GET_DATA_PATH, FEATURE_NAME_FILE
+from epitome import GET_DATA_PATH, FEATURE_NAME_FILE, REQUIRED_FILES
 import h5py
 from scipy.io import savemat
 
@@ -145,6 +145,7 @@ def get_missing_indices_for_cell(matrix, cellmap, cell):
 
 ################## LOADING DATA ######################
 
+        
 def load_epitome_data(data_dir=None):
     """
     Loads data processed using data/download_encode.py. This will load three sparse matrix files
@@ -163,10 +164,10 @@ def load_epitome_data(data_dir=None):
     
     if not data_dir:
         data_dir = DATA_PATH
+        download_data(data_dir) # TODO
 
     # make sure all required files exist
-    required_files = ["all.pos.bed.gz","train.npz","valid.npz", "feature_name","test.npz"]
-    required_paths = [os.path.join(data_dir, x) for x in required_files]
+    required_paths = [os.path.join(data_dir, x) for x in REQUIRED_FILES]
     assert(np.all([os.path.exists(x) for x in required_paths]))
     npz_files = list(filter(lambda x: x.endswith(".npz"), required_paths))
 

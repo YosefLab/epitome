@@ -50,6 +50,7 @@ setup(
         # Pick your license as you wish (should match "license" above)
          'License :: OSI Approved :: Apache Software License',
         # Python versions supported
+        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8'
     ],
@@ -59,7 +60,6 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     packages=find_packages(exclude=['*.test.*']),
-    python_requires='>=3',
-    include_package_data=True
+    python_requires='>=3'
 )
  

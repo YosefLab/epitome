@@ -15,12 +15,14 @@ also includes scripts for processing ENCODE peaks.
 
 """
 import os
+from os.path import expanduser
 
 __path__ = __import__('pkgutil').extend_path(__path__, __name__)
 
 # relative path to data
 def GET_DATA_PATH():
-    return os.path.join(os.path.dirname(__file__), 'data','data')
+    return os.path.join(expanduser("~"), '.epitome','data')
 
 POSITIONS_FILE = "all.pos.bed.gz"
 FEATURE_NAME_FILE = "feature_name"
+REQUIRED_FILES = [POSITIONS_FILE,"train.npz","valid.npz", FEATURE_NAME_FILE,"test.npz"]
