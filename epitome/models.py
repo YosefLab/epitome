@@ -27,6 +27,8 @@ from operator import itemgetter
 
 ################################### Channel Model ##########################################
 
+
+
 class VariationalPeakModel():
     def __init__(self,
                  data_path,
@@ -43,7 +45,8 @@ class VariationalPeakModel():
                  lr=1e-3,
                  radii=[1,3,10,30], 
                  train_indices = None,
-                 data = None):
+                 data = None,
+                 checkpoint = None):
         
         """
         Peak Model
@@ -161,8 +164,18 @@ class VariationalPeakModel():
         
         :param checkpoint_path: string file path to save model to. 
         """
-        # save keras model
-        self.model.save(checkpoint_path)
+        weights_path = os.path.join(checkpoint_path, "weights.h5")
+        meta_path = os.path.join(checkpoint_path, "model_params.pickle")
+        
+        # save keras model weights
+        if not os.path.exists(checkpoint_path):
+            os.makedirs(checkpoint_path)
+            
+        file = h5py.File(weights_path, 'w')
+        weight = self.model.get_weights()
+        for i in range(len(weight)):
+            file.create_dataset('weight' + str(i), data=weight[i])
+        file.close()
         
         # save model params to pickle file
         dict_ = {'test_celltypes':self.test_celltypes,
@@ -175,7 +188,7 @@ class VariationalPeakModel():
                          'prefetch_size':self.prefetch_size,
                          'radii':self.radii}
         
-        fileObject = open(os.path.join(checkpoint_path, "model_params.pickle"),'wb')
+        fileObject = open(meta_path,'wb')
         pickle.dump(dict_,fileObject)   
         fileObject.close()
 
@@ -538,7 +551,7 @@ class VLP(VariationalPeakModel):
              **kwargs):
 
         """ To resume model training, call:
-            model2 = VLP(data = data, checkpoint="/home/eecs/akmorrow/epitome/out/models/test_model")
+            model2 = VLP(data_path = data_path, checkpoint="/home/eecs/akmorrow/epitome/out/models/test_model")
         """
         self.activation = tf.tanh
         self.layers = 2
@@ -546,8 +559,17 @@ class VLP(VariationalPeakModel):
         if "checkpoint" in kwargs.keys():
             fileObject = open(kwargs["checkpoint"] + "/model_params.pickle" ,'rb')
             metadata = pickle.load(fileObject)
-            VariationalPeakModels.__init__(self, kwargs["data_path"], **metadata)
-            self.model = tf.keras.models.load_model(kwargs["checkpoint"])
+            fileObject.close()
+            # remove checkpoint from kwargs
+            VariationalPeakModel.__init__(self, **metadata, **kwargs)
+            file = h5py.File(os.path.join(kwargs["checkpoint"], "weights.h5"), 'r')
+            
+            # load model weights back in
+            weights = []
+            for i in range(len(file.keys())):
+                weights.append(file['weight' + str(i)][:])
+            self.model.set_weights(weights)
+            file.close()
             
         else: 
             VariationalPeakModel.__init__(self, *args, **kwargs)
