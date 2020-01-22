@@ -29,16 +29,15 @@ import tqdm
 import pickle
 from operator import itemgetter
 
+# TODO RM!
+# this is required because tensorflow is running in eager mode
+# but keras weights are not, which throws an error
+# should be fixed by not running in eager mode
+tf.config.experimental_run_functions_eagerly(True) 
 
-<<<<<<< HEAD
 #######################################################################
 #################### Variational Peak Model ###########################
 #######################################################################
-=======
-################################### Channel Model ##########################################
->>>>>>> channels
-
-
 
 class VariationalPeakModel():
     """ Model for learning from ChIP-seq peaks.
