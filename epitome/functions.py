@@ -19,7 +19,7 @@ Helper functions
 """
 
 # imports
-from epitome import GET_DATA_PATH, FEATURE_NAME_FILE, REQUIRED_FILES
+from epitome import *
 import h5py
 from scipy.io import savemat
 
@@ -36,12 +36,17 @@ import pyranges as pr
 
 from operator import itemgetter
 import gzip
-import gzip
+import urllib
+import os
+import sys
+import requests
+import urllib
+import tqdm
+from zipfile import ZipFile
+
 
 # to load in positions file
 import multiprocessing
-
-DATA_PATH=GET_DATA_PATH()
 
 ################### CLASSES ##########################
 # TODO move to separate file
@@ -145,13 +150,53 @@ def get_missing_indices_for_cell(matrix, cellmap, cell):
 
 ################## LOADING DATA ######################
 
+def download_and_unzip(url, dst):
+    """ Downloads a url to local destination, unzips it and deletes zip.
+    
+    Args:
+        :param url: url to download.
+        :param dst: local absolute path to download data to.
+    """
+    dst = os.path.join(dst, os.path.basename(url))
+    
+    # download data if it does not exist
+    if not os.path.exists(dst):
+
+        file_size = int(urllib.request.urlopen(url).info().get('Content-Length', -1))
+        if os.path.exists(dst):
+            first_byte = os.path.getsize(dst)
+        else:
+            first_byte = 0
+        if first_byte < file_size:
+
+            header = {"Range": "bytes=%s-%s" % (first_byte, file_size)}
+            pbar = tqdm.tqdm(
+                total=file_size, initial=first_byte,
+                unit='B', unit_scale=True, desc="Dataset not found. Downloading Epitome data to %s..." % dst)
+            req = requests.get(url, headers=header, stream=True)
+            with(open(dst, 'ab')) as f:
+                for chunk in req.iter_content(chunk_size=1024):
+                    if chunk:
+                        f.write(chunk)
+                        pbar.update(1024)
+            pbar.close()
+
+    if url.endswith('.zip'):
+        
+        # Extract zip data if it does not exist
+        if not os.path.exists(dst.split('.zip')[0]):
+            with ZipFile(dst, 'r') as zipObj:
+               zipObj.extractall(os.path.dirname(dst))
+            
+            # delete old zip to free space
+            os.remove(dst)
         
 def load_epitome_data(data_dir=None):
     """
     Loads data processed using data/download_encode.py. This will load three sparse matrix files
-    (.npz). One for train, valid (chr7) and test (chr 8 and 8).
+    (.npz). One for train, valid (chr7) and test (chr 8 and 9). If data is not available,
+    downloads Epitome data from S3.
 
-    Takes ~10 seconds to load data.
 
     Args:
         :param data_dir: Directory containing train.npz, valid.npz, test.npz,
@@ -163,8 +208,8 @@ def load_epitome_data(data_dir=None):
     """
     
     if not data_dir:
-        data_dir = DATA_PATH
-        download_data(data_dir) # TODO
+        data_dir = GET_DATA_PATH()
+        download_and_unzip(S3_DATA_PATH, GET_EPITOME_USER_PATH()) 
 
     # make sure all required files exist
     required_paths = [os.path.join(data_dir, x) for x in REQUIRED_FILES]
