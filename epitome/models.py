@@ -11,15 +11,12 @@ Models
   VLP
 """
 
-import warnings
 
-from epitome import GET_DATA_PATH, POSITIONS_FILE
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore",category=FutureWarning)
-    import tensorflow as tf
-    import tensorflow_probability as tfp
-    from .functions import *
-    
+from epitome import *
+import tensorflow as tf
+import tensorflow_probability as tfp
+
+from .functions import *    
 from .constants import *
 from .generators import *
 from .metrics import *
@@ -27,10 +24,6 @@ import numpy as np
 
 import tqdm
 
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore",category=FutureWarning)
-    import tensorflow as tf
-    import tensorflow_probability as tfp
 
 # for saving model
 import pickle
@@ -119,7 +112,7 @@ class VariationalPeakModel():
             self.data = load_epitome_data()
 
         if not data_path:
-            data_path = DATA_PATH
+            data_path = GET_DATA_PATH()
 
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
 

@@ -159,8 +159,10 @@ def download_and_unzip(url, dst):
     """
     dst = os.path.join(dst, os.path.basename(url))
     
+    final_dst = dst.split('.zip')[0]
+    
     # download data if it does not exist
-    if not os.path.exists(dst):
+    if not os.path.exists(final_dst):
 
         file_size = int(urllib.request.urlopen(url).info().get('Content-Length', -1))
         if os.path.exists(dst):
@@ -184,7 +186,7 @@ def download_and_unzip(url, dst):
     if url.endswith('.zip'):
         
         # Extract zip data if it does not exist
-        if not os.path.exists(dst.split('.zip')[0]):
+        if not os.path.exists(final_dst):
             with ZipFile(dst, 'r') as zipObj:
                zipObj.extractall(os.path.dirname(dst))
             
@@ -255,7 +257,7 @@ def list_assays(feature_name_file = None):
         assays: list of assay names
     '''
     if not feature_name_file:
-        feature_name_file = os.path.join(DATA_PATH, FEATURE_NAME_FILE)    
+        feature_name_file = os.path.join(GET_DATA_PATH(), FEATURE_NAME_FILE)    
 
     with open(feature_name_file) as f:
 
@@ -268,7 +270,8 @@ def list_assays(feature_name_file = None):
             _, assay = l.split('\t')[1].split('|')[:2]
             assays.append(assay)
 
-    return assays
+    # return unique list
+    return list(set(assays))
 
     
 
@@ -295,7 +298,7 @@ def get_assays_from_feature_file(feature_name_file = None,
     '''
     
     if not feature_name_file:
-        feature_name_file = os.path.join(DATA_PATH, FEATURE_NAME_FILE)
+        feature_name_file = os.path.join(GET_DATA_PATH(), FEATURE_NAME_FILE)
 
     # check argument validity
     if (min_assays_per_cell < 2):
