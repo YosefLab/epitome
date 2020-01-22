@@ -1,4 +1,3 @@
 global-exclude *.py[cod] __pycache__ .DS_Store *.bed
 include version.py
-include docs/figures/epitome_diagram.png
 include requirements.txt
