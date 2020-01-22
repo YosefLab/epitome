@@ -35,15 +35,13 @@ import scipy.sparse
 import pyranges as pr
 
 from operator import itemgetter
-import gzip
 import urllib
-import os
 import sys
 import requests
 import urllib
 import tqdm
 from zipfile import ZipFile
-
+import gzip
 
 # to load in positions file
 import multiprocessing
