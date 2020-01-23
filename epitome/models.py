@@ -166,7 +166,6 @@ class VariationalPeakModel():
         self.matrix = matrix
         self.assaymap= assaymap 
         self.cellmap = cellmap
-        self.data = data
         self.model = self.create_model()
   
     def get_weight_parameters(self):
