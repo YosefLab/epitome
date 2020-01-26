@@ -59,7 +59,8 @@ class VariationalPeakModel():
                  radii=[1,3,10,30],
                  train_indices = None,
                  data = None,
-                 data_path = None):
+                 data_path = None,
+                 checkpoint = None):
         """
         Initializes Peak Model
 
@@ -506,7 +507,19 @@ class VariationalPeakModel():
 
         print("columns for matrices are chr, start, end, %s" % ", ".join(list(self.assaymap)[1:]))
     
-    def score_peak_file(self, chromatin_peak_file, regions_peak_file):
+    def score_peak_file(self, chromatin_peak_file, regions_peak_file, all_data = None):
+        """
+        Runs predictions on a set of peaks defined in a bed or narrowPeak file.
+
+        Args:
+            :param chromatin_peak_file: narrowpeak or bed file containing chromatin accessibility to score
+            :param regions_peak_file: narrowpeak or bed file containing regions to score.
+            :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
+            
+        Returns:
+            pandas dataframe of genomic regions and predictions
+
+        """
 
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
         # and their indices are stored in missing_idx for future use
@@ -523,7 +536,8 @@ class VariationalPeakModel():
         if len(idx) == 0:
             raise ValueError("No positive peaks found in %s" % regions_peak_file)
 
-        all_data = np.concatenate((self.data[Dataset.TRAIN], self.data[Dataset.VALID], self.data[Dataset.TEST]), axis=1)
+        if all_data is None:
+            all_data = concatenate_all_data(self.data, self.regionsFile)
 
         # tuple of means and stds
         predictions = self.eval_vector(all_data, peak_vector_chromatin, idx)
