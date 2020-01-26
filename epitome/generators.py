@@ -115,17 +115,24 @@ def load_data(data,
 
     # string of radii for meta data labeling
     radii_str = list(map(lambda x: "RADII_%i" % x, radii))
+    
+    # get indices for features.rows are cells and cols are assays
+    cellmap_idx = [cellmap[c] for c in list(eval_cell_types)]
+    feature_cell_indices = matrix[cellmap_idx,:]
+    
+    # indices to be deleted used for similarity comparison
+    delete_indices = np.array([assaymap[s] for s in similarity_assays])
+
+    # make sure no similarity comparison data is missing for all cell types
+    assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \
+        "missing data at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1))
 
     def g():
         for i in indices: # for all records specified
             for (cell) in label_cell_types: # for all cell types to be used in labels
+                
                 similarities_double_positive = np.empty([len(eval_cell_types),0])
                 similarities_agreement = np.empty([len(eval_cell_types),0])
-
-                # features from all remaining cells not in label set
-                feature_cell_indices_list = list(map(lambda c: get_y_indices_for_cell(matrix, cellmap, c),
-                                                     eval_cell_types))
-                delete_indices = np.array([assaymap[s] for s in similarity_assays])
 
                 # labels for this cell
                 if (mode != Dataset.RUNTIME):
@@ -145,17 +152,12 @@ def load_data(data,
 
                     # Mask and labels are all 0's because labels are missing during runtime
                     garbage_labels = assay_mask = np.zeros(label_count)
+                
 
                 # get indices for assays used in similarity computation
                 # for cell types that are going to be features
-                similarity_indices = np.array([x[delete_indices] for x in feature_cell_indices_list])
-
-                # should not be missing data for any of the cell lines we are computing similarity for
-                for f,c in zip(feature_cell_indices_list, eval_cell_types):
-                    # should not be missing data for any of the cell lines we are computing similarity for
-                    assert np.all(np.invert(np.isin(-1, f[delete_indices]))), \
-                    "%s is missing data for assay %s" % (c, similarity_assays[np.where(f[delete_indices]==-1)[0][0]])
-
+                similarity_indices = feature_cell_indices[:, delete_indices]
+                
                 for r, radius in enumerate(radii):
 
                     min_radius = max(0, i - radius + 1)
@@ -174,7 +176,7 @@ def load_data(data,
 
 
                     ####################################################################
-                    cell_train_data = data[similarity_indices,:][:,:,radius_range]
+                    cell_train_data = data[similarity_indices[:,:,None],radius_range]
 
                     # use similarity matrix, if it is provided
                     if (mode == Dataset.RUNTIME):
@@ -188,7 +190,7 @@ def load_data(data,
                                                  similarity_matrix[:,radius_range], axis=-1)
 
                     else:
-                        cell_label_data = data[label_cell_indices[delete_indices],:][:,radius_range]
+                        cell_label_data = data[label_cell_indices[delete_indices][:,None],radius_range]
 
                         similarity_double_positive = np.average(cell_train_data*
                                                  cell_label_data, axis=-1)
@@ -199,14 +201,15 @@ def load_data(data,
 
                     similarities_double_positive = np.concatenate([similarities_double_positive,similarity_double_positive],axis=1)
                     similarities_agreement = np.concatenate([similarities_agreement,similarity_agreement],axis=1)
-
+                    
                 # rehape agreement assay similarity to Radii by feature_cells
                 similarities = np.concatenate([similarities_agreement, similarities_double_positive], axis=1)
 
                 final = []
                 for j,c in enumerate(eval_cell_types):
                     # get indices for this cell that has data
-                    present_indices = feature_cell_indices_list[j][feature_cell_indices_list[j]!=-1]
+                    present_indices = feature_cell_indices[j,:]
+                    present_indices = present_indices[present_indices!=-1]
                     cell_features = data[present_indices,i]
                     cell_similarities = similarities[j,:]
                     concat = np.concatenate([cell_features, cell_similarities])

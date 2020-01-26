@@ -60,7 +60,8 @@ class VariationalPeakModel():
                  similarity_assays = ['DNase'],
                  train_indices = None,
                  data = None,
-                 data_path = None):
+                 data_path = None,
+                 checkpoint = None):
         """
         Initializes Peak Model
 
@@ -316,7 +317,7 @@ class VariationalPeakModel():
         """
         return self.run_predictions(num_samples, ds, calculate_metrics)
 
-    def eval_vector(self, data, vector, matrix):
+    def eval_vector(self, data, matrix, indices):
         """
         Evaluates a new cell type based on its chromatin (DNase or ATAC-seq) vector, as well
         as any other similarity assays (acetylation, methylation, etc.). len(vector) should equal
