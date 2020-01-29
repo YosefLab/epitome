@@ -172,6 +172,8 @@ class VariationalPeakModel():
         self.matrix = matrix
         self.assaymap= assaymap
         self.cellmap = cellmap
+        self.predict_assays = list(self.assaymap)
+        [self.predict_assays.remove(i) for i in self.similarity_assays]
         self.model = self.create_model()
 
     def get_weight_parameters(self):
@@ -434,7 +436,7 @@ class VariationalPeakModel():
         try:
 
             # try/accept for cases with only one class (throws ValueError)
-            assay_dict = get_performance(self.assaymap, preds_mean, truth_reset, sample_weight)
+            assay_dict = get_performance(self.assaymap, preds_mean, truth_reset, sample_weight, self.predict_assays)
 
             # calculate averages
             auROC = np.nanmean(list(map(lambda x: x['AUC'],assay_dict.values())))
