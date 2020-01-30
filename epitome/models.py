@@ -522,8 +522,8 @@ class VariationalPeakModel():
 
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set, 
         # and their indices are stored in missing_idx for future use
-        peak_vector_chromatin, all_peaks_chromatin = bedFile2Vector(chromatin_peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
-        peak_vector_regions, all_peaks_regions = bedFile2Vector(regions_peak_file, EPITOME_ALLTFS_BEDFILE + ".gz")
+        peak_vector_chromatin, all_peaks_chromatin = bedFile2Vector(chromatin_peak_file, self.regionsFile)
+        peak_vector_regions, all_peaks_regions = bedFile2Vector(regions_peak_file, self.regionsFile)
 
         print("finished loading peak file")
 
@@ -539,57 +539,45 @@ class VariationalPeakModel():
             all_data = concatenate_all_data(self.data, self.regionsFile)
 
         # tuple of means and stds
-        predictions = self.eval_vector(all_data, peak_vector_chromatin, idx)
+        means, stds = self.eval_vector(all_data, peak_vector_chromatin, idx)
+        
         # zip together meands and stdevs for each position in idx
         # shape of predictions is (# available predictions, 2 [mean, std], #TFs )
-        predictions = np.array(list(zip(predictions[0], predictions[1])))
-        print("finished predictions...", predictions.shape)
+        print("finished predictions...", means.shape)
+        
+        means_df =  pd.DataFrame(data=means.numpy(), columns=list(self.assaymap)[1:])
+        std_cols = list(map(lambda x: x + "_stds",list(self.assaymap)[1:]))
+        stds_df =  pd.DataFrame(data=stds.numpy(), columns=std_cols)
 
-        # # get number of factors to fill in if values are missing
-        num_factors = predictions.shape[-1]
-
-        # map predictions with genomic position 
-        liRegions = load_bed_regions(EPITOME_ALLTFS_BEDFILE + ".gz")
-        prediction_positions = itemgetter(*idx)(liRegions)
-        # list of (region, mean, stdev) for each prediction
-        zipped = list(zip(prediction_positions, predictions))
-
-        # # for each all_peaks, if 1, reduce means for all overlapping peaks in positions
-        # # else, set to 0s
-        def reduceMeans(peak):
-
-            if (peak[1]):
-                # parse region
-
-                # filter overlapping predictions for this peak and take mean  
-                res = np.array(list(map(lambda k: k[1][0], filter(lambda x: Region.overlaps(peak[0], x[0], 1), zipped))))
-                mean = np.mean(res, axis = 0)
-                # TODO: there are some cases with no peaks
-                if res.shape[0] == 0:
-                    return(peak[0], np.zeros(num_factors))  
-                else:
-                    return(peak[0], mean)
-
-            else:
-                return(peak[0], np.zeros(num_factors)) 
-
-        # zip together all intervals being evalutated (all_peaks_regions[0]) and whether or 
-        # not each evaluated region is present (all_peaks_regions[1])
-        #
-        # for each evaluated region, reduce means
-        grouped = list(map(lambda x: np.matrix(reduceMeans(x)[1]), zip(all_peaks_regions[0], all_peaks_regions[1])))
-        final = np.concatenate(grouped, axis=0)
-
-        df = pd.DataFrame(final, columns=list(self.assaymap)[1:])
-
-
-        # load in peaks to get positions and could be called only once
-        # TODO why are you reading this in twice?
-        df_pos = pd.read_csv(regions_peak_file, sep="\t", header = None)[[0,1,2]]
-        final_df = pd.concat([df_pos, df], axis=1)
-
-        return final_df
-
+        # read in regions file and filter by indices that were scored
+        p = pd.read_csv(self.regionsFile, sep='\t',header=None)[[0,1,2]]
+        p['idx']=p.index # keep original bed region ordering using idx column
+        p.columns = ['Chromosome', 'Start','End','idx']
+        prediction_positions = p[p['idx'].isin(idx)] # select regions that were scored
+        # reset index to match predictions shape
+        prediction_positions = prediction_positions.reset_index()
+        prediction_positions['idx'] = prediction_positions.index
+        prediction_positions = pd.concat([prediction_positions,means_df,stds_df],axis=1)
+        prediction_positions_pr = pr.PyRanges(prediction_positions).sort()
+        
+        original_file = bed2Pyranges(regions_peak_file)
+        # left join 
+        joined = original_file.join(prediction_positions_pr, how='left')
+        # turn into dataframe
+        joined_df = joined.df
+        joined_df = joined_df.drop(['index','Start_b','End_b','idx_b'],axis=1)
+        # set missing values to 0
+        num = joined_df._get_numeric_data()
+        num[num < 0] = 0
+        mean_results = joined_df.groupby('idx').mean()
+        
+        tmp = original_file.df
+        tmp = tmp.set_index(tmp['idx']) # correctly set index to original ordering
+        
+        assert np.all(tmp.sort_index()['Start'].values == mean_results['Start'].values), "Error: genomic position start sites in mean results and original bed file do not match!"
+        assert np.all(tmp.sort_index()['End'].values == mean_results['End'].values), "Error: genomic position end sites in mean results and original bed file do not match!"
+            
+        return pd.concat([tmp[['Chromosome']],mean_results], axis=1)
 
 class VLP(VariationalPeakModel):
     def __init__(self,
@@ -601,7 +589,6 @@ class VLP(VariationalPeakModel):
         """
         self.activation = tf.tanh
         self.layers = 2
-                          
         if "checkpoint" in kwargs.keys():
             fileObject = open(kwargs["checkpoint"] + "/model_params.pickle" ,'rb')
             metadata = pickle.load(fileObject)
