@@ -24,13 +24,11 @@ def gini_normalized(actual, pred, sample_weight = None):
     return normalized_gini
 
 
-def get_performance(assaymap, preds, truth, sample_weight):
+def get_performance(assaymap, preds, truth, sample_weight, predicted_assays):
 
 
     assert(preds.shape == truth.shape)
     assert(preds.shape == sample_weight.shape)
-
-    inv_assaymap = {v: k for k, v in assaymap.items()}
 
     evaluated_assays = {}
 
@@ -65,6 +63,6 @@ def get_performance(assaymap, preds, truth, sample_weight):
 
         except ValueError:
             gini_score = np.NaN
-        evaluated_assays[inv_assaymap[j+1]] = {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
+        evaluated_assays[predicted_assays[j]] = {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
 
     return evaluated_assays
