@@ -394,7 +394,7 @@ def get_assays_from_feature_file(feature_name_file = None,
 def bed2Pyranges(bed_file):
     """
     Loads bed file in as a pyranges object.
-    Preserves ordering of bed lines.
+    Preserves ordering of bed lines by loading in as a pandas DF first.
 
     Args:
         :param bed_file: absolute path to bed file

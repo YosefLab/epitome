@@ -17,7 +17,7 @@ def gini(actual, pred, sample_weight):
     cumPosFound = tf.math.cumsum(df[0])
     Lorentz = tf.divide(cumPosFound,totalPos)
     Gini = Lorentz - linsp
-    return tf.reduce_sum(tf.boolean_mask(Gini, sample_weight)).numpy()
+    return tf.reduce_sum(tf.boolean_mask(Gini, sample_weight)).numpy().astype(float)
 
 def gini_normalized(actual, pred, sample_weight = None):
     normalized_gini = gini(actual, pred, sample_weight)/gini(actual, actual, sample_weight)

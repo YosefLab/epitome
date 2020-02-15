@@ -125,7 +125,7 @@ def load_data(data,
 
     # make sure no similarity comparison data is missing for all cell types
     assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \
-        "missing data at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1))
+        "missing data at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
 
     def g():
         for i in indices: # for all records specified
