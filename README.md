@@ -1,6 +1,6 @@
 # Epitome
 
-Full pipeline for learning TFBS from epigenetic datasets.
+Pipeline for predicting ChIP-seq peaks in novel cell types using chromatin accessibility.
 
 ![Epitome Diagram](docs/figures/epitome_diagram.png)
 
