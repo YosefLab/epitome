@@ -39,18 +39,18 @@ nvcc --version
 
 ```python
 
-    assays = list_assays()[0:3] # list of available ChIP-seq targets epitome can predict on
+assays = list_assays()[0:3] # list of available ChIP-seq targets epitome can predict on
 
-    from epitome.models import *
-    model = VLP(['CTCF', 'SMC3', 'RAD21'])
-    model.train(5000) # train for 5000 iterations
+from epitome.models import *
+model = VLP(['CTCF', 'SMC3', 'RAD21'])
+model.train(5000) # train for 5000 iterations
 ```
 
 ## Evaluate a Model:
 
 ```python
 
-   model.test(1000) # evaluate how well the model performs on a validation set
+model.test(1000) # evaluate how well the model performs on a validation set
 
 ```
 
@@ -63,17 +63,17 @@ To score specific regions:
 
 ```python
 
-   chromatin_peak_file = ... # path to peak called ATAC-seq or DNase-seq in bed format
-   regions_file = ...        # path to bed file of regions to score
-   results = model.score_peak_file(chromatin_peak_file, regions_file)
+chromatin_peak_file = ... # path to peak called ATAC-seq or DNase-seq in bed format
+regions_file = ...        # path to bed file of regions to score
+results = model.score_peak_file(chromatin_peak_file, regions_file)
 
 ```
 
 To score on the whole genome:
 ```python
 
-   chromatin_peak_file = ... # path to peak called ATAC-seq or DNase-seq in bed format
-   file_prefix = ...        # file to save compressed numpy predictions to.
-   model.score_peak_file(chromatin_peak_file, file_prefix)
+chromatin_peak_file = ... # path to peak called ATAC-seq or DNase-seq in bed format
+file_prefix = ...        # file to save compressed numpy predictions to.
+model.score_peak_file(chromatin_peak_file, file_prefix)
 
 ```
