@@ -26,9 +26,11 @@ TENSORFLOW_VERSION = "2.0.0.dev20190729"
 
 try:
     subprocess.check_output(["nvidia-smi", "-L"])
-    tf_req = "tf-nightly-gpu-2.0-preview==%s" % TENSORFLOW_VERSION
+    tf_req = "tf-nightly-gpu-2.0==%s" % TENSORFLOW_VERSION
+    # Could error out on CUDA
 except:
-    tf_req = "tf-nightly-2.0-preview==%s" % TENSORFLOW_VERSION
+    # tf_req = "tf-nightly-2.0==%s" % TENSORFLOW_VERSION
+    tf_req = "tfp-nightly==0.8.0.dev20190729"
 
 reqs.append(tf_req)
 
