@@ -40,9 +40,8 @@ MOCK_MODULES = [
     "matplotlib.pyplot",
     "matplotlib.backends",
     "matplotlib.lines",
-    "matplotlib.transforms"
-
-
+    "matplotlib.transforms",
+    "sklearn.calibration"
 ]
 
 for mod_name in MOCK_MODULES:
