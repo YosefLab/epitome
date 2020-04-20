@@ -6,7 +6,10 @@ class GeneratorsTest(EpitomeTestCase):
 
 	def test_generator_no_dnase(self):
 
-		data = self.getValidData()
+		# generate consistent data
+		data_shape = self.getValidDataShape()
+		data = np.zeros(data_shape)
+		data[::2] = 1 # every 2nd row is 1s
 
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_assays = ['DNase','CTCF']
@@ -22,7 +25,7 @@ class GeneratorsTest(EpitomeTestCase):
 			matrix,
 			assaymap,
 			cellmap,
-			radii = [],
+			radii = [], # no dnase
 			mode = Dataset.VALID,
 			indices=np.arange(0,10))()
 		li_results = list(results)

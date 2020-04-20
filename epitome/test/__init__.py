@@ -7,10 +7,13 @@ from epitome import GET_DATA_PATH
 
 class EpitomeTestCase(unittest.TestCase):
 
+	def getValidDataShape(self):
+		return (749, 50000)
+
 	def getValidData(self):
-		data_path = GET_DATA_PATH()
-		x = os.path.join(data_path, 'valid.npz')
-		return scipy.sparse.load_npz(x).toarray()
+		np.random.seed(1)
+		# generate striped array
+		return np.random.randint(2, size=self.getValidDataShape())
 
 	def getFeatureData(self, eligible_assays, eligible_cells):
 		# returns matrix, cellmap, assaymap
