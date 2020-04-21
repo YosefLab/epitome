@@ -3,11 +3,11 @@ import sys
 import tempfile
 import unittest
 from epitome.models import *
-from epitome import GET_DATA_PATH
 
 class EpitomeTestCase(unittest.TestCase):
 
 	def getValidDataShape(self):
+		# number of rows in feature_name file by n random genome regions
 		return (749, 50000)
 
 	def getValidData(self):
@@ -17,7 +17,8 @@ class EpitomeTestCase(unittest.TestCase):
 
 	def getFeatureData(self, eligible_assays, eligible_cells):
 		# returns matrix, cellmap, assaymap
-		return get_assays_from_feature_file(eligible_assays = eligible_assays,
+		return get_assays_from_feature_file(feature_name_file = 'epitome/test/data/feature_name',
+				eligible_assays = eligible_assays,
 				eligible_cells = eligible_cells, min_cells_per_assay = 3, min_assays_per_cell = 1)
 
 	def makeSmallModel(self):
