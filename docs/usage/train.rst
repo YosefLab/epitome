@@ -21,9 +21,9 @@ Quick Start
 
 First, define the assays you would like to train. Then you can create a `VLP` model:
 
-TODO: have a function that lists all of the assays you can build a model from.
-
 .. code:: python
+
+	print(list_assays()) # prints all targets that epitome can train
 
 	assays = ['CTCF','RAD21','SMC3']
 	model = VLP(assays, test_celltypes = ["K562"]) # cell line reserved for testing
