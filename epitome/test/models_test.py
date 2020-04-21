@@ -43,6 +43,6 @@ class ModelsTest(EpitomeTestCase):
 		# should save and re-load model
 		tmp_path = self.tmpFile()
 		self.model.save(tmp_path)
-		loaded_model = VLP(checkpoint=tmp_path)
+		loaded_model = VLP(checkpoint=tmp_path, data = self.model.data)
 		results = loaded_model.test(self.validation_size)
 		assert(results['preds_mean'].shape[0] == self.validation_size)

@@ -150,15 +150,15 @@ def get_missing_indices_for_cell(matrix, cellmap, cell):
 
 def download_and_unzip(url, dst):
     """ Downloads a url to local destination, unzips it and deletes zip.
-    
+
     Args:
         :param url: url to download.
         :param dst: local absolute path to download data to.
     """
     dst = os.path.join(dst, os.path.basename(url))
-    
+
     final_dst = dst.split('.zip')[0]
-    
+
     # download data if it does not exist
     if not os.path.exists(final_dst):
 
@@ -182,15 +182,15 @@ def download_and_unzip(url, dst):
             pbar.close()
 
     if url.endswith('.zip'):
-        
+
         # Extract zip data if it does not exist
         if not os.path.exists(final_dst):
             with ZipFile(dst, 'r') as zipObj:
                zipObj.extractall(os.path.dirname(dst))
-            
+
             # delete old zip to free space
             os.remove(dst)
-        
+
 def load_epitome_data(data_dir=None):
     """
     Loads data processed using data/download_encode.py. This will load three sparse matrix files
@@ -206,10 +206,10 @@ def load_epitome_data(data_dir=None):
     :returns: train_data, valid_data, and test_data
         3 numpy ndarrays for train, valid and test
     """
-    
+
     if not data_dir:
         data_dir = GET_DATA_PATH()
-        download_and_unzip(S3_DATA_PATH, GET_EPITOME_USER_PATH()) 
+        download_and_unzip(S3_DATA_PATH, GET_EPITOME_USER_PATH())
 
     # make sure all required files exist
     required_paths = [os.path.join(data_dir, x) for x in REQUIRED_FILES]
@@ -232,7 +232,7 @@ def load_bed_regions(bedfile):
     Returns:
         :return list of genomic Regions the size of train/valid/test data.
     '''
-    
+
     with gzip.open(bedfile, 'r') as f:
             liPositions = f.readlines()
 
@@ -244,7 +244,7 @@ def load_bed_regions(bedfile):
 
 
 def list_assays(feature_name_file = None):
-    
+
     ''' Parses a feature name file from DeepSea. File can be found in repo at ../data/feature_name.
     Returns at matrix of cell type/assays which exist for a subset of cell types.
 
@@ -255,7 +255,7 @@ def list_assays(feature_name_file = None):
         assays: list of assay names
     '''
     if not feature_name_file:
-        feature_name_file = os.path.join(GET_DATA_PATH(), FEATURE_NAME_FILE)    
+        feature_name_file = os.path.join(GET_DATA_PATH(), FEATURE_NAME_FILE)
 
     with open(feature_name_file) as f:
 
@@ -271,7 +271,7 @@ def list_assays(feature_name_file = None):
     # return unique list
     return list(set(assays))
 
-    
+
 
 def get_assays_from_feature_file(feature_name_file = None,
                                  eligible_assays = None,
@@ -294,7 +294,7 @@ def get_assays_from_feature_file(feature_name_file = None,
         cellmap: index of cells
         assaymap: index of assays
     '''
-    
+
     if not feature_name_file:
         feature_name_file = os.path.join(GET_DATA_PATH(), FEATURE_NAME_FILE)
 
