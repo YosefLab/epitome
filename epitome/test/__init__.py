@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from epitome.models import *
 
+S3_TEST_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/test/data.zip'
+
 class EpitomeTestCase(unittest.TestCase):
 
 	def getValidDataShape(self):
