@@ -24,10 +24,10 @@ pip install epitome
 
 # Install Epitome for development:
 ```
-pip install -e .
+make develop
 ```
 
-Note: Epitome is configured for tensorflow 1.12/Cuda 9. If you have a different
+Note: Epitome is configured for tensorflow 2.1.0/Cuda 9. If you have a different
 version of cuda, update tensorflow-gpu version accordingly.
 
 To check your Cuda version:
