@@ -28,7 +28,8 @@ try:
     subprocess.check_output(["nvidia-smi", "-L"])
     tf_req = "tf-nightly-gpu-2.0-preview==%s" % TENSORFLOW_VERSION
 except:
-    tf_req = "tf-nightly-2.0-preview==%s" % TENSORFLOW_VERSION
+    # tf_req = "tf-nightly-2.0-preview==%s" % TENSORFLOW_VERSION # OLD VERSION
+    tf_req = "tfp-nightly==0.8.0.dev20190729"
 
 reqs.append(tf_req)
 
