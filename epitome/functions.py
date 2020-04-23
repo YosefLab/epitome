@@ -155,6 +155,9 @@ def download_and_unzip(url, dst):
         :param url: url to download.
         :param dst: local absolute path to download data to.
     """
+    if not os.path.exists(dst):
+        os.makedirs(dst)
+    
     dst = os.path.join(dst, os.path.basename(url))
 
     final_dst = dst.split('.zip')[0]
