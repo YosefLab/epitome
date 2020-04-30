@@ -120,7 +120,7 @@ class VariationalPeakModel():
             data_path = GET_DATA_PATH()
 
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
-
+        
         input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.data[Dataset.TRAIN],
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
@@ -174,7 +174,7 @@ class VariationalPeakModel():
         self.cellmap = cellmap
         self.predict_assays = list(self.assaymap)
         [self.predict_assays.remove(i) for i in self.similarity_assays]
-        self.model = self.create_model()
+        self.model = self.create_model(generative = len(self.eval_cell_types) == 1)
 
     def get_weight_parameters(self):
         """
@@ -266,6 +266,7 @@ class VariationalPeakModel():
             features = f[:-2]
             labels = f[-2]
             weights = f[-1]
+            
             with tf.GradientTape() as tape:
 
                 logits = self.model(features, training=True)
@@ -279,7 +280,6 @@ class VariationalPeakModel():
             return elbo_loss, neg_log_likelihood, kl_loss
 
         for step, f in enumerate(self.train_iter.take(num_steps)):
-
             loss = train_step(f)
 
             if step % 1000 == 0:
@@ -340,6 +340,7 @@ class VariationalPeakModel():
                  radii = self.radii,
                  mode = Dataset.RUNTIME,
                  similarity_matrix = matrix,
+		 similarity_assays = self.similarity_assays,
                  indices = indices), self.batch_size, 1, self.prefetch_size)
 
         num_samples = len(indices)
@@ -347,6 +348,27 @@ class VariationalPeakModel():
         results = self.run_predictions(num_samples, ds, calculate_metrics = False)
 
         return results['preds_mean'], results['preds_std']
+    
+    
+    def _predict(self, numpy_matrix):
+        """
+        Run predictions on a numpy matrix. Size of numpy_matrix should be # examples by features.
+        This function is mostly used for testing, as it requires the user to pre-generate the
+        features using the generator function in generators.py.
+        """
+        
+        inv_assaymap = {v: k for k, v in self.assaymap.items()}
+
+        @tf.function
+        def predict_step(inputs):
+
+            # sample n times by tiling batch by rows, running
+            # predictions for each row
+            tmp = self.model(inputs.astype(np.float32))
+            y_pred = tf.sigmoid(tmp)
+            return y_pred
+
+        return predict_step(numpy_matrix)
 
     def run_predictions(self, num_samples, iter_, calculate_metrics = True, samples = 50):
         """
@@ -470,7 +492,7 @@ class VariationalPeakModel():
         Takes about 1 hour.
 
         Args:
-            :param chromatin_peak_files: list of similarity_peak_files corresponding to similarity_assays
+            :param similarity_peak_files: list of similarity_peak_files corresponding to similarity_assays
             :param file_prefix: path to save compressed numpy file to. Adds '.npz' extension.
             :param chroms: list of chromosome names to score. If none, scores all chromosomes.
             :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
@@ -483,7 +505,7 @@ class VariationalPeakModel():
         peak_matrix = np.vstack(peak_vectors)
         del peak_vectors
 
-        liRegions = enumerate(load_bed_regions(self.regionsFile))
+        liRegions = list(enumerate(load_bed_regions(self.regionsFile)))
 
         # filter liRegions by chrs
         if chrs is not None:
@@ -507,12 +529,14 @@ class VariationalPeakModel():
         # return matrix of region, TF information
         npRegions = np.array(list(map(lambda x: np.array([x.chrom, x.start, x.end]),liRegions)))
         # TODO turn into right types (all strings right now)
+	# predictions[0] is means of size n regions by # ChIP-seq peaks predicted
         means = np.concatenate([npRegions, predictions[0]], axis=1)
         stds = np.concatenate([npRegions, predictions[1]], axis=1)
 
         # can load back in using:
         # > loaded = np.load('file_prefix.npz')
         # > loaded['means'], loaded['stds']
+        # TODO: save the right types!  (currently all strings!)
         np.savez_compressed(file_prefix, means = means, stds=stds,
                             names=np.array(['chr','start','end'] + list(self.assaymap)[1:]))
 
@@ -620,7 +644,7 @@ class VLP(VariationalPeakModel):
         else:
             VariationalPeakModel.__init__(self, *args, **kwargs)
 
-    def create_model(self):
+    def create_model(self, **kwargs):
         # first model that has cell line channels but full connection to TFs
 
         # inputs for cell type specific channels
@@ -634,7 +658,12 @@ class VLP(VariationalPeakModel):
             # make input layer for cell
             last = cell_inputs[i]
             for j in range(self.layers):
-                num_units = int(self.num_inputs[i]/(2 * (j+1)))
+                # set number of units in subsequent layers.
+                # we do not decrease input size for generative model case
+                if "generative" in kwargs.keys():
+                    num_units = self.num_inputs[i]
+                else:   
+                    num_units = int(self.num_inputs[i]/(2 * (j+1)))
                 d = tfp.layers.DenseFlipout(num_units,
                                                  activation = self.activation)(last)
                 last = d
@@ -642,8 +671,10 @@ class VLP(VariationalPeakModel):
 
 
         # merge together all cell channels
-        last = tf.keras.layers.concatenate(cell_channels)
-
+        if (len(cell_channels) > 1):
+            last = tf.keras.layers.concatenate(cell_channels)
+        else:
+            last = cell_channels[0]
 
         outputs = tfp.layers.DenseFlipout(self.num_outputs,
                                         activity_regularizer=tf.keras.regularizers.l1_l2(self.l1, self.l2),
@@ -652,44 +683,3 @@ class VLP(VariationalPeakModel):
         model = tf.keras.models.Model(inputs=cell_inputs, outputs=outputs)
         return model
 
-
-    def create_model_parse_connections(self):
-        # This model seemed to make more sense, but is really slow and does not do any better.
-        # the premise was to unhook connections to TFs that do not have data from that cell line.
-        # TODO: try on a dataset where some TFs have few connections
-
-        # inputs for cell type specific channels
-        # inputs will be different length for each cell type
-        cell_inputs = [tf.keras.layers.Input(shape=(self.num_inputs[i],))
-                       for i in range(len(self.num_inputs))]
-
-        # make a channel for each cell type
-        cell_channels = []
-        for i in range(len(self.num_inputs)):
-            # make input layer for cell
-            last = cell_inputs[i]
-            for j in range(self.layers):
-                num_units = int(self.num_inputs[i]/(2 * (j+1)))
-                d = tfp.layers.DenseFlipout(num_units, name="cell_layer_%s_%i" % (self.eval_cell_types[i], j),
-                                                 activation = self.activation)(last)
-                last = d
-            cell_channels.append(last)
-
-        # for each assay, if there is data from each cell type from a given assay,
-        # add those connections to the network
-        outputs = []
-        for assay in list(self.assaymap)[1:]:
-            tf_channels = []
-            for cell, channel in zip(self.eval_cell_types, cell_channels):
-                has_data = self.matrix[self.cellmap[cell], self.assaymap[assay]] != -1
-                if has_data:
-                    tf_channels.append(channel)
-            outputs.append(tfp.layers.DenseFlipout(1,
-                                        activity_regularizer=tf.keras.regularizers.l1_l2(self.l1, self.l2),
-                                        name="output_layer_%s" % assay)(tf.keras.layers.concatenate(tf_channels)))
-
-        # merge cell channels together
-        output = tf.keras.layers.concatenate(outputs)
-
-        model = tf.keras.models.Model(inputs=cell_inputs, outputs=output)
-        return model
