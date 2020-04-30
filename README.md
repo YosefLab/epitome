@@ -2,7 +2,7 @@
 
 Pipeline for predicting ChIP-seq peaks in novel cell types using chromatin accessibility.
 
-![Epitome Diagram](docs/figures/epitome_diagram.png)
+![Epitome Diagram](docs/figures/epitome_diagram_celllines.png)
 
 Epitome leverages chromatin accessibility data to predict transcription factor binding sites on a novel cell type of interest. Epitome computes the chromatin similarity between 11 cell types in ENCODE and the novel cell types, and uses chromatin similarity to transfer binding information in known cell types to a novel cell type of interest.
 
@@ -24,10 +24,10 @@ pip install epitome
 
 # Install Epitome for development:
 ```
-pip install -e .
+make develop
 ```
 
-Note: Epitome is configured for tensorflow 1.12/Cuda 9. If you have a different
+Note: Epitome is configured for tensorflow 2.1.0/Cuda 9. If you have a different
 version of cuda, update tensorflow-gpu version accordingly.
 
 To check your Cuda version:
@@ -39,7 +39,7 @@ nvcc --version
 
 ```python
 
-    assays = list_assays()[0:3] # list of available ChIP-seq targets epitome can predict on
+    print(list_assays()) # list of available ChIP-seq targets epitome can predict on
 
     from epitome.models import *
     model = VLP(['CTCF', 'SMC3', 'RAD21'])

@@ -22,15 +22,20 @@ reqs = [str(ir.req) for ir in install_reqs]
 
 # append tensorflow or tensorflow-gpu to reqs
 # need nightly build to work with tensorflow probability
-TENSORFLOW_VERSION = "2.0.0.dev20190729"
+TENSORFLOW_VERSION="2.1.0"
 
 try:
     subprocess.check_output(["nvidia-smi", "-L"])
-    tf_req = "tf-nightly-gpu-2.0-preview==%s" % TENSORFLOW_VERSION
+    tf_req = "tensorflow-gpu==%s" % TENSORFLOW_VERSION
 except:
-    tf_req = "tf-nightly-2.0-preview==%s" % TENSORFLOW_VERSION
+    tf_req = "tensorflow==%s" % TENSORFLOW_VERSION
 
 reqs.append(tf_req)
+
+# Cython must be installed before pyranges
+err = subprocess.call(["pip","install","cython"])
+if err != 0:
+    raise Exception("Installing cython failed with error %i" % err)
 
 with open("README.md", "r") as fh:
     long_description = fh.read()

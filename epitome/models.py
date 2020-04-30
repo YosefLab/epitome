@@ -41,6 +41,7 @@ tf.config.experimental_run_functions_eagerly(True)
 
 class VariationalPeakModel():
     """ Model for learning from ChIP-seq peaks.
+    Modeled from https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py.
     """
 
     def __init__(self,
@@ -550,7 +551,7 @@ class VariationalPeakModel():
             :param similarity_peak_files: narrowpeak or bed files containing chromatin accessibility to score
             :param regions_peak_file: narrowpeak or bed file containing regions to score.
             :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
-            
+
         Returns:
             pandas dataframe of genomic regions and predictions
         """
@@ -580,7 +581,7 @@ class VariationalPeakModel():
         # tuple of means and stds
         means, stds = self.eval_vector(all_data, peak_matrix, idx)
         print("finished predictions...", means.shape)
-        
+
         means_df =  pd.DataFrame(data=means.numpy(), columns=list(self.assaymap)[1:])
         std_cols = list(map(lambda x: x + "_stds",list(self.assaymap)[1:]))
         stds_df =  pd.DataFrame(data=stds.numpy(), columns=std_cols)
@@ -595,9 +596,9 @@ class VariationalPeakModel():
         prediction_positions['idx'] = prediction_positions.index
         prediction_positions = pd.concat([prediction_positions,means_df,stds_df],axis=1)
         prediction_positions_pr = pr.PyRanges(prediction_positions).sort()
-        
+
         original_file = bed2Pyranges(regions_peak_file)
-        # left join 
+        # left join
         joined = original_file.join(prediction_positions_pr, how='left')
         # turn into dataframe
         joined_df = joined.df
@@ -606,13 +607,13 @@ class VariationalPeakModel():
         num = joined_df._get_numeric_data()
         num[num < 0] = 0
         mean_results = joined_df.groupby('idx').mean()
-        
+
         tmp = original_file.df
         tmp = tmp.set_index(tmp['idx']) # correctly set index to original ordering
-        
+
         assert np.all(tmp.sort_index()['Start'].values == mean_results['Start'].values), "Error: genomic position start sites in mean results and original bed file do not match!"
         assert np.all(tmp.sort_index()['End'].values == mean_results['End'].values), "Error: genomic position end sites in mean results and original bed file do not match!"
-            
+
         return pd.concat([tmp[['Chromosome']],mean_results], axis=1)
 
 class VLP(VariationalPeakModel):
@@ -654,6 +655,10 @@ class VLP(VariationalPeakModel):
 
         # make a channel for each cell type
         cell_channels = []
+
+        kl_divergence_function = (lambda q, p, _: tfp.distributions.kl_divergence(q, p) /
+                            tf.cast(self.batch_size, dtype=tf.float32))
+
         for i in range(len(self.num_inputs)):
             # make input layer for cell
             last = cell_inputs[i]
@@ -665,7 +670,8 @@ class VLP(VariationalPeakModel):
                 else:   
                     num_units = int(self.num_inputs[i]/(2 * (j+1)))
                 d = tfp.layers.DenseFlipout(num_units,
-                                                 activation = self.activation)(last)
+                                                kernel_divergence_fn=kl_divergence_function,
+                                                activation = self.activation)(last)
                 last = d
             cell_channels.append(last)
 
@@ -677,6 +683,7 @@ class VLP(VariationalPeakModel):
             last = cell_channels[0]
 
         outputs = tfp.layers.DenseFlipout(self.num_outputs,
+                                        kernel_divergence_fn=kl_divergence_function,
                                         activity_regularizer=tf.keras.regularizers.l1_l2(self.l1, self.l2),
                                         name="output_layer")(last)
 
