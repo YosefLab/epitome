@@ -18,7 +18,10 @@ def read(fname):
 # parse_requirements() returns generator of pip.req.InstallRequirement objects
 install_reqs = parse_requirements('requirements.txt', session='hack')
 
-reqs = [str(ir.req) for ir in install_reqs]
+try:
+    reqs = [str(ir.req) for ir in install_reqs]
+except: # pip > 20
+    reqs = [str(ir.requirement) for ir in install_reqs]
 
 # append tensorflow or tensorflow-gpu to reqs
 # need nightly build to work with tensorflow probability

@@ -115,7 +115,7 @@ def get_y_indices_for_cell(matrix, cellmap, cell):
     return np.copy(matrix[cellmap[cell]])
 
 
-def get_y_indices_for_assay(arrays, assaymap, assay):
+def get_y_indices_for_assay(matrix, assaymap, assay):
     """
     Gets indices for a assay.
 
@@ -126,8 +126,6 @@ def get_y_indices_for_assay(arrays, assaymap, assay):
 
     :return locations of indices for the cell name specified
     """
-    # get  column for this assay
-    matrix = output = np.array(arrays)
     return np.copy(matrix[:,assaymap[assay]])
 
 def get_missing_indices_for_cell(matrix, cellmap, cell):

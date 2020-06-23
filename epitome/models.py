@@ -432,10 +432,10 @@ class VariationalPeakModel():
         sample_weight = tf.concat(sample_weight, axis=0)
 
         # trim off extra from last batch
-        truth = truth[:num_samples, :]
-        preds_mean = preds_mean[:num_samples, :]
-        preds_std = preds_std[:num_samples, :]
-        sample_weight = sample_weight[:num_samples, :]
+        truth = truth[:num_samples, :].numpy()
+        preds_mean = preds_mean[:num_samples, :].numpy()
+        preds_std = preds_std[:num_samples, :].numpy()
+        sample_weight = sample_weight[:num_samples, :].numpy()
 
         # reset truth back to 0 to compute metrics
         # sample weights will rule these out anyways when computing metrics
@@ -656,9 +656,9 @@ class VLP(VariationalPeakModel):
         # make a channel for each cell type
         cell_channels = []
 
+        # TODO resize by max iterations. 5000 is an estimate for data size
         kl_divergence_function = (lambda q, p, _: tfp.distributions.kl_divergence(q, p) /
-                            tf.cast(self.batch_size, dtype=tf.float32))
-
+                            tf.cast(self.batch_size * 5000, dtype=tf.float32)) 
         for i in range(len(self.num_inputs)):
             # make input layer for cell
             last = cell_inputs[i]
