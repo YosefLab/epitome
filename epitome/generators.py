@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 from .constants import *
 from .functions import *
-import epitome.iio as iio
+from .sampling import *
 import glob
 
 ######################### Original Data Generator: Only peak based #####################
@@ -25,6 +25,7 @@ def load_data(data,
                  mode = Dataset.TRAIN,
                  similarity_matrix = None,
                  indices = None,
+                 return_feature_names = False,
                  **kwargs):
     """
     Takes Deepsea data and calculates distance metrics from cell types whose locations
@@ -50,6 +51,21 @@ def load_data(data,
 
     # for now, we require DNase to be part of the similarity comparison
     assert('DNase' in similarity_assays)
+        
+    # get indices for features.rows are cells and cols are assays
+    cellmap_idx = [cellmap[c] for c in list(eval_cell_types)]
+    feature_cell_indices = matrix[cellmap_idx,:]
+    
+    # indices to be deleted used for similarity comparison
+    delete_indices = np.array([assaymap[s] for s in similarity_assays])
+    
+    # make sure no similarity comparison data is missing for all cell types
+    assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \
+        "missing data at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
+    
+    # names of labels that are being predicted
+    feature_assays = [a for a in list(assaymap)] # assays used as features for each evaluation cell type
+    label_assays = [a for a in feature_assays if a not in similarity_assays]
 
     if (not isinstance(mode, Dataset)):
         raise ValueError("mode is not a Dataset enum")
@@ -61,23 +77,18 @@ def load_data(data,
                                      list(cellmap))))
             feature_indices = feature_indices[feature_indices != -1]
 
-            # need to re-proportion the indices to equalize positives
+            # need to re-proportion the indices to oversample underrepresented labels
             if (len(list(assaymap)) > 2):
-
-                # get sums for each feature in the dataset
-                rowsums = np.sum(data[feature_indices,:], axis=1)
-
-                # multiply data by row scaling factor
-                scale_factor = 1/rowsums
-                scaled = data[feature_indices,:] * scale_factor[:, np.newaxis]
-
-                # indices where sum > 0
-                indices_zero = np.where(np.sum(scaled, axis=0) > 0)[0]
-                # then filter indices by probabilities inversely proportional to frequency
-                indices = np.random.choice(indices_zero, int(indices_zero.shape[0] * 0.4), p=(np.sum(scaled, axis=0)/np.sum(scaled))[indices_zero])
-
+                # configure y: label matrix of ChIP for all assays from all cell lines in train
+                indices = np.concatenate([get_y_indices_for_assay(matrix, assaymap, assay) for assay in label_assays])
+                indices = indices[indices != -1]
+                y = data[indices, :].T
+                m = MLSMOTE(y)
+                indices = m.fit_resample()
+            
             else:
                 # single TF model
+                # get indices for DNAse and chip for this mark
                 feature_indices = np.concatenate(list(map(lambda c: get_y_indices_for_cell(matrix, cellmap, c),
                                                      list(cellmap))))
 
@@ -88,7 +99,7 @@ def load_data(data,
                 TF_indices =  TF_indices[TF_indices != -1]
                 feature_indices = feature_indices[feature_indices != -1]
 
-                # sites where TF is in at least 1 cell line
+                # sites where TF is bound in at least 2 cell line
                 positive_indices = np.where(np.sum(data[TF_indices,:], axis=0) > 1)[0]
 
                 indices_probs = np.ones([data.shape[1]])
@@ -96,12 +107,14 @@ def load_data(data,
                 indices_probs = indices_probs/np.sum(indices_probs, keepdims=1)
 
                 # randomly select 10 fold sites where TF is not in any cell line
-                negative_indices = np.random.choice(np.arange(0,data.shape[1]), positive_indices.shape[0] * 10,p=indices_probs)
+                negative_indices = np.random.choice(np.arange(0,data.shape[1]), 
+                                                    positive_indices.shape[0] * 10,
+                                                    p=indices_probs)
                 indices = np.sort(np.concatenate([negative_indices, positive_indices]))
-
 
         else:
             indices = range(0, data.shape[-1]) # not training mode, set to all points
+
 
     if (mode == Dataset.RUNTIME):
         label_cell_types = ["PLACEHOLDER_CELL"]
@@ -116,21 +129,11 @@ def load_data(data,
     # string of radii for meta data labeling
     radii_str = list(map(lambda x: "RADII_%i" % x, radii))
     
-    # get indices for features.rows are cells and cols are assays
-    cellmap_idx = [cellmap[c] for c in list(eval_cell_types)]
-    feature_cell_indices = matrix[cellmap_idx,:]
-    
-    # indices to be deleted used for similarity comparison
-    delete_indices = np.array([assaymap[s] for s in similarity_assays])
-
-    # make sure no similarity comparison data is missing for all cell types
-    assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \
-        "missing data at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
-
     def g():
         for i in indices: # for all records specified
+            feature_names = []
+            
             for (cell) in label_cell_types: # for all cell types to be used in labels
-                
                 similarities_double_positive = np.empty([len(eval_cell_types),0])
                 similarities_agreement = np.empty([len(eval_cell_types),0])
 
@@ -157,6 +160,9 @@ def load_data(data,
                 # get indices for assays used in similarity computation
                 # for cell types that are going to be features
                 similarity_indices = feature_cell_indices[:, delete_indices]
+                
+                similarity_labels_agreement = []
+                similarity_labels_dp = []
                 
                 for r, radius in enumerate(radii):
 
@@ -199,24 +205,33 @@ def load_data(data,
                         similarity_agreement = np.average(cell_train_data ==
                                                  cell_label_data, axis=-1)
 
+                    similarity_labels_agreement.append('r%i_%s' % (radius, 'agree'))
+                    similarity_labels_dp.append('r%i_%s' % (radius, 'dp'))
+                    
                     similarities_double_positive = np.concatenate([similarities_double_positive,similarity_double_positive],axis=1)
                     similarities_agreement = np.concatenate([similarities_agreement,similarity_agreement],axis=1)
                     
                 # rehape agreement assay similarity to Radii by feature_cells
                 similarities = np.concatenate([similarities_agreement, similarities_double_positive], axis=1)
+                similarity_labels = np.concatenate([similarity_labels_agreement, similarity_labels_dp])
 
                 final = []
                 for j,c in enumerate(eval_cell_types):
                     # get indices for this cell that has data
                     present_indices = feature_cell_indices[j,:]
                     present_indices = present_indices[present_indices!=-1]
+                    
                     cell_features = data[present_indices,i]
                     cell_similarities = similarities[j,:]
                     concat = np.concatenate([cell_features, cell_similarities])
-                    if c == cell: # if eval cell write out missing values
-                        final.append(np.zeros(len(concat)))
-                    else:
-                        final.append(concat)
+                    final.append(concat)
+                        
+                    # concatenate together feature names
+                    tmp = np.array(feature_assays)[feature_cell_indices[j,:] != -1]
+                    al = ['%s_%s' % (c, a) for a in tmp]
+                    sl = ['%s_%s' % (c, s) for s in similarity_labels]
+                        
+                    feature_names.append(np.concatenate([al, sl]))
 
 
                 if (mode != Dataset.RUNTIME):
@@ -228,10 +243,19 @@ def load_data(data,
 
                 # append labels and assaymask
                 final.append(labels.astype(np.float32))
+                feature_names.append(['lbl_%s_%s' % (cell, a) for a in label_assays]) # of form lbl_cellline_target
+                
                 final.append(assay_mask.astype(np.float32))
-                yield tuple(final)
+                feature_names.append(['mask_%s_%s' % (cell, a) for a in label_assays]) # of form mask_cellline_target
+                
+                if (return_feature_names):
+                    yield (tuple(final), tuple(feature_names))
+                else:
+                    yield tuple(final)
+                
 
     return g
+
 
 
 def generator_to_tf_dataset(g, batch_size, shuffle_size, prefetch_size):
