@@ -124,6 +124,7 @@ class VariationalPeakModel():
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
         
         # Reserving chr1 to validate training data while training
+        # Time range_for_contigs and see if it's too long
         chr1_end = range_for_contigs(self.regionsFile)['chr1'][1]
         self.train_valid_data = self.data[Dataset.TRAIN][:,0:chr1_end]
         self.train_data = self.data[Dataset.TRAIN][:,chr1_end:]
