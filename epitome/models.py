@@ -129,17 +129,18 @@ class VariationalPeakModel():
         self.train_valid_data = self.data[Dataset.TRAIN][:,0:chr1_end]
         self.train_data = self.data[Dataset.TRAIN][:,chr1_end:]
         
-        _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.train_valid_data, #self.data[Dataset.TRAIN],
+        _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.train_valid_data,
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
                                                 matrix,
                                                 assaymap,
                                                 cellmap,
                                                 similarity_assays = similarity_assays,
-                                                radii = radii, mode = Dataset.TRAIN, max_records=max_valid_records),
+                                                radii = radii, mode = Dataset.TRAIN,
+                                                max_records=max_valid_records),
                                                 batch_size, 1, prefetch_size)
         
-        input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.train_data, #self.data[Dataset.TRAIN],
+        input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.train_data, 
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
                                                 matrix,
@@ -318,9 +319,7 @@ class VariationalPeakModel():
                                           str(tf.reduce_mean(loss[1])) +
                                           str(tf.reduce_mean(loss[2])))
                 
-                # TODO: ADD IN STOPPING VALIDATION CODE
-                # TODO: train_valid_iter can just be the same 20,000-40,000 same points --> follow a similar sampling method as the training 
-                # Empty array for concatenation
+                # EARLY STOPPING VALIDATION CODE
                 if self.max_valid_records is not None:
                     new_valid_loss = []
                     for step_v, f_v in enumerate(self.train_valid_iter.take(self.max_valid_records)):
