@@ -48,6 +48,11 @@ def load_data(data,
         3. 0/1 mask of labels that have validation data. For example, if this record is for celltype A549,
         and A549 does not have data for ATF3, there will be a 0 in the position corresponding to the label space.
     """
+    
+    # reshape similarity_matrix to a matrix if there is only one assay
+    if similarity_matrix is not None:
+        if len(similarity_matrix.shape) == 1:
+            similarity_matrix = similarity_matrix[None,:]
 
     # for now, we require DNase to be part of the similarity comparison
     assert('DNase' in similarity_assays)
@@ -56,7 +61,7 @@ def load_data(data,
     cellmap_idx = [cellmap[c] for c in list(eval_cell_types)]
     feature_cell_indices = matrix[cellmap_idx,:]
     
-    # indices to be deleted used for similarity comparison
+    # indices to be deleted. used for similarity comparison, not predictions.
     delete_indices = np.array([assaymap[s] for s in similarity_assays])
     
     # make sure no similarity comparison data is missing for all cell types
