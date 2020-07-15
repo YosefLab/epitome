@@ -341,7 +341,7 @@ class VariationalPeakModel():
                  radii = self.radii,
                  mode = Dataset.RUNTIME,
                  similarity_matrix = matrix,
-		 similarity_assays = self.similarity_assays,
+                 similarity_assays = self.similarity_assays,
                  indices = indices), self.batch_size, 1, self.prefetch_size)
 
         num_samples = len(indices)
@@ -362,10 +362,16 @@ class VariationalPeakModel():
 
         @tf.function
         def predict_step(inputs):
+            
+            # get the shapes for the cell type specific features. 
+            # they are not even, because some cells have missing data.
+            cell_lens = [i.shape[-1] for i in self.train_iter.element_spec[:-2]]
+            
+            # split matrix inputs into tuple of cell line specific features
+            split_inputs = tf.split(inputs.astype(np.float32), cell_lens, axis=1)
 
-            # sample n times by tiling batch by rows, running
-            # predictions for each row
-            tmp = self.model(inputs.astype(np.float32))
+            # predict
+            tmp = self.model(split_inputs)
             y_pred = tf.sigmoid(tmp)
             return y_pred
 

@@ -112,7 +112,7 @@ def get_y_indices_for_cell(matrix, cellmap, cell):
     :return locations of indices for the cell name specified
     """
 
-    return np.copy(matrix[cellmap[cell]])
+    return np.copy(matrix[cellmap[cell],:])
 
 
 def get_y_indices_for_assay(matrix, assaymap, assay):
