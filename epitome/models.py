@@ -15,6 +15,7 @@ Models
 from epitome import *
 import tensorflow as tf
 import tensorflow_probability as tfp
+# import tensorflow_datasets as tfds
 
 from .functions import *
 from .constants import *
@@ -23,7 +24,7 @@ from .metrics import *
 import numpy as np
 
 import tqdm
-
+from timeit import default_timer as timer
 
 # for saving model
 import pickle
@@ -308,8 +309,9 @@ class VariationalPeakModel():
             neg_log_likelihood = self.loss_fn(labels, logits, weights)
             return neg_log_likelihood
         
-        mean_valid_loss = sys.maxsize
-
+        patience = 2
+        mean_valid_loss, min_delta, iters_dec = sys.maxsize, 0.001, 0
+        
         for step, f in enumerate(self.train_iter.take(num_steps)):
             loss = train_step(f)
 
@@ -322,18 +324,33 @@ class VariationalPeakModel():
                 # EARLY STOPPING VALIDATION CODE
                 if self.max_valid_records is not None:
                     new_valid_loss = []
+                    # Time Function Validation function
+                    start = timer()
                     for step_v, f_v in enumerate(self.train_valid_iter.take(self.max_valid_records)):
                         new_valid_loss.append(valid_step(f_v))
-
+                    end = timer()
+                    generator_time = end - start
+                    tf.compat.v1.logging.info(str(step) + " Validation Generator Time: " + str(generator_time) + " seconds")
+                    
+#                     for arr, label in tfds.as_numpy(self.train_valid_iter):
+#                         print(type(arr), type(label), label)
+                    
+#                     valid_step(self.train_valid_iter)
+                    
                     new_valid_loss = tf.concat(new_valid_loss, axis=0)
                     new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
 
                     tf.compat.v1.logging.info(str(step) + " Validation:" + str(new_mean_valid_loss))
-
-                    if new_mean_valid_loss > mean_valid_loss:
-                        return step
-                    else:
-                        mean_valid_loss = new_mean_valid_loss
+                    
+                    # Check if the new loss is min_delta less than the old loss.
+                    # If the loss is decreasing more than patience times, the function stops early.
+                    # Else it continues.
+                    if new_mean_valid_loss > mean_valid_loss - min_delta:
+                        iters_dec += 1
+                        if iters_dec == patience:
+                            return step
+                    
+                    mean_valid_loss = new_mean_valid_loss
                                     
 #                 valid_dict = self.test(20000, Dataset.TRAIN, calculate_metrics=True)
                 tf.compat.v1.logging.info("")
@@ -342,7 +359,7 @@ class VariationalPeakModel():
 #                     tf.compat.v1.logging.info("On validation")
 #                     _, _, _, _, _ = self.test(40000, log=False)
 #                     tf.compat.v1.logging.info("")
-        return step
+        return step + 1
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
         """
@@ -392,7 +409,7 @@ class VariationalPeakModel():
                  radii = self.radii,
                  mode = Dataset.RUNTIME,
                  similarity_matrix = matrix,
-		 similarity_assays = self.similarity_assays,
+                 similarity_assays = self.similarity_assays,
                  indices = indices), self.batch_size, 1, self.prefetch_size)
 
         num_samples = len(indices)
@@ -405,6 +422,7 @@ class VariationalPeakModel():
     def _predict(self, numpy_matrix):
         """
         Run predictions on a numpy matrix. Size of numpy_matrix should be # examples by features.
+        Size should be (number of examples x number of features).
         This function is mostly used for testing, as it requires the user to pre-generate the
         features using the generator function in generators.py.
         """
