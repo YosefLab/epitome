@@ -125,10 +125,13 @@ class VariationalPeakModel():
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
         
         # Reserving chr1 to validate training data while training
-        # Time range_for_contigs and see if it's too long
-        chr1_end = range_for_contigs(self.regionsFile)['chr1'][1]
-        self.train_valid_data = self.data[Dataset.TRAIN][:,0:chr1_end]
-        self.train_data = self.data[Dataset.TRAIN][:,chr1_end:]
+#         chr1_end = range_for_contigs(self.regionsFile)['chr1'][1]
+#         self.train_valid_data = self.data[Dataset.TRAIN][:,0:chr1_end]
+#         self.train_data = self.data[Dataset.TRAIN][:,chr1_end:]
+        chr22_beg, chr22_end = range_for_contigs(self.regionsFile)['chr22']
+        chr22_len = chr22_end - chr22_beg
+        self.train_valid_data = self.data[Dataset.TRAIN][:, -chr22_len:]
+        self.train_data = self.data[Dataset.TRAIN][:, :-chr22_len]
         
         _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.train_valid_data,
                                                 self.eval_cell_types,
@@ -137,9 +140,9 @@ class VariationalPeakModel():
                                                 assaymap,
                                                 cellmap,
                                                 similarity_assays = similarity_assays,
-                                                radii = radii, mode = Dataset.TRAIN,
-                                                max_records=max_valid_records),
-                                                batch_size, 1, prefetch_size)
+                                                radii = radii, mode = Dataset.TRAIN),
+#                                                 max_records=max_valid_records),
+                                                batch_size, shuffle_size, prefetch_size)
         
         input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.train_data, 
                                                 self.eval_cell_types,
@@ -276,7 +279,7 @@ class VariationalPeakModel():
 
         return tf.math.reduce_sum(loss, axis=0)
 
-    def train(self, num_steps, lr=None, checkpoint_path = None):
+    def train(self, num_steps, lr=None, checkpoint_path = None, patience=1, min_delta=0):
         if lr == None:
             lr = self.lr
 
@@ -309,13 +312,15 @@ class VariationalPeakModel():
             neg_log_likelihood = self.loss_fn(labels, logits, weights)
             return neg_log_likelihood
         
-        patience = 2
-        mean_valid_loss, min_delta, iters_dec = sys.maxsize, 0.001, 0
+        # Initializing variables
+#         patience, min_delta = 2, 0.001
+        mean_valid_loss, iters_dec, best_train_iters = sys.maxsize, 0, 0
+        valid_losses = []
         
         for step, f in enumerate(self.train_iter.take(num_steps)):
             loss = train_step(f)
 
-            if step % 1000 == 0:
+            if step % 200 == 0:
 
                 tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) +
                                           str(tf.reduce_mean(loss[1])) +
@@ -331,27 +336,31 @@ class VariationalPeakModel():
                     end = timer()
                     generator_time = end - start
                     tf.compat.v1.logging.info(str(step) + " Validation Generator Time: " + str(generator_time) + " seconds")
-                    
-#                     for arr, label in tfds.as_numpy(self.train_valid_iter):
-#                         print(type(arr), type(label), label)
-                    
-#                     valid_step(self.train_valid_iter)
-                    
+                                        
                     new_valid_loss = tf.concat(new_valid_loss, axis=0)
                     new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
+                    # new_mean_valid_loss = new_mean_valid_loss.tonumpy()
+                    valid_losses.append(new_mean_valid_loss)
 
                     tf.compat.v1.logging.info(str(step) + " Validation:" + str(new_mean_valid_loss))
                     
-                    # Check if the new loss is min_delta less than the old loss.
-                    # If the loss is decreasing more than patience times, the function stops early.
-                    # Else it continues.
-                    if new_mean_valid_loss > mean_valid_loss - min_delta:
+                    # Check if the improvement in loss is at least min_delta. 
+                    # If the loss has increased more than patience consecutive times, the function stops early.
+                    # Else it continues training.
+                    improvement = mean_valid_loss - new_mean_valid_loss
+#                     if new_mean_valid_loss > mean_valid_loss - min_delta:
+                    if improvement < min_delta:
                         iters_dec += 1
                         if iters_dec == patience:
-                            return step
+                            return best_train_iters, step, valid_losses
+                    else:
+                        # If val_loss increases before patience epochs, reset iters_dec and mean_valid_loss.
+                        iters_dec = 0
+                        mean_valid_loss = new_mean_valid_loss
+                        best_train_iters = step
+                        # TODO: Save and checkpoint model
+                        self.save(checkpoint_path)
                     
-                    mean_valid_loss = new_mean_valid_loss
-                                    
 #                 valid_dict = self.test(20000, Dataset.TRAIN, calculate_metrics=True)
                 tf.compat.v1.logging.info("")
 
@@ -359,7 +368,7 @@ class VariationalPeakModel():
 #                     tf.compat.v1.logging.info("On validation")
 #                     _, _, _, _, _ = self.test(40000, log=False)
 #                     tf.compat.v1.logging.info("")
-        return step + 1
+        return best_train_iters, step + 1, valid_losses #step + 1
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
         """
