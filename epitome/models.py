@@ -15,6 +15,7 @@ Models
 from epitome import *
 import tensorflow as tf
 import tensorflow_probability as tfp
+# import tensorflow_datasets as tfds
 
 from .functions import *
 from .constants import *
@@ -23,7 +24,7 @@ from .metrics import *
 import numpy as np
 
 import tqdm
-
+from timeit import default_timer as timer
 
 # for saving model
 import pickle
@@ -62,7 +63,8 @@ class VariationalPeakModel():
                  train_indices = None,
                  data = None,
                  data_path = None,
-                 checkpoint = None):
+                 checkpoint = None,
+                 max_valid_records = None):
         """
         Initializes Peak Model
 
@@ -122,7 +124,27 @@ class VariationalPeakModel():
 
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
         
-        input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.data[Dataset.TRAIN],
+        # Reserving chr1 to validate training data while training
+#         chr1_end = range_for_contigs(self.regionsFile)['chr1'][1]
+#         self.train_valid_data = self.data[Dataset.TRAIN][:,0:chr1_end]
+#         self.train_data = self.data[Dataset.TRAIN][:,chr1_end:]
+        chr22_beg, chr22_end = range_for_contigs(self.regionsFile)['chr22']
+        chr22_len = chr22_end - chr22_beg
+        self.train_valid_data = self.data[Dataset.TRAIN][:, -chr22_len:]
+        self.train_data = self.data[Dataset.TRAIN][:, :-chr22_len]
+        
+        _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.train_valid_data,
+                                                self.eval_cell_types,
+                                                self.eval_cell_types,
+                                                matrix,
+                                                assaymap,
+                                                cellmap,
+                                                similarity_assays = similarity_assays,
+                                                radii = radii, mode = Dataset.TRAIN),
+#                                                 max_records=max_valid_records),
+                                                batch_size, shuffle_size, prefetch_size)
+        
+        input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.train_data, 
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
                                                 matrix,
@@ -141,7 +163,7 @@ class VariationalPeakModel():
                                                 similarity_assays = similarity_assays,
                                                 radii = radii, mode = Dataset.VALID),
                                                 batch_size, 1, prefetch_size)
-
+        
         # can be empty if len(test_celltypes) == 0
         if len(self.test_celltypes) > 0:
             _, _,            self.test_iter = generator_to_tf_dataset(load_data(self.data[Dataset.TEST],
@@ -163,6 +185,7 @@ class VariationalPeakModel():
 
         self.num_outputs = output_shape[0]
         self.num_inputs = input_shapes
+        self.max_valid_records = max_valid_records
 
         # set self
         self.radii = radii
@@ -256,7 +279,7 @@ class VariationalPeakModel():
 
         return tf.math.reduce_sum(loss, axis=0)
 
-    def train(self, num_steps, lr=None, checkpoint_path = None):
+    def train(self, num_steps, lr=None, checkpoint_path = None, patience=1, min_delta=0):
         if lr == None:
             lr = self.lr
 
@@ -279,20 +302,73 @@ class VariationalPeakModel():
             self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
             return elbo_loss, neg_log_likelihood, kl_loss
-
+        
+        @tf.function
+        def valid_step(f):
+            features = f[:-2]
+            labels = f[-2]
+            weights = f[-1]
+            logits = self.model(features, training=False)
+            neg_log_likelihood = self.loss_fn(labels, logits, weights)
+            return neg_log_likelihood
+        
+        # Initializing variables
+#         patience, min_delta = 2, 0.001
+        mean_valid_loss, iters_dec, best_train_iters = sys.maxsize, 0, 0
+        valid_losses = []
+        
         for step, f in enumerate(self.train_iter.take(num_steps)):
             loss = train_step(f)
 
-            if step % 1000 == 0:
+            if step % 200 == 0:
 
                 tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) +
                                           str(tf.reduce_mean(loss[1])) +
                                           str(tf.reduce_mean(loss[2])))
+                
+                # EARLY STOPPING VALIDATION CODE
+                if self.max_valid_records is not None:
+                    new_valid_loss = []
+                    # Time Function Validation function
+                    start = timer()
+                    for step_v, f_v in enumerate(self.train_valid_iter.take(self.max_valid_records)):
+                        new_valid_loss.append(valid_step(f_v))
+                    end = timer()
+                    generator_time = end - start
+                    tf.compat.v1.logging.info(str(step) + " Validation Generator Time: " + str(generator_time) + " seconds")
+                                        
+                    new_valid_loss = tf.concat(new_valid_loss, axis=0)
+                    new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
+                    # new_mean_valid_loss = new_mean_valid_loss.tonumpy()
+                    valid_losses.append(new_mean_valid_loss)
 
-                if (self.debug):
-                    tf.compat.v1.logging.info("On validation")
-                    _, _, _, _, _ = self.test(40000, log=False)
-                    tf.compat.v1.logging.info("")
+                    tf.compat.v1.logging.info(str(step) + " Validation:" + str(new_mean_valid_loss))
+                    
+                    # Check if the improvement in loss is at least min_delta. 
+                    # If the loss has increased more than patience consecutive times, the function stops early.
+                    # Else it continues training.
+                    improvement = mean_valid_loss - new_mean_valid_loss
+#                     if new_mean_valid_loss > mean_valid_loss - min_delta:
+                    if improvement < min_delta:
+                        iters_dec += 1
+                        if iters_dec == patience:
+                            return best_train_iters, step, valid_losses
+                    else:
+                        # If val_loss increases before patience epochs, reset iters_dec and mean_valid_loss.
+                        iters_dec = 0
+                        mean_valid_loss = new_mean_valid_loss
+                        best_train_iters = step
+                        # TODO: Save and checkpoint model
+                        self.save(checkpoint_path)
+                    
+#                 valid_dict = self.test(20000, Dataset.TRAIN, calculate_metrics=True)
+                tf.compat.v1.logging.info("")
+
+#                 if (self.debug):
+#                     tf.compat.v1.logging.info("On validation")
+#                     _, _, _, _, _ = self.test(40000, log=False)
+#                     tf.compat.v1.logging.info("")
+        return best_train_iters, step + 1, valid_losses #step + 1
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
         """
@@ -301,7 +377,8 @@ class VariationalPeakModel():
 
         if (mode == Dataset.VALID):
             handle = self.valid_iter # for standard validation of validation cell types
-
+        elif (mode == Dataset.TRAIN):
+            handle = self.train_valid_iter
         elif (mode == Dataset.TEST and len(self.test_celltypes) > 0):
             handle = self.test_iter # for standard validation of validation cell types
         else:
@@ -341,7 +418,7 @@ class VariationalPeakModel():
                  radii = self.radii,
                  mode = Dataset.RUNTIME,
                  similarity_matrix = matrix,
-		 similarity_assays = self.similarity_assays,
+                 similarity_assays = self.similarity_assays,
                  indices = indices), self.batch_size, 1, self.prefetch_size)
 
         num_samples = len(indices)
@@ -354,6 +431,7 @@ class VariationalPeakModel():
     def _predict(self, numpy_matrix):
         """
         Run predictions on a numpy matrix. Size of numpy_matrix should be # examples by features.
+        Size should be (number of examples x number of features).
         This function is mostly used for testing, as it requires the user to pre-generate the
         features using the generator function in generators.py.
         """
