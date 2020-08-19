@@ -15,3 +15,17 @@ def test_download_and_unzip(tmp_dir):
 
     files = os.listdir(os.path.join(dirname,"data"))
     assert(len(files) == 3)
+    
+    
+    
+def get_assays_single_assay():
+    TF = 'JUND'
+
+    matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = TF, 
+                                                             min_cells_per_assay = 2, 
+                                                             min_assays_per_cell =2)
+    
+    assays = list(assaymap)
+    assert(len(assays)) == 2
+    assert(TF in assays) == 2
+           
