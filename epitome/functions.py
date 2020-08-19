@@ -533,7 +533,7 @@ def range_for_contigs(all_regions_file):
     Traverses through feature_name_file to get contig ranges.
 
     Args:
-        :param all_regions_file: path to bed file of genomic regions
+        :param all_regions_file: path to bed file of genomic regions. must be gzipped.
 
     Returns:
         list of contigs and their start/end position all_regions_file
