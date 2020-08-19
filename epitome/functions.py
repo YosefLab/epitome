@@ -274,6 +274,7 @@ def list_assays(feature_name_file = None):
 
 
 
+
 def get_assays_from_feature_file(feature_name_file = None,
                                  eligible_assays = None,
                                  eligible_cells = None,
@@ -308,6 +309,15 @@ def get_assays_from_feature_file(feature_name_file = None,
          print("Warning: min_cells_per_assay should not be < 2 (this means you may only see it in test) but was set to %i" % min_cells_per_assay)
 
     if (eligible_assays != None):
+
+        # make sure eligible assays is a list, and not a single assay
+        if type(eligible_assays) == str:
+            eligible_assays = [eligible_assays]
+
+        # DNase must be in list
+        if 'DNase' not in eligible_assays:
+            eligible_assays = ['DNase'] + eligible_assays
+        
         if (len(eligible_assays) + 1 < min_assays_per_cell):
             raise Exception("""%s is less than the minimum assays required (%i).
             Lower min_assays_per_cell to (%i) if you plan to use only %i eligible assays""" \
