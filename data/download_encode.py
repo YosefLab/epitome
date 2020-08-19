@@ -14,6 +14,7 @@ import numpy as np
 import os
 import urllib
 import multiprocessing
+from multiprocessing import Pool
 import subprocess
 import math
 import argparse
@@ -128,7 +129,7 @@ else:
     if os.path.normpath(os.path.dirf(all_regions_file_unfiltered)) != os.path.normpath(output_path):
         shutil.copyfile(all_regions_file_unfiltered, os.path.join(output_path, "all.pos_unfiltered.bed"))
 
-# gzipped tmp file        
+# gzipped tmp file
 all_regions_file_unfiltered_gz = all_regions_file_unfiltered + ".gz"
 
 # download metadata if it does not exist
@@ -161,11 +162,13 @@ filtered_dnase = dnase_files.drop_duplicates(subset=["Biosample term name"] , ke
 chip_files = filtered_files[(((filtered_files["Output type"] == "replicated peaks") | (filtered_files["Output type"] == "optimal IDR thresholded peaks"))
                              & (filtered_files["Assay"].str.contains("ChIP-seq")) )] # or conservative idr thresholded peaks?
 
+print(chip_files.shape[0])
 # only want ChIP-seq from cell lines that have DNase
 filtered_chip = chip_files[(chip_files["Biosample term name"].isin(filtered_dnase["Biosample term name"]))]
 # select first assay without audit warning
 filtered_chip = filtered_chip.sort_values(by=['Audit WARNING','Audit NOT_COMPLIANT'])
 filtered_chip = filtered_chip.drop_duplicates(subset=["Biosample term name","Experiment target"] , keep='last')
+print(filtered_chip.shape[0])
 
 
 # only want assays that are shared between more than 3 cells
@@ -173,7 +176,7 @@ filtered_chip = filtered_chip.groupby("Experiment target").filter(lambda x: len(
 
 # only want cells that have more than min_chip_per_cell epigenetic marks
 filtered_chip = filtered_chip.groupby("Biosample term name").filter(lambda x: len(x) >= min_chip_per_cell)
-
+print(filtered_chip.shape[0])
 # only filter if use requires at least one chip experiment for a cell type.
 if min_chip_per_cell > 0:
     # only want DNase that has chip.
@@ -188,12 +191,12 @@ logger.info("Processing %i files..." % len(filtered_files))
 ##############################################################################################
 
 def download_url(f, tries = 0):
-    
+
     logger.warning("Trying to download %s for the %ith time..." % (f["File download URL"], tries))
-    
+
     if tries == 2:
         raise Exception("File accession %s from URL %s failed for download 3 times. Exiting 1..." % (f['File accession'], f["File download URL"]))
-        
+
     path = f["File download URL"]
     ext = path.split(".")[-1]
     if (ext == "gz" and path.split(".")[-2]  == 'bed'):
@@ -387,7 +390,7 @@ def save_epitome_numpy_data(download_dir, output_path):
     # paths to save 0 reduced files to
     all_regions_file = os.path.join(output_path, "all.pos.bed")
     all_regions_file_gz = all_regions_file + ".gz"
-    
+
     if not os.path.exists(all_regions_file) or not os.path.exists(matrix_path):
 
         if not os.path.exists(output_path):
@@ -421,11 +424,12 @@ def save_epitome_numpy_data(download_dir, output_path):
         matrix = h5_file.create_dataset("data", nonzero_data.shape, dtype='i',
             compression='gzip', compression_opts=9)
         matrix[:,:] = nonzero_data
+
         h5_file.close()
         logger.info("done saving matrix")
-        
-        
-        
+
+
+
     # gzip filtered all_regions_file
     if not os.path.exists(all_regions_file_gz):
         stdout = open(all_regions_file_gz,"wb")
@@ -482,4 +486,3 @@ os.remove(all_regions_file_unfiltered_gz)
 os.remove(all_regions_file_unfiltered + ".tmp")
 # remove h5 file with all zeros
 os.remove(matrix_path_all) # remove h5 file with all zeros
-
