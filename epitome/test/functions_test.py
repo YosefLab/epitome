@@ -37,7 +37,7 @@ def test_assays_SPI1_PAX5():
     # https://github.com/YosefLab/epitome/issues/22
     with warnings.catch_warnings(record=True) as warning_list:
         warnings.simplefilter('always')
-        assays = list_assays()
+        assays = list_assays(feature_name_file = 'epitome/test/data/feature_name')
         matrix, cellmap, assaymap = get_assays_from_feature_file(feature_name_file = 'epitome/test/data/feature_name',
                 eligible_assays = assays)
 

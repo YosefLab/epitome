@@ -60,6 +60,7 @@ class VariationalPeakModel():
                  radii=[1,3,10,30],
                  similarity_assays = ['DNase'],
                  train_indices = None,
+                 feature_name_file = None,
                  data = None,
                  data_path = None,
                  checkpoint = None):
@@ -88,6 +89,9 @@ class VariationalPeakModel():
 
         logging.getLogger("tensorflow").setLevel(logging.INFO)
 
+        if not feature_name_file:
+            feature_name_file = os.path.join(GET_DATA_PATH(), FEATURE_NAME_FILE)
+
         # user can provide their own assaymap information.
         if assaymap is not None:
             assert matrix is not None and cellmap is not None, "matrix, cellmap, and assaymap must all be set"
@@ -102,7 +106,8 @@ class VariationalPeakModel():
             assays = list(set(assays + similarity_assays))
 
             # get list of TFs that have minimum number of cell lines
-            matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = assays)
+            matrix, cellmap, assaymap = get_assays_from_feature_file(feature_name_file = feature_name_file,
+                                                                     eligible_assays = assays)
             assert len(assays) == len(list(assaymap))
 
 
