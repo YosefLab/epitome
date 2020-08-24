@@ -23,7 +23,7 @@ from .metrics import *
 import numpy as np
 
 import tqdm
-
+import logging
 
 # for saving model
 import pickle
@@ -86,7 +86,7 @@ class VariationalPeakModel():
             each model.
         """
 
-        tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
+        logging.getLogger("tensorflow").setLevel(logging.INFO)
 
         # user can provide their own assaymap information.
         if assaymap is not None:
@@ -98,9 +98,12 @@ class VariationalPeakModel():
 
         # get cell lines to train on if not specified
         if assaymap is None:
+            # assays should include similarity assays and predicted assays
+            assays = list(set(assays + similarity_assays))
+
             # get list of TFs that have minimum number of cell lines
             matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = assays)
-            assert len(assays) == len(list(assaymap))-1
+            assert len(assays) == len(list(assaymap))
 
 
         assert (set(test_celltypes) < set(list(cellmap))), \
@@ -121,7 +124,7 @@ class VariationalPeakModel():
             data_path = GET_DATA_PATH()
 
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
-        
+
         input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.data[Dataset.TRAIN],
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
@@ -267,7 +270,7 @@ class VariationalPeakModel():
             features = f[:-2]
             labels = f[-2]
             weights = f[-1]
-            
+
             with tf.GradientTape() as tape:
 
                 logits = self.model(features, training=True)
@@ -349,24 +352,24 @@ class VariationalPeakModel():
         results = self.run_predictions(num_samples, ds, calculate_metrics = False)
 
         return results['preds_mean'], results['preds_std']
-    
-    
+
+
     def _predict(self, numpy_matrix):
         """
         Run predictions on a numpy matrix. Size of numpy_matrix should be # examples by features.
         This function is mostly used for testing, as it requires the user to pre-generate the
         features using the generator function in generators.py.
         """
-        
+
         inv_assaymap = {v: k for k, v in self.assaymap.items()}
 
         @tf.function
         def predict_step(inputs):
-            
-            # get the shapes for the cell type specific features. 
+
+            # get the shapes for the cell type specific features.
             # they are not even, because some cells have missing data.
             cell_lens = [i.shape[-1] for i in self.train_iter.element_spec[:-2]]
-            
+
             # split matrix inputs into tuple of cell line specific features
             split_inputs = tf.split(inputs.astype(np.float32), cell_lens, axis=1)
 
@@ -664,7 +667,7 @@ class VLP(VariationalPeakModel):
 
         # TODO resize by max iterations. 5000 is an estimate for data size
         kl_divergence_function = (lambda q, p, _: tfp.distributions.kl_divergence(q, p) /
-                            tf.cast(self.batch_size * 5000, dtype=tf.float32)) 
+                            tf.cast(self.batch_size * 5000, dtype=tf.float32))
         for i in range(len(self.num_inputs)):
             # make input layer for cell
             last = cell_inputs[i]
@@ -673,7 +676,7 @@ class VLP(VariationalPeakModel):
                 # we do not decrease input size for generative model case
                 if "generative" in kwargs.keys():
                     num_units = self.num_inputs[i]
-                else:   
+                else:
                     num_units = int(self.num_inputs[i]/(2 * (j+1)))
                 d = tfp.layers.DenseFlipout(num_units,
                                                 kernel_divergence_fn=kl_divergence_function,
@@ -695,4 +698,3 @@ class VLP(VariationalPeakModel):
 
         model = tf.keras.models.Model(inputs=cell_inputs, outputs=outputs)
         return model
-

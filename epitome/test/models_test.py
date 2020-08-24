@@ -32,6 +32,17 @@ class ModelsTest(EpitomeTestCase):
 		results = self.model.test(self.validation_size, mode=Dataset.TEST)
 		assert(results['preds_mean'].shape[0] == self.validation_size)
 
+	def test_specify_assays(self):
+		# test for https://github.com/YosefLab/epitome/issues/23
+		# should add DNase to eligible assays
+
+		sparse_matrix = self.getValidData()
+		data = {Dataset.TRAIN: sparse_matrix, Dataset.VALID: sparse_matrix, Dataset.TEST: sparse_matrix}
+		eligible_assays = ['CTCF', 'RAD21', 'CEBPB']
+
+		model = VLP(list(eligible_assays), data = data)
+		assert(len(model.assaymap) == 4)
+
 	def test_eval_vector(self):
 
 		# should be able to evaluate on a dnase vector
