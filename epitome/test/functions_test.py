@@ -18,7 +18,7 @@ def test_download_and_unzip(tmp_dir):
     
     
     
-def get_assays_single_assay():
+def test_get_assays_single_assay():
     TF = 'JUND'
 
     matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = TF, 
@@ -26,6 +26,8 @@ def get_assays_single_assay():
                                                              min_assays_per_cell =2)
     
     assays = list(assaymap)
+    # Make sure only JUND and DNase are in list of assays
     assert(len(assays)) == 2
-    assert(TF in assays) == 2
+    assert(TF in assays)
+    assert('DNase' in assays)
            
