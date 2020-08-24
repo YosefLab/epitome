@@ -30,7 +30,6 @@ def load_data(data,
     """
     Takes Deepsea data and calculates distance metrics from cell types whose locations
     are specified by label_cell_indices, and the other cell types in the set. Label space is only one cell type.
-     TODO AM 3/7/2019
     :param data: dictionary of matrices. Should have keys x and y. x contains n by 1000 rows. y contains n by 919 labels.
     :param label_cell_types: list of cell types to be rotated through and used as labels (subset of eval_cell_types)
     :param eval_cell_types: list of cell types to be used in evaluation (includes label_cell_types)
@@ -38,8 +37,12 @@ def load_data(data,
     :param assaymap: map of column assay positions in matrix
     :param cellmap: map of row cell type positions in matrix
     :param radii: radii to compute similarity distances from
+    :param similarity_assays: list of assays used to measure cell type similarity (default is DNase-seq)
     :param mode: Dataset.TRAIN, VALID, TEST or RUNTIME
+    :param similarity_matrix: matrix with shape (len(similarity_assays), genome_size) containing binary 0/1s of peaks for similarity_assays
+    to be compared in the CASV.
     :param indices: indices in genome to generate records for.
+    :param return_feature_names: boolean whether to return string names of features
     :param kwargs: kargs
 
     :returns: generator of data with three elements:
@@ -48,26 +51,28 @@ def load_data(data,
         3. 0/1 mask of labels that have validation data. For example, if this record is for celltype A549,
         and A549 does not have data for ATF3, there will be a 0 in the position corresponding to the label space.
     """
-    
+
     # reshape similarity_matrix to a matrix if there is only one assay
     if similarity_matrix is not None:
         if len(similarity_matrix.shape) == 1:
             similarity_matrix = similarity_matrix[None,:]
 
     # for now, we require DNase to be part of the similarity comparison
+    if type(similarity_assays) is not list:
+        similarity_assays = [similarity_assays]
     assert('DNase' in similarity_assays)
-        
+
     # get indices for features.rows are cells and cols are assays
     cellmap_idx = [cellmap[c] for c in list(eval_cell_types)]
     feature_cell_indices = matrix[cellmap_idx,:]
-    
+
     # indices to be deleted. used for similarity comparison, not predictions.
     delete_indices = np.array([assaymap[s] for s in similarity_assays])
-    
+
     # make sure no similarity comparison data is missing for all cell types
     assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \
         "missing data at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
-    
+
     # names of labels that are being predicted
     feature_assays = [a for a in list(assaymap)] # assays used as features for each evaluation cell type
     label_assays = [a for a in feature_assays if a not in similarity_assays]
@@ -90,7 +95,7 @@ def load_data(data,
                 y = data[indices, :].T
                 m = MLSMOTE(y)
                 indices = m.fit_resample()
-            
+
             else:
                 # single TF model
                 # get indices for DNAse and chip for this mark
@@ -112,7 +117,7 @@ def load_data(data,
                 indices_probs = indices_probs/np.sum(indices_probs, keepdims=1)
 
                 # randomly select 10 fold sites where TF is not in any cell line
-                negative_indices = np.random.choice(np.arange(0,data.shape[1]), 
+                negative_indices = np.random.choice(np.arange(0,data.shape[1]),
                                                     positive_indices.shape[0] * 10,
                                                     p=indices_probs)
                 indices = np.sort(np.concatenate([negative_indices, positive_indices]))
@@ -133,11 +138,11 @@ def load_data(data,
 
     # string of radii for meta data labeling
     radii_str = list(map(lambda x: "RADII_%i" % x, radii))
-    
+
     def g():
         for i in indices: # for all records specified
             feature_names = []
-            
+
             for (cell) in label_cell_types: # for all cell types to be used in labels
                 similarities_double_positive = np.empty([len(eval_cell_types),0])
                 similarities_agreement = np.empty([len(eval_cell_types),0])
@@ -160,15 +165,15 @@ def load_data(data,
 
                     # Mask and labels are all 0's because labels are missing during runtime
                     garbage_labels = assay_mask = np.zeros(label_count)
-                
+
 
                 # get indices for assays used in similarity computation
                 # for cell types that are going to be features
                 similarity_indices = feature_cell_indices[:, delete_indices]
-                
+
                 similarity_labels_agreement = []
                 similarity_labels_dp = []
-                
+
                 for r, radius in enumerate(radii):
 
                     min_radius = max(0, i - radius + 1)
@@ -212,10 +217,10 @@ def load_data(data,
 
                     similarity_labels_agreement.append('r%i_%s' % (radius, 'agree'))
                     similarity_labels_dp.append('r%i_%s' % (radius, 'dp'))
-                    
+
                     similarities_double_positive = np.concatenate([similarities_double_positive,similarity_double_positive],axis=1)
                     similarities_agreement = np.concatenate([similarities_agreement,similarity_agreement],axis=1)
-                    
+
                 # rehape agreement assay similarity to Radii by feature_cells
                 similarities = np.concatenate([similarities_agreement, similarities_double_positive], axis=1)
                 similarity_labels = np.concatenate([similarity_labels_agreement, similarity_labels_dp])
@@ -225,17 +230,17 @@ def load_data(data,
                     # get indices for this cell that has data
                     present_indices = feature_cell_indices[j,:]
                     present_indices = present_indices[present_indices!=-1]
-                    
+
                     cell_features = data[present_indices,i]
                     cell_similarities = similarities[j,:]
                     concat = np.concatenate([cell_features, cell_similarities])
                     final.append(concat)
-                        
+
                     # concatenate together feature names
                     tmp = np.array(feature_assays)[feature_cell_indices[j,:] != -1]
                     al = ['%s_%s' % (c, a) for a in tmp]
                     sl = ['%s_%s' % (c, s) for s in similarity_labels]
-                        
+
                     feature_names.append(np.concatenate([al, sl]))
 
 
@@ -249,15 +254,15 @@ def load_data(data,
                 # append labels and assaymask
                 final.append(labels.astype(np.float32))
                 feature_names.append(['lbl_%s_%s' % (cell, a) for a in label_assays]) # of form lbl_cellline_target
-                
+
                 final.append(assay_mask.astype(np.float32))
                 feature_names.append(['mask_%s_%s' % (cell, a) for a in label_assays]) # of form mask_cellline_target
-                
+
                 if (return_feature_names):
                     yield (tuple(final), tuple(feature_names))
                 else:
                     yield tuple(final)
-                
+
 
     return g
 
