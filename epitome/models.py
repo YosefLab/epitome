@@ -596,6 +596,11 @@ class VariationalPeakModel():
         means, stds = self.eval_vector(all_data, peak_matrix, idx)
         print("finished predictions...", means.shape)
 
+        assert type(means) == type(stds), "Means and STDs variables not of the same type"
+        if not isinstance(means, np.array):
+            means = means.numpy()
+            stds = stds.numpy()
+
         means_df =  pd.DataFrame(data=means, columns=list(self.assaymap)[1:])
         std_cols = list(map(lambda x: x + "_stds",list(self.assaymap)[1:]))
         stds_df =  pd.DataFrame(data=stds, columns=std_cols)
