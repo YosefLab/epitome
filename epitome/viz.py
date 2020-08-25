@@ -15,8 +15,14 @@ Vizualization functions
 ################### Visualization functions #########################
 #####################################################################
 
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+   import matplotlib
+   matplotlib.use('PS')
+   import matplotlib.pyplot as plt
+
 import seaborn as sns; sns.set()
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from matplotlib.backends import backend_agg
