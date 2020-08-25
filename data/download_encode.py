@@ -25,11 +25,24 @@ from epitome.functions import *
 import sys
 import shutil
 import gzip
-from multiprocessing import Pool
+import logging
+
+##################################### LOG INFO ################################
+logger = logging.getLogger('DOWNLOAD ENCODE')
+logger.setLevel(logging.DEBUG)
+
+# create console handler with a low log level
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+# create formatter and add it to the handlers
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+# add the handlers to the logger
+logger.addHandler(ch)
 
 # number of threads
 threads = multiprocessing.cpu_count()
-print("%i threads available for processing" % threads)
+logger.info("%i threads available for processing" % threads)
 
 ########################### Functions ########################################
 def chunk(it, size):
@@ -148,20 +161,19 @@ filtered_dnase = dnase_files.drop_duplicates(subset=["Biosample term name"] , ke
 chip_files = filtered_files[(((filtered_files["Output type"] == "replicated peaks") | (filtered_files["Output type"] == "optimal IDR thresholded peaks"))
                              & (filtered_files["Assay"].str.contains("ChIP-seq")) )] # or conservative idr thresholded peaks?
 
-print(chip_files.shape[0])
 # only want ChIP-seq from cell lines that have DNase
 filtered_chip = chip_files[(chip_files["Biosample term name"].isin(filtered_dnase["Biosample term name"]))]
 # select first assay without audit warning
 filtered_chip = filtered_chip.sort_values(by=['Audit WARNING','Audit NOT_COMPLIANT'])
 filtered_chip = filtered_chip.drop_duplicates(subset=["Biosample term name","Experiment target"] , keep='last')
-print(filtered_chip.shape[0])
+
 
 # only want assays that are shared between more than 3 cells
 filtered_chip = filtered_chip.groupby("Experiment target").filter(lambda x: len(x) >= min_cells_per_chip)
 
 # only want cells that have more than min_chip_per_cell epigenetic marks
 filtered_chip = filtered_chip.groupby("Biosample term name").filter(lambda x: len(x) >= min_chip_per_cell)
-print(filtered_chip.shape[0])
+
 # only filter if use requires at least one chip experiment for a cell type.
 if min_chip_per_cell > 0:
     # only want DNase that has chip.
@@ -169,7 +181,7 @@ if min_chip_per_cell > 0:
 
 # combine dataframes
 filtered_files = filtered_dnase.append(filtered_chip)
-print("Processing %i files..." % len(filtered_files))
+logger.info("Processing %i files..." % len(filtered_files))
 
 ##############################################################################################
 ##################################### download all files #####################################
@@ -177,7 +189,7 @@ print("Processing %i files..." % len(filtered_files))
 
 def download_url(f, tries = 0):
     
-    print("Trying to download %s for the %ith time..." % (f["File download URL"], tries))
+    logger.warning("Trying to download %s for the %ith time..." % (f["File download URL"], tries))
     
     if tries == 2:
         raise Exception("File accession %s from URL %s failed for download 3 times. Exiting 1..." % (f['File accession'], f["File download URL"]))
@@ -238,7 +250,6 @@ def download_url(f, tries = 0):
 if not os.path.exists(all_regions_file_unfiltered):
     tmpFile = all_regions_file_unfiltered + ".tmp"
     chrom_sizes_file = os.path.join(download_path, "%s.chrom.sizes" % assembly)
-    print(chrom_sizes_file)
 
     # download file
     if not os.path.exists(chrom_sizes_file):
@@ -270,7 +281,7 @@ if not os.path.exists(all_regions_file_unfiltered_gz):
 
 # get number of genomic regions in all.pos.bed file
 nregions = sum(1 for line in open(all_regions_file_unfiltered))
-print("Completed windowing genome with %i regions" % nregions)
+logger.info("Completed windowing genome with %i regions" % nregions)
 
 #############################################################################################
 ################################ save all files to matrix ###################################
@@ -292,64 +303,66 @@ if (start not in written_features):
     feature_name_handle.write("%s\n" % start)
 
 # create matrix or load in existing
-matrix_path = os.path.join(download_path, 'train.h5')
-# if os.path.exists(matrix_path):
-#     h5_file = h5py.File(matrix_path, "a")
-#     matrix = h5_file['data']
+matrix_path_all = os.path.join(download_path, 'train_total.h5') # all sites
+matrix_path = os.path.join(download_path, 'train.h5')           # filtered nonzero sites
 
-#     # make sure the dataset hasnt changed if you are appending
-#     assert(matrix[0,:].shape[0] == nregions)
-#     assert(matrix[:,0].shape[0] == len(filtered_files))
+if os.path.exists(matrix_path_all):
+    h5_file = h5py.File(matrix_path_all, "a")
+    matrix = h5_file['data']
 
-# else:
-#     h5_file = h5py.File(matrix_path, "w")
-#     matrix = h5_file.create_dataset("data", (len(filtered_files), nregions), dtype='i',
-#         compression='gzip', compression_opts=9)
+    # make sure the dataset hasnt changed if you are appending
+    assert(matrix[0,:].shape[0] == nregions)
+    assert(matrix[:,0].shape[0] == len(filtered_files))
 
-
-# bed_files = list(filter(lambda x: x.endswith(".bed") & x.startswith("ENC"), os.listdir(download_path)))
-# print("Running bedtools on %i files..." % len(bed_files))
-
-# # batch files and parallelize
-# for b in chunk(enumerate(bed_files), threads):
-
-#     files = list(map(lambda x: os.path.join(download_path, x[1]), b))
-#     indices = [i[0] for i in b]
-#     cells = [fileName.split("_")[-1].split(".")[0] for (idx, fileName) in b] # remove file ext
-#     targets = [fileName.split("_")[1].split("-")[0] for (idx, fileName) in b] # remove "human"
-#     feature_names = ["%i\t%s|%s|%s" % (i+1, cell, target, "None") for (i, cell, target) in zip(indices, cells, targets)]
-
-#     # if whole batch is already written, skip it
-#     if (len(written_features) > indices[-1]+1):
-#         if (feature_names == written_features[indices[0]+1:indices[-1]+2]):
-#             print("skipping batch for indices %s, already written" % indices)
-#             continue
-#         else:
-#             raise Exception("Feature name %s starting at position %i did not match feature file (%s). This is most likely because you \
-#             downloaded more or deleted bed files. Delete your saved in %s data files and start from scratch." \
-#             % (feature_names, indices[0], written_features[indices[0]+1:indices[-1]+1], download_path))
+else:
+    h5_file = h5py.File(matrix_path_all, "w")
+    matrix = h5_file.create_dataset("data", (len(filtered_files), nregions), dtype='i',
+        compression='gzip', compression_opts=9)
 
 
-#     print("writing into matrix at positions %i:%i" % (indices[0], indices[-1]+1))
+bed_files = list(filter(lambda x: x.endswith(".bed") & x.startswith("ENC"), os.listdir(download_path)))
+logger.info("Running bedtools on %i files..." % len(bed_files))
 
-#     # Should not parallelize bedtools. Gives non-deterministic results.
-#     for j, file in enumerate(files):
-#         matrix[indices[j],:] = loj_overlap(file)
-#         print("writing file %s to index %i. Sum = %i" % (file, indices[j], np.sum(matrix[indices[j],:])))
+# batch files and parallelize
+for b in chunk(enumerate(bed_files), threads):
 
-#     for feature_name in feature_names:
+    files = list(map(lambda x: os.path.join(download_path, x[1]), b))
+    indices = [i[0] for i in b]
+    cells = [fileName.split("_")[-1].split(".")[0] for (idx, fileName) in b] # remove file ext
+    targets = [fileName.split("_")[1].split("-")[0] for (idx, fileName) in b] # remove "human"
+    feature_names = ["%i\t%s|%s|%s" % (i+1, cell, target, "None") for (i, cell, target) in zip(indices, cells, targets)]
 
-#         print("Writing metadata for %s" % (feature_name))
+    # if whole batch is already written, skip it
+    if (len(written_features) > indices[-1]+1):
+        if (feature_names == written_features[indices[0]+1:indices[-1]+2]):
+            logger.info("skipping batch for indices %s, already written" % indices)
+            continue
+        else:
+            raise Exception("Feature name %s starting at position %i did not match feature file (%s). This is most likely because you \
+            downloaded more or deleted bed files. Delete your saved in %s data files and start from scratch." \
+            % (feature_names, indices[0], written_features[indices[0]+1:indices[-1]+1], download_path))
 
-#         # append to file and flush
-#         feature_name_handle.write("%s\n" % feature_name)
 
-#     feature_name_handle.flush()
-#     h5_file.flush()
+    logger.info("writing into matrix at positions %i:%i" % (indices[0], indices[-1]+1))
 
-# feature_name_handle.close()
-# h5_file.close()
-# print("Done saving data")
+    # Should not parallelize bedtools. Gives non-deterministic results.
+    for j, file in enumerate(files):
+        matrix[indices[j],:] = loj_overlap(file)
+        logger.info("writing file %s to index %i. Sum = %i" % (file, indices[j], np.sum(matrix[indices[j],:])))
+
+    for feature_name in feature_names:
+
+        logger.info("Writing metadata for %s" % (feature_name))
+
+        # append to file and flush
+        feature_name_handle.write("%s\n" % feature_name)
+
+    feature_name_handle.flush()
+    h5_file.flush()
+
+feature_name_handle.close()
+h5_file.close()
+logger.info("Done saving data")
 
 # can read matrix back in using:
 # > import h5py
@@ -379,50 +392,38 @@ def save_epitome_numpy_data(download_dir, output_path):
 
         if not os.path.exists(output_path):
             os.mkdir(output_path)
-            print("%s Created " % output_path)
+            logger.info("%s Created " % output_path)
 
-        h5_path = os.path.join(download_dir, "train.h5")
-        h5_data = h5py.File(h5_path, "r")['data']
-        print("loaded data..")
-
-        # get chunks for parallel processing
-        chunks = list(chunk(range(h5_data.shape[1]), 1000000))
-
-        def get_nonzero_indices(indices):
-            start = indices[0]
-            print(start)
-            data = h5_data[:,indices[0]:indices[-1]]
-            idx = np.where(np.sum(data, axis=0) > 0)[0]
-            return data[:, idx], idx + start
+        # load in all data into RAM: much faster for indexing
+        h5_data = h5py.File(matrix_path_all, "r")['data'][:,:]
+        logger.info("loaded data..")
 
         # get non-zero indices
-        with Pool(threads) as p:
-            nonzero_ret = p.map(get_nonzero_indices, chunks)
+        nonzero_indices = np.where(np.sum(h5_data, axis=0) > 0)[0]
 
-        ## combine indices and data
-        nonzero_data = np.hstack(list(map(lambda x: x[0],  nonzero_ret)))
-        nonzero_indices = np.hstack(list(map(lambda x: x[1],  nonzero_ret)))
-        print("number of new indices in %i" % nonzero_indices.shape[0])
+        ## get data from columns where sum > 0
+        nonzero_data = h5_data[:,nonzero_indices]
+        logger.info("number of new indices in %i" % nonzero_indices.shape[0])
 
         # filter and re-save all_regions_file
-        print("saving new file")
+        logger.info("saving new regions file")
         with gzip.open(all_regions_file_unfiltered_gz, 'rt') as f:
             # list of idx, chromosome
             lines = filter(lambda x: x[0] in nonzero_indices, enumerate(f.readlines()))
             mapped = list(map(lambda x: x[1], lines))
             with open(all_regions_file, "w") as new_f:
                 new_f.writelines(mapped)
-        print("done saving file")
+        logger.info("done saving regions file")
 
-        print("saving new matrix")
+        logger.info("saving new matrix")
         # resave h5 file without 0 columns
         h5_file = h5py.File(matrix_path, "w")
         matrix = h5_file.create_dataset("data", nonzero_data.shape, dtype='i',
-        compression='gzip', compression_opts=9)
+            compression='gzip', compression_opts=9)
         matrix[:,:] = nonzero_data
-        print("done saving matrix")
-
         h5_file.close()
+        logger.info("done saving matrix")
+        
         
         
     # gzip filtered all_regions_file
@@ -446,16 +447,16 @@ def save_epitome_numpy_data(download_dir, output_path):
         TRAIN_RANGE = np.r_[EPITOME_TRAIN_REGIONS[0][0]:EPITOME_TRAIN_REGIONS[0][1],
                         EPITOME_TRAIN_REGIONS[1][0]:EPITOME_TRAIN_REGIONS[1][1]]
         train_data = h5_data[:,TRAIN_RANGE]
-        print("loaded train..")
+        logger.info("loaded train..")
 
         valid_data = h5_data[:,EPITOME_VALID_REGIONS[0]:EPITOME_VALID_REGIONS[1]]
-        print("loaded valid..")
+        logger.info("loaded valid..")
 
         test_data = h5_data[:,EPITOME_TEST_REGIONS[0]:EPITOME_TEST_REGIONS[1]]
-        print("loaded test..")
+        logger.info("loaded test..")
 
         # save files
-        print("saving sparse train.npz, valid.npz and test.npyz to %s" % output_path)
+        logger.info("saving sparse train.npz, valid.npz and test.npyz to %s" % output_path)
 
         scipy.sparse.save_npz(train_output_np, scipy.sparse.csc_matrix(train_data,dtype=np.int8))
         scipy.sparse.save_npz(valid_output_np, scipy.sparse.csc_matrix(valid_data, dtype=np.int8))
@@ -479,3 +480,6 @@ save_epitome_numpy_data(download_path, output_path)
 os.remove(all_regions_file_unfiltered)
 os.remove(all_regions_file_unfiltered_gz)
 os.remove(all_regions_file_unfiltered + ".tmp")
+# remove h5 file with all zeros
+os.remove(matrix_path_all) # remove h5 file with all zeros
+
