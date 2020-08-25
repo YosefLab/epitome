@@ -162,13 +162,12 @@ filtered_dnase = dnase_files.drop_duplicates(subset=["Biosample term name"] , ke
 chip_files = filtered_files[(((filtered_files["Output type"] == "replicated peaks") | (filtered_files["Output type"] == "optimal IDR thresholded peaks"))
                              & (filtered_files["Assay"].str.contains("ChIP-seq")) )] # or conservative idr thresholded peaks?
 
-print(chip_files.shape[0])
 # only want ChIP-seq from cell lines that have DNase
 filtered_chip = chip_files[(chip_files["Biosample term name"].isin(filtered_dnase["Biosample term name"]))]
 # select first assay without audit warning
 filtered_chip = filtered_chip.sort_values(by=['Audit WARNING','Audit NOT_COMPLIANT'])
 filtered_chip = filtered_chip.drop_duplicates(subset=["Biosample term name","Experiment target"] , keep='last')
-print(filtered_chip.shape[0])
+
 
 
 # only want assays that are shared between more than 3 cells
@@ -176,7 +175,7 @@ filtered_chip = filtered_chip.groupby("Experiment target").filter(lambda x: len(
 
 # only want cells that have more than min_chip_per_cell epigenetic marks
 filtered_chip = filtered_chip.groupby("Biosample term name").filter(lambda x: len(x) >= min_chip_per_cell)
-print(filtered_chip.shape[0])
+
 # only filter if use requires at least one chip experiment for a cell type.
 if min_chip_per_cell > 0:
     # only want DNase that has chip.
@@ -321,6 +320,7 @@ else:
     h5_file = h5py.File(matrix_path_all, "w")
     matrix = h5_file.create_dataset("data", (len(filtered_files), nregions), dtype='i',
         compression='gzip', compression_opts=9)
+
 
 
 bed_files = list(filter(lambda x: x.endswith(".bed") & x.startswith("ENC"), os.listdir(download_path)))
