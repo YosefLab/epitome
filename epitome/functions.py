@@ -34,6 +34,7 @@ from .constants import *
 import scipy.sparse
 import pyranges as pr
 
+import warnings
 from operator import itemgetter
 import urllib
 import sys
@@ -155,7 +156,7 @@ def download_and_unzip(url, dst):
     """
     if not os.path.exists(dst):
         os.makedirs(dst)
-    
+
     dst = os.path.join(dst, os.path.basename(url))
 
     final_dst = dst.split('.zip')[0]
@@ -274,6 +275,7 @@ def list_assays(feature_name_file = None):
 
 
 
+
 def get_assays_from_feature_file(feature_name_file = None,
                                  eligible_assays = None,
                                  eligible_cells = None,
@@ -283,7 +285,7 @@ def get_assays_from_feature_file(feature_name_file = None,
     Returns at matrix of cell type/assays which exist for a subset of cell types.
 
     Args:
-        :param: feature_name_file. Path to file containing cell, ChIP metadata. Defaults to module data feature file.
+        :param: feature_name_file: Path to file containing cell, ChIP metadata. Defaults to module data feature file.
         :param eligible_assays: list of assays to filter by (ie ["CTCF", "EZH2", ..]). If None, then returns all assays.
         Note that DNase will always be included in the factors, as it is required by Epitome.
         :param eligible_cells: list of cells to filter by (ie ["HepG2", "GM12878", ..]). If None, then returns all cell types.
@@ -301,13 +303,22 @@ def get_assays_from_feature_file(feature_name_file = None,
 
     # check argument validity
     if (min_assays_per_cell < 2):
-         print("Warning: min_assays_per_cell should not be < 2 (this means it only has DNase) but was set to %i" % min_assays_per_cell)
+         warnings.warn("min_assays_per_cell should not be < 2 (this means it only has DNase) but was set to %i" % min_assays_per_cell)
 
 
     if (min_cells_per_assay < 2):
-         print("Warning: min_cells_per_assay should not be < 2 (this means you may only see it in test) but was set to %i" % min_cells_per_assay)
+         warnings.warn("min_cells_per_assay should not be < 2 (this means you may only see it in test) but was set to %i" % min_cells_per_assay)
 
     if (eligible_assays != None):
+
+        # make sure eligible assays is a list, and not a single assay
+        if type(eligible_assays) == str:
+            eligible_assays = [eligible_assays]
+
+        # DNase must be in list
+        if 'DNase' not in eligible_assays:
+            eligible_assays = ['DNase'] + eligible_assays
+
         if (len(eligible_assays) + 1 < min_assays_per_cell):
             raise Exception("""%s is less than the minimum assays required (%i).
             Lower min_assays_per_cell to (%i) if you plan to use only %i eligible assays""" \
@@ -384,6 +395,16 @@ def get_assays_from_feature_file(feature_name_file = None,
     for cell in cells:
         for assay, _ in indexed_assays[cell].items():
             matrix[cellmap[cell], assaymap[assay]] = indexed_assays[cell][assay]
+
+    # finally, make sure that all assays that were specified are in assaymap
+    # if not, throw an error and print the reason.
+    print(eligible_assays is not None)
+    if eligible_assays is not None:
+
+        missing = [i for i in eligible_assays if i not in list(assaymap)]
+        for a in missing:
+            warnings.warn('%s does not have enough data for cutoffs of min_cells_per_assay=%i and min_assays_per_cell=%i' %
+                          (a, min_cells_per_assay, min_assays_per_cell))
 
     matrix = matrix.astype(int)
     return matrix, cellmap, assaymap

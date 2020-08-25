@@ -109,3 +109,33 @@ class GeneratorsTest(EpitomeTestCase):
 
 		# length should include eligible assays and 2* radius for pos and agreement
 		assert(len(li_results[0][0]) == len(eligible_assays)+len(radii)* 4)
+
+
+	def test_generator_dnase_array(self):
+		# should not fail if similarity_assays are just for DNase and is a single array.
+		# https://github.com/YosefLab/epitome/issues/4
+		data = self.getValidData()
+		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
+		eligible_assays = ['DNase','CTCF','RAD21','LARP7']
+		matrix, cellmap, assaymap = self.getFeatureData(eligible_assays, eligible_cells)
+		test_celltypes = ['K562']
+		eligible_cells.remove(test_celltypes[0])
+		radii = [1,10]
+		# fake data for DNase
+		similarity_matrix = np.ones(data.shape[1])
+
+		results = load_data(data,
+                 test_celltypes,
+                 eligible_cells,
+                 matrix,
+                 assaymap,
+                 cellmap,
+				 radii,
+                 mode = Dataset.RUNTIME,
+                 similarity_matrix = similarity_matrix,
+                 similarity_assays = 'DNase',
+                 indices=np.arange(0,10))()
+		li_results = list(results)
+
+		# if we reach here, an error was not thrown :)
+		assert(len(li_results) == 10)
