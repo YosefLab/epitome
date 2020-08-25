@@ -596,9 +596,14 @@ class VariationalPeakModel():
         means, stds = self.eval_vector(all_data, peak_matrix, idx)
         print("finished predictions...", means.shape)
 
-        means_df =  pd.DataFrame(data=means.numpy(), columns=list(self.assaymap)[1:])
+        assert type(means) == type(stds), "Means and STDs variables not of the same type"
+        if not isinstance(means, np.array):
+            means = means.numpy()
+            stds = stds.numpy()
+
+        means_df =  pd.DataFrame(data=means, columns=list(self.assaymap)[1:])
         std_cols = list(map(lambda x: x + "_stds",list(self.assaymap)[1:]))
-        stds_df =  pd.DataFrame(data=stds.numpy(), columns=std_cols)
+        stds_df =  pd.DataFrame(data=stds, columns=std_cols)
 
         # read in regions file and filter by indices that were scored
         p = pd.read_csv(self.regionsFile, sep='\t',header=None)[[0,1,2]]
