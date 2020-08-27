@@ -238,11 +238,10 @@ def download_url(f, tries = 0):
         download_url(f, tries + 1)
 
 # download all files
-# TODO AM uncomment
-# rows = list(map(lambda x: x[1], filtered_files.iterrows()))
-# pool = multiprocessing.Pool(processes=threads)
-# pool.map(download_url, rows)
-# pool.close()
+rows = list(map(lambda x: x[1], filtered_files.iterrows()))
+pool = multiprocessing.Pool(processes=threads)
+pool.map(download_url, rows)
+pool.close()
 
 ##############################################################################################
 ############################# window chromsizes into 200bp ###################################

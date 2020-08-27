@@ -60,9 +60,7 @@ class VariationalPeakModel():
                  radii=[1,3,10,30],
                  similarity_assays = ['DNase'],
                  train_indices = None,
-                 feature_name_file = None,
                  data = None,
-                 data_path = None,
                  checkpoint = None):
         """
         Initializes Peak Model
@@ -83,14 +81,10 @@ class VariationalPeakModel():
             :param radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30])
             :param train_indices: option numpy array of indices to train from data[Dataset.TRAIN]
             :param data: data loaded from datapath. This option is mostly for testing, so users dont have to load in data for
-            :param data_path: path to data. Directory should contain all.pos.bed.gz, feature_name,test.npz,train.npz,valid.npz
             each model.
         """
 
         logging.getLogger("tensorflow").setLevel(logging.INFO)
-
-        if not feature_name_file:
-            feature_name_file = os.path.join(GET_DATA_PATH(), FEATURE_NAME_FILE)
 
         # user can provide their own assaymap information.
         if assaymap is not None:
@@ -106,8 +100,7 @@ class VariationalPeakModel():
             assays = list(set(assays + similarity_assays))
 
             # get list of TFs that have minimum number of cell lines
-            matrix, cellmap, assaymap = get_assays_from_feature_file(feature_name_file = feature_name_file,
-                                                                     eligible_assays = assays)
+            matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = assays)
             assert len(assays) == len(list(assaymap))
 
 
@@ -119,14 +112,15 @@ class VariationalPeakModel():
         self.test_celltypes = test_celltypes
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
 
+        data_path = GET_DATA_PATH()
+            
         # load in data, if the user has not specified it
         if data is not None:
             self.data = data
         else:
-            self.data = load_epitome_data()
+            self.data = load_epitome_data(data_path)
 
-        if not data_path:
-            data_path = GET_DATA_PATH()
+
 
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
 
@@ -183,7 +177,7 @@ class VariationalPeakModel():
         self.cellmap = cellmap
         self.predict_assays = list(self.assaymap)
         [self.predict_assays.remove(i) for i in self.similarity_assays]
-        self.model = self.create_model(generative = len(self.eval_cell_types) == 1)
+        self.model = self.create_model()
 
     def get_weight_parameters(self):
         """
@@ -544,7 +538,7 @@ class VariationalPeakModel():
         # return matrix of region, TF information
         npRegions = np.array(list(map(lambda x: np.array([x.chrom, x.start, x.end]),liRegions)))
         # TODO turn into right types (all strings right now)
-	# predictions[0] is means of size n regions by # ChIP-seq peaks predicted
+        # predictions[0] is means of size n regions by # ChIP-seq peaks predicted
         means = np.concatenate([npRegions, predictions[0]], axis=1)
         stds = np.concatenate([npRegions, predictions[1]], axis=1)
 
@@ -682,12 +676,7 @@ class VLP(VariationalPeakModel):
             # make input layer for cell
             last = cell_inputs[i]
             for j in range(self.layers):
-                # set number of units in subsequent layers.
-                # we do not decrease input size for generative model case
-                if "generative" in kwargs.keys():
-                    num_units = self.num_inputs[i]
-                else:
-                    num_units = int(self.num_inputs[i]/(2 * (j+1)))
+                num_units = int(self.num_inputs[i]/(2 * (j+1)))
                 d = tfp.layers.DenseFlipout(num_units,
                                                 kernel_divergence_fn=kl_divergence_function,
                                                 activation = self.activation)(last)
