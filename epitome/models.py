@@ -41,7 +41,7 @@ tf.config.experimental_run_functions_eagerly(True)
 
 class VariationalPeakModel():
     """ Model for learning from ChIP-seq peaks.
-    Modeled from https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py.
+    Modeled from `this Bayesian Neural Network <https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py>`_.
     """
 
     def __init__(self,
@@ -113,7 +113,7 @@ class VariationalPeakModel():
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
 
         data_path = GET_DATA_PATH()
-            
+
         # load in data, if the user has not specified it
         if data is not None:
             self.data = data
@@ -249,6 +249,19 @@ class VariationalPeakModel():
         return a * tf.math.pow(p, y) + B
 
     def loss_fn(self, y_true, y_pred, weights):
+        """
+        Loss function for Epitome. Calculates the weighted sigmoid cross entropy
+        between logits and true values.
+
+        Args:
+          :param y_true: true binary values
+          :param y_pred: logits
+          :param weights: binary weights whether the true values exist for
+          a given cell type/assay combination
+
+        Returns:
+          Loss summed over all TFs and genomic loci.
+        """
         # weighted sum of cross entropy for non 0 weights
         # Reduction method = Reduction.SUM_BY_NONZERO_WEIGHTS
         loss = tf.compat.v1.losses.sigmoid_cross_entropy(y_true,
@@ -258,9 +271,13 @@ class VariationalPeakModel():
 
         return tf.math.reduce_sum(loss, axis=0)
 
-    def train(self, num_steps, lr=None, checkpoint_path = None):
-        if lr == None:
-            lr = self.lr
+    def train(self, num_steps):
+        """ Trains an Epitome model for num_steps iterations.
+
+        Args:
+          :param num_steps: number of iterations to train for
+
+        """
 
         tf.compat.v1.logging.info("Starting Training")
 
@@ -552,8 +569,7 @@ class VariationalPeakModel():
         print("columns for matrices are chr, start, end, %s" % ", ".join(list(self.assaymap)[1:]))
 
     def score_peak_file(self, similarity_peak_files, regions_peak_file, all_data = None):
-        """
-        Runs predictions on a set of peaks defined in a bed or narrowPeak file.
+        """ Runs predictions on a set of peaks defined in a bed or narrowPeak file.
 
         Args:
             :param similarity_peak_files: narrowpeak or bed files containing chromatin accessibility to score
@@ -635,7 +651,10 @@ class VLP(VariationalPeakModel):
              **kwargs):
         """ Creates a new model with 4 layers with 100 unites each.
             To resume model training on an old model, call:
-            model = VLP(checkpoint=path_to_saved_model)
+
+            .. code-block:: python
+
+                model = VLP(checkpoint=path_to_saved_model)
         """
         self.activation = tf.tanh
         self.layers = 2
@@ -659,10 +678,8 @@ class VLP(VariationalPeakModel):
             VariationalPeakModel.__init__(self, *args, **kwargs)
 
     def create_model(self, **kwargs):
-        # first model that has cell line channels but full connection to TFs
-
-        # inputs for cell type specific channels
-        # inputs will be different length for each cell type
+        """ Creates an Epitome model.
+        """
         cell_inputs = [tf.keras.layers.Input(shape=(self.num_inputs[i],))
                        for i in range(len(self.num_inputs))]
 
