@@ -40,7 +40,7 @@ class ModelsTest(EpitomeTestCase):
 		data = {Dataset.TRAIN: sparse_matrix, Dataset.VALID: sparse_matrix, Dataset.TEST: sparse_matrix}
 		eligible_assays = ['CTCF', 'RAD21', 'CEBPB']
 
-		model = VLP(list(eligible_assays), data = data, feature_name_file = 'epitome/test/data/feature_name')
+		model = VLP(list(eligible_assays), data = data)
 		assert(len(model.assaymap) == 4)
 
 	def test_eval_vector(self):

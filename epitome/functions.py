@@ -33,6 +33,7 @@ from scipy.io import loadmat
 from .constants import *
 import scipy.sparse
 import pyranges as pr
+from sklearn.metrics import jaccard_score
 
 import warnings
 from operator import itemgetter
@@ -398,7 +399,6 @@ def get_assays_from_feature_file(feature_name_file = None,
 
     # finally, make sure that all assays that were specified are in assaymap
     # if not, throw an error and print the reason.
-    print(eligible_assays is not None)
     if eligible_assays is not None:
 
         missing = [i for i in eligible_assays if i not in list(assaymap)]
@@ -633,3 +633,32 @@ def concatenate_all_data(data, region_file):
                            data[Dataset.VALID], # chr7
                            data[Dataset.TEST], # chr 8 and 9
                            data[Dataset.TRAIN][:,chr6_end:]],axis=1) # all the rest of the chromosomes
+
+
+
+
+def order_by_similarity(matrix, cellmap, assaymap, cell, data, compare_assay = 'DNase'):
+    """
+    Orders list of cellmap names by similarity to comparison cell. 
+    
+    Args:
+        :param numpy matrix specifying location of each assay/cellmap in data
+        :param cellmap: map of cell: index in matrix
+        :param assaymap: map of assay: index in matrix
+        :param cell: name of cell type, should be in cellmap
+        :param data: numpy matrix of data to run comparison. rows index into assay/cell
+        :compare_assay: assay to use to compare cell types. Default = DNase
+
+    Returns:
+        list of cellline names ordered by DNase similarity to cell (most similar is first)
+    """
+
+    # data for cell line to compare all other cell lines to
+    compare_arr = data[matrix[cellmap[cell], assaymap[compare_assay]],:]
+
+    # calculate jaccard score
+    corrs = np.array([jaccard_score(data[matrix[cellmap[c], assaymap[compare_assay]],:], compare_arr) for c in list(cellmap)])
+
+    tmp = sorted(zip(corrs, list(cellmap)), key = lambda x: x[0], reverse=True)
+    return list(map(lambda x: x[1],tmp))
+
