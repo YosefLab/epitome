@@ -16,6 +16,7 @@ Helper functions
   range_for_contigs
   calculate_epitome_regions
   concatenate_all_data
+  saveToyData
 """
 
 # imports
@@ -44,6 +45,7 @@ import urllib
 import tqdm
 from zipfile import ZipFile
 import gzip
+import shutil
 
 # to load in positions file
 import multiprocessing
@@ -225,7 +227,7 @@ def load_epitome_data(data_dir=None):
 ################### Parsing Deepsea Files ########################
 
 def load_bed_regions(bedfile):
-    ''' Loads Deepsea bed file (stored as .gz format), removing
+    ''' Loads bed file (stored as .gz format), removing
     regions that have no data (the regions between valid/test
     and chromosomes X/Y).
 
@@ -408,6 +410,70 @@ def get_assays_from_feature_file(feature_name_file = None,
 
     matrix = matrix.astype(int)
     return matrix, cellmap, assaymap
+
+
+def saveToyData(toy_path):
+        '''
+        Creates a toy dataset for test from original dataset.
+
+        Copies over feature_name, then generates synthetic bed file and numpy matrices
+        for 22 chrs
+
+        Args:
+            :param toy_path: path to save toy dataset to.
+        '''
+
+        if not os.path.exists(toy_path):
+            os.makedirs(toy_path)
+
+        # 1. copy feature_name file
+        new_feature_path = os.path.join(toy_path, FEATURE_NAME_FILE)
+        shutil.copyfile(os.path.join(data_dir, FEATURE_NAME_FILE), new_feature_path)
+
+        # 2. generate 100 records for each chromosome and save to gzip compressed bed file
+        regions = []
+
+        PER_CHR_RECORDS=100
+        chrs = range(1,22)
+
+        for i in chrs:
+            chrom = 'chr' + str(i)
+            for j in range(1,PER_CHR_RECORDS+1):
+                regions.append(Region(chrom, j * 200, j * 200 + 200))
+
+        # convert region to byte string
+        bytes_str = '\n'.join(list(map(lambda i: '%s\t%i\t%i' % (i.chrom, i.start, i.end), regions))).encode('utf-8')
+
+        # save regions as gzip bed file
+        with gzip.open(os.path.join(toy_path,  POSITIONS_FILE), 'wb') as f:
+            f.write(bytes_str)
+
+
+        # 3. generate random small toy matrices and save
+        valid_shape = PER_CHR_RECORDS
+        test_shape = PER_CHR_RECORDS * 2
+        train_shape = PER_CHR_RECORDS * len(chrs) - valid_shape - test_shape
+
+        np.random.seed(1)
+
+        fcount = len(open(new_feature_path).readlines())
+
+        train_data = np.random.randint(2, size=(fcount, train_shape))
+        valid_data = np.random.randint(2, size=(fcount, valid_shape))
+        test_data = np.random.randint(2, size=(fcount, test_shape))
+
+        # save npz files
+        train_output_np = os.path.join(toy_path, "train.npz")
+        valid_output_np = os.path.join(toy_path, "valid.npz")
+        test_output_np = os.path.join(toy_path, "test.npz")
+
+        scipy.sparse.save_npz(train_output_np, scipy.sparse.csc_matrix(train_data,dtype=np.int8))
+        scipy.sparse.save_npz(valid_output_np, scipy.sparse.csc_matrix(valid_data, dtype=np.int8))
+        scipy.sparse.save_npz(test_output_np, scipy.sparse.csc_matrix(test_data, dtype=np.int8))
+
+
+        # 4. make sure all required files exist
+        assert np.all([os.path.exists(os.path.join(toy_path,i)) for i in REQUIRED_FILES])
 
 
 ################### Parsing data from bed file ########################
@@ -639,8 +705,8 @@ def concatenate_all_data(data, region_file):
 
 def order_by_similarity(matrix, cellmap, assaymap, cell, data, compare_assay = 'DNase'):
     """
-    Orders list of cellmap names by similarity to comparison cell. 
-    
+    Orders list of cellmap names by similarity to comparison cell.
+
     Args:
         :param numpy matrix specifying location of each assay/cellmap in data
         :param cellmap: map of cell: index in matrix
@@ -661,4 +727,3 @@ def order_by_similarity(matrix, cellmap, assaymap, cell, data, compare_assay = '
 
     tmp = sorted(zip(corrs, list(cellmap)), key = lambda x: x[0], reverse=True)
     return list(map(lambda x: x[1],tmp))
-

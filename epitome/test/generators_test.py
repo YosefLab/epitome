@@ -4,10 +4,15 @@ from epitome.generators import *
 
 class GeneratorsTest(EpitomeTestCase):
 
+
+	def __init__(self, *args, **kwargs):
+		super(GeneratorsTest, self).__init__(*args, **kwargs)
+		self.data= load_epitome_data()
+
 	def test_generator_no_dnase(self):
 
 		# generate consistent data
-		data_shape = self.getValidDataShape()
+		data_shape = self.data[Dataset.TRAIN].shape
 		data = np.zeros(data_shape)
 		data[::2] = 1 # every 2nd row is 1s
 
@@ -36,14 +41,14 @@ class GeneratorsTest(EpitomeTestCase):
 		assert(np.all(li_results[pos_position][-2] == 1))
 
 	def test_generator_sparse_data(self):
-		data = self.getValidData()
+
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_assays = ['DNase','CTCF','RAD21','LARP7']
 		matrix, cellmap, assaymap = self.getFeatureData(eligible_assays, eligible_cells)
 		label_cell_types = ['K562']
 		eligible_cells.remove(label_cell_types[0])
 
-		results = load_data(data,
+		results = load_data(self.data[Dataset.TRAIN],
 			['K562'],
 			eligible_cells,
 			matrix,
@@ -58,7 +63,6 @@ class GeneratorsTest(EpitomeTestCase):
 		assert(len(li_results[0][0]) == len(eligible_assays)-1)
 
 	def test_generator_radius(self):
-		data = self.getValidData()
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_assays = ['DNase','CTCF','RAD21']
 		matrix, cellmap, assaymap = self.getFeatureData(eligible_assays, eligible_cells)
@@ -67,7 +71,7 @@ class GeneratorsTest(EpitomeTestCase):
 
 		radii = [1,10]
 
-		results = load_data(data,
+		results = load_data(self.data[Dataset.TRAIN],
 			['K562'],
 			eligible_cells,
 			matrix,
@@ -83,18 +87,17 @@ class GeneratorsTest(EpitomeTestCase):
 
 
 	def test_generator_runtime(self):
-		data = self.getValidData()
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_assays = ['DNase','CTCF','RAD21']
 		matrix, cellmap, assaymap = self.getFeatureData(eligible_assays, eligible_cells)
 		label_cell_types = ['K562']
 		eligible_cells.remove(label_cell_types[0])
 
-		similarity_matrix = np.ones([2,data.shape[1]])
+		similarity_matrix = np.ones([2,self.data[Dataset.TRAIN].shape[1]])
 
 		radii = [1,10]
 
-		results = load_data(data,
+		results = load_data(self.data[Dataset.TRAIN],
 			['K562'],
 			eligible_cells,
 			matrix,
@@ -114,7 +117,6 @@ class GeneratorsTest(EpitomeTestCase):
 	def test_generator_dnase_array(self):
 		# should not fail if similarity_assays are just for DNase and is a single array.
 		# https://github.com/YosefLab/epitome/issues/4
-		data = self.getValidData()
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_assays = ['DNase','CTCF','RAD21','LARP7']
 		matrix, cellmap, assaymap = self.getFeatureData(eligible_assays, eligible_cells)
@@ -122,9 +124,9 @@ class GeneratorsTest(EpitomeTestCase):
 		eligible_cells.remove(test_celltypes[0])
 		radii = [1,10]
 		# fake data for DNase
-		similarity_matrix = np.ones(data.shape[1])
+		similarity_matrix = np.ones(self.data[Dataset.TRAIN].shape[1])
 
-		results = load_data(data,
+		results = load_data(self.data[Dataset.TRAIN],
                  test_celltypes,
                  eligible_cells,
                  matrix,

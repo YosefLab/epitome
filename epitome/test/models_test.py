@@ -7,7 +7,7 @@ import pytest
 class ModelsTest(EpitomeTestCase):
 
 	def __init__(self, *args, **kwargs):
-		super(EpitomeTestCase, self).__init__(*args, **kwargs)
+		super(ModelsTest, self).__init__(*args, **kwargs)
 		self.model = self.makeSmallModel()
 		self.validation_size = 10
 
@@ -36,11 +36,9 @@ class ModelsTest(EpitomeTestCase):
 		# test for https://github.com/YosefLab/epitome/issues/23
 		# should add DNase to eligible assays
 
-		sparse_matrix = self.getValidData()
-		data = {Dataset.TRAIN: sparse_matrix, Dataset.VALID: sparse_matrix, Dataset.TEST: sparse_matrix}
 		eligible_assays = ['CTCF', 'RAD21', 'CEBPB']
 
-		model = VLP(list(eligible_assays), data = data)
+		model = VLP(list(eligible_assays))
 		assert(len(model.assaymap) == 4)
 
 	def test_eval_vector(self):
