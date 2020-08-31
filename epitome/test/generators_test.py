@@ -6,7 +6,7 @@ class GeneratorsTest(EpitomeTestCase):
 
 
 	def __init__(self, *args, **kwargs):
-		super(EpitomeTestCase, self).__init__(*args, **kwargs)
+		super(GeneratorsTest, self).__init__(*args, **kwargs)
 		self.data= load_epitome_data()
 
 	def test_generator_no_dnase(self):

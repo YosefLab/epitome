@@ -7,7 +7,7 @@ import pytest
 class ModelsTest(EpitomeTestCase):
 
 	def __init__(self, *args, **kwargs):
-		super(EpitomeTestCase, self).__init__(*args, **kwargs)
+		super(ModelsTest, self).__init__(*args, **kwargs)
 		self.model = self.makeSmallModel()
 		self.validation_size = 10
 

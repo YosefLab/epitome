@@ -20,10 +20,7 @@ class EpitomeTestCase(unittest.TestCase):
 	def __init__(self, *args, **kwargs):
 		# download test data to parent dir of EPITOME_DATA_PATH  if it was not yet downloaded
 		download_and_unzip(S3_TEST_PATH, os.path.dirname(os.environ["EPITOME_DATA_PATH"]))
-		super(unittest.TestCase, self).__init__()
-
-
-
+		super(EpitomeTestCase, self).__init__(*args, **kwargs)
 
 	def getFeatureData(self, eligible_assays, eligible_cells):
 		# returns matrix, cellmap, assaymap

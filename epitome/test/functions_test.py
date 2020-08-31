@@ -8,7 +8,7 @@ import warnings
 class FunctionsTest(EpitomeTestCase):
 
     def __init__(self, *args, **kwargs):
-        super(EpitomeTestCase, self).__init__(*args, **kwargs)
+        super(FunctionsTest, self).__init__(*args, **kwargs)
 
     def test_user_data_path(self):
         # user data path should be able to be explicitly set
