@@ -3,6 +3,8 @@ from epitome.constants import Dataset
 import numpy as np
 from epitome.models import VLP
 import pytest
+import pandas as pd
+import os
 
 class ModelsTest(EpitomeTestCase):
 
@@ -11,6 +13,24 @@ class ModelsTest(EpitomeTestCase):
 		self.model = self.makeSmallModel()
 		self.validation_size = 10
 
+	def test_score_peak_file(self):
+		test_similarity_peak_file = os.getcwd() + '/epitome/test/data/test_bed.bed'
+		test_regions_peak_file = os.getcwd() + '/epitome/test/data/test_regions.bed'
+
+		def file_len(fname):
+			with open(fname) as f:
+				for i, l in enumerate(f):
+					pass
+			return i + 1
+		len_regions_file = file_len(test_regions_peak_file)
+
+		model = self.model
+
+		preds = model.score_peak_file([test_similarity_peak_file], test_regions_peak_file, all_data=None)
+
+		assert(preds.shape[0] == len_regions_file)
+	
+	
 
 	def test_train_model(self):
 		train_iters = 2

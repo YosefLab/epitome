@@ -607,7 +607,7 @@ class VariationalPeakModel():
         print("finished predictions...", means.shape)
 
         assert type(means) == type(stds), "Means and STDs variables not of the same type"
-        if not isinstance(means, np.array):
+        if not isinstance(means, np.ndarray):
             means = means.numpy()
             stds = stds.numpy()
 
