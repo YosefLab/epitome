@@ -5,6 +5,7 @@ from epitome.models import VLP
 import pytest
 import pandas as pd
 import os
+import tempfile
 
 class ModelsTest(EpitomeTestCase):
 
@@ -14,24 +15,33 @@ class ModelsTest(EpitomeTestCase):
 		self.validation_size = 10
 
 	def test_score_peak_file(self):
-		test_similarity_peak_file = os.getcwd() + '/epitome/test/data/test_bed.bed'
-		test_regions_peak_file = os.getcwd() + '/epitome/test/data/test_regions.bed'
+		test_similarity_peak_file = tempfile.NamedTemporaryFile(delete=False)
+		test_regions_peak_file = tempfile.NamedTemporaryFile(delete=False)
+
+		# Create dummy data and write to a tempfile
+		test_similarity_peak_file.write(b'chr1\t10238\t10738\nchr1\t847482\t847982\nchr6\t41395111\t41395611')
+		test_regions_peak_file.write(b'chr1\t10238\t10738\nchr1\t847482\t847982')
+
+		test_similarity_peak_file.flush()
+		test_regions_peak_file.flush()
 
 		def file_len(fname):
 			with open(fname) as f:
 				for i, l in enumerate(f):
 					pass
 			return i + 1
-		len_regions_file = file_len(test_regions_peak_file)
+		len_regions_file = file_len(test_regions_peak_file.name)
 
 		model = self.model
 
-		preds = model.score_peak_file([test_similarity_peak_file], test_regions_peak_file, all_data=None)
+		preds = model.score_peak_file([test_similarity_peak_file.name], test_regions_peak_file.name, all_data=None)
 
 		assert(preds.shape[0] == len_regions_file)
-	
-	
+		assert(1 == 1)
 
+		test_regions_peak_file.close()
+		test_similarity_peak_file.close()
+	
 	def test_train_model(self):
 		train_iters = 2
 
