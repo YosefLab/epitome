@@ -30,17 +30,9 @@ class ModelsTest(EpitomeTestCase):
 		test_similarity_peak_file.flush()
 		test_regions_peak_file.flush()
 
-		# Function to count file length
-		def file_len(fname):
-			with open(fname) as f:
-				for i, l in enumerate(f):
-					pass
-			return i + 1
-		len_regions_file = file_len(test_regions_peak_file.name)
-
 		preds = self.model.score_peak_file([test_similarity_peak_file.name], test_regions_peak_file.name, all_data=None)
 
-		assert(preds.shape[0] == len_regions_file)
+		assert(preds.shape[0] == len(regions_pr))
 
 		test_regions_peak_file.close()
 		test_similarity_peak_file.close()
