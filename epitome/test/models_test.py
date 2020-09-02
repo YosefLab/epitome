@@ -32,10 +32,10 @@ class ModelsTest(EpitomeTestCase):
 
 		preds = self.model.score_peak_file([test_similarity_peak_file.name], test_regions_peak_file.name, all_data=None)
 
-		assert(preds.shape[0] == len(regions_pr))
-
 		test_regions_peak_file.close()
 		test_similarity_peak_file.close()
+
+		assert(preds.shape[0] == len(regions_pr))
 	
 	def test_train_model(self):
 		train_iters = 2
