@@ -3,9 +3,8 @@ from epitome.constants import Dataset
 import numpy as np
 from epitome.models import VLP
 import pytest
-import pandas as pd
-import os
 import tempfile
+import pyranges as pr
 
 class ModelsTest(EpitomeTestCase):
 
@@ -18,13 +17,20 @@ class ModelsTest(EpitomeTestCase):
 		test_similarity_peak_file = tempfile.NamedTemporaryFile(delete=False)
 		test_regions_peak_file = tempfile.NamedTemporaryFile(delete=False)
 
-		# Create dummy data and write to a tempfile
-		test_similarity_peak_file.write(b'chr1\t10238\t10738\nchr1\t847482\t847982\nchr6\t41395111\t41395611')
-		test_regions_peak_file.write(b'chr1\t10238\t10738\nchr1\t847482\t847982')
+		# Create dummy data
+		similarity_dict =  {'Chromosome': ['chr1', 'chr1', 'chr6'], 'Start': [200, 400, 1100],  'End': [220, 440, 1150]}
+		regions_dict = {'Chromosome': ['chr1', 'chr1'], 'Start': [210, 410],  'End': [215, 415]}
+		similarity_pr = pr.from_dict(similarity_dict)
+		regions_pr = pr.from_dict(regions_dict)
+
+		# Write to temp bed file
+		similarity_pr.to_bed(test_similarity_peak_file.name)
+		regions_pr.to_bed(test_regions_peak_file.name)
 
 		test_similarity_peak_file.flush()
 		test_regions_peak_file.flush()
 
+		# Function to count file length
 		def file_len(fname):
 			with open(fname) as f:
 				for i, l in enumerate(f):
@@ -32,12 +38,9 @@ class ModelsTest(EpitomeTestCase):
 			return i + 1
 		len_regions_file = file_len(test_regions_peak_file.name)
 
-		model = self.model
-
-		preds = model.score_peak_file([test_similarity_peak_file.name], test_regions_peak_file.name, all_data=None)
+		preds = self.model.score_peak_file([test_similarity_peak_file.name], test_regions_peak_file.name, all_data=None)
 
 		assert(preds.shape[0] == len_regions_file)
-		assert(1 == 1)
 
 		test_regions_peak_file.close()
 		test_similarity_peak_file.close()
