@@ -299,19 +299,25 @@ class VariationalPeakModel():
 
             return elbo_loss, neg_log_likelihood, kl_loss
 
-        for step, f in enumerate(self.train_iter.take(num_steps)):
-            loss = train_step(f)
+        @tf.function
+        def loopiter():
+            for step, f in enumerate(self.train_iter):
+                loss = train_step(f)
 
-            if step % 1000 == 0:
+                if step % 100 == 0:
+                  tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) +
+                                            str(tf.reduce_mean(loss[1])) +
+                                            str(tf.reduce_mean(loss[2])))
 
-                tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) +
-                                          str(tf.reduce_mean(loss[1])) +
-                                          str(tf.reduce_mean(loss[2])))
+                  if (self.debug):
+                      tf.compat.v1.logging.info("On validation")
+                      _, _, _, _, _ = self.test(40000, log=False)
+                      tf.compat.v1.logging.info("")
 
-                if (self.debug):
-                    tf.compat.v1.logging.info("On validation")
-                    _, _, _, _, _ = self.test(40000, log=False)
-                    tf.compat.v1.logging.info("")
+                if step > num_steps:
+                  break
+
+        loopiter()
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
         """
