@@ -15,6 +15,7 @@ Models
 from epitome import *
 import tensorflow as tf
 import tensorflow_probability as tfp
+from tensorflow.python.framework.ops import disable_eager_execution
 
 from .functions import *
 from .constants import *
@@ -28,12 +29,6 @@ import logging
 # for saving model
 import pickle
 from operator import itemgetter
-
-# TODO RM!
-# this is required because tensorflow is running in eager mode
-# but keras weights are not, which throws an error
-# should be fixed by not running in eager mode
-tf.config.experimental_run_functions_eagerly(True)
 
 #######################################################################
 #################### Variational Peak Model ###########################

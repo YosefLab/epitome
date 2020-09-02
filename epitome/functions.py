@@ -701,7 +701,40 @@ def concatenate_all_data(data, region_file):
                            data[Dataset.TRAIN][:,chr6_end:]],axis=1) # all the rest of the chromosomes
 
 
+def get_radius_indices(radii, r, i, max_index):
+    '''
+    Gets indices for a given radius r in both directions from index i.
+    Used in generator code to get indices in data for a given radius from
+    genomic loci i.
 
+    Args:
+        :param radii: increasing list of integers indiciating radii
+        :param r: Index of which radii
+        :param i: center index to access data
+        :param max_index: max index which can be accessed
+
+    Returns:
+        exclusive indices for this radius
+
+    '''
+    radius = radii[r]
+
+    min_radius = max(0, i - radius)
+    max_radius = min(i+radius+1, max_index)
+
+    # do not featurize chromatin regions
+    # that were considered in smaller radii
+    if (r != 0):
+
+        radius_range_1 = np.arange(min_radius, max(0, i - radii[r-1]+1))
+        radius_range_2 = np.arange(i+radii[r-1], max_radius)
+
+        radius_range = np.concatenate([radius_range_1, radius_range_2])
+    else:
+
+        radius_range = np.arange(min_radius, max_radius)
+
+    return radius_range
 
 def order_by_similarity(matrix, cellmap, assaymap, cell, data, compare_assay = 'DNase'):
     """

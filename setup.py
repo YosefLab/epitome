@@ -25,7 +25,7 @@ except: # pip > 20
 
 # append tensorflow or tensorflow-gpu to reqs
 # need nightly build to work with tensorflow probability
-TENSORFLOW_VERSION="2.1.0"
+TENSORFLOW_VERSION="2.3.0"
 
 try:
     subprocess.check_output(["nvidia-smi", "-L"])
