@@ -9,6 +9,7 @@ except ImportError: # for pip <= 9.0.3
 import os
 import sys
 import subprocess
+import pkg_resources
 
 # Utility function to read the README file.
 # Used for the long_description.
