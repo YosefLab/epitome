@@ -15,7 +15,6 @@ Models
 from epitome import *
 import tensorflow as tf
 import tensorflow_probability as tfp
-from tensorflow.python.framework.ops import disable_eager_execution
 
 from .functions import *
 from .constants import *

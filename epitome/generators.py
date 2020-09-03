@@ -171,7 +171,12 @@ def load_data(data,
 
                 # get indices for each radius in radii
                 radius_ranges = list(map(lambda x: get_radius_indices(radii, x, i, data.shape[-1]), range(len(radii))))
-                radius_indices = np.concatenate(radius_ranges)
+
+                if len(radius_ranges) > 0:
+                    radius_indices = np.concatenate(radius_ranges)
+                else:
+                    # cases where radii is nothing of single radius
+                    radius_indices = radius_ranges
 
                 cell_train_data = data[similarity_indices[:,:,None],radius_indices]
 

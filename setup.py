@@ -23,17 +23,32 @@ try:
 except: # pip > 20
     reqs = [str(ir.requirement) for ir in install_reqs]
 
-# append tensorflow or tensorflow-gpu to reqs
-# need nightly build to work with tensorflow probability
-TENSORFLOW_VERSION="2.3.0"
 
-try:
-    subprocess.check_output(["nvidia-smi", "-L"])
-    tf_req = "tensorflow-gpu==%s" % TENSORFLOW_VERSION
-except:
-    tf_req = "tensorflow==%s" % TENSORFLOW_VERSION
+# Check if tensorflow is already installed.
+# Ideally, it would be compiled for the machine it is being used on.
+# Throw user warning if we have to install on pip.
+installed = {pkg.key for pkg in pkg_resources.working_set}
 
-reqs.append(tf_req)
+if 'tensorflow' not in installed:
+
+    message = """tensorflow is not installed in the current environment.
+        We are installing it here through pip, but it will not be optimized for your hardware.
+        To get the best performance, install tensorflow from source.
+        Installation instructions can be found at https://www.tensorflow.org/install/source"""
+
+    warnings.warn(message)
+
+    # append tensorflow or tensorflow-gpu to reqs
+    # need nightly build to work with tensorflow probability
+    TENSORFLOW_VERSION="2.3.0"
+
+    try:
+        subprocess.check_output(["nvidia-smi", "-L"])
+        tf_req = "tensorflow-gpu==%s" % TENSORFLOW_VERSION
+    except:
+        tf_req = "tensorflow==%s" % TENSORFLOW_VERSION
+
+    reqs.append(tf_req)
 
 # Cython must be installed before pyranges
 err = subprocess.call(["pip","install","cython"])
@@ -70,4 +85,3 @@ setup(
     packages=find_packages(exclude=['*.test.*']),
     python_requires='>=3'
 )
- 
