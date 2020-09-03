@@ -44,23 +44,40 @@ class GeneratorsTest(EpitomeTestCase):
 
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_assays = ['DNase','CTCF','RAD21','LARP7']
-		matrix, cellmap, assaymap = self.getFeatureData(eligible_assays, eligible_cells)
-		label_cell_types = ['K562']
+		matrix, cellmap, assaymap = get_assays_from_feature_file(
+				eligible_assays = eligible_assays,
+				eligible_cells = eligible_cells, min_cells_per_assay = 1, min_assays_per_cell = 1)
+
+		label_cell_types = ['HepG2']
 		eligible_cells.remove(label_cell_types[0])
 
-		results = load_data(self.data[Dataset.TRAIN],
-			['K562'],
+		results = list(load_data(self.data[Dataset.TRAIN],
+			label_cell_types,
 			eligible_cells,
 			matrix,
 			assaymap,
 			cellmap,
 			radii = [],
 			mode = Dataset.VALID,
-			indices=np.arange(0,10))()
-		li_results = list(results)
+			return_feature_names=True,
+			indices=np.arange(0,10))())
 
-		# length should be shorter for first cell because missing LARP7
-		assert(len(li_results[0][0]) == len(eligible_assays)-1)
+		# get first features
+		features = results[0][0]
+
+		# get labels
+		labels = results[0][1]
+
+		#  all cell types but K562 are missing LARP7 data
+		assert(len(features[0]) == len(eligible_cells) * len(eligible_assays) - 3)
+
+		# make sure mask is masking out LARP7 for HepG2
+		assert(np.all(features[-1] == [1., 0., 1.]))
+
+		# make sure first label cell is not the test cell K562
+		assert(labels[-2][0] == 'lbl_HepG2_RAD21')
+		assert(labels[-2][1] == 'lbl_HepG2_LARP7')
+		assert(labels[-2][2] == 'lbl_HepG2_CTCF')
 
 	def test_generator_radius(self):
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
@@ -83,10 +100,9 @@ class GeneratorsTest(EpitomeTestCase):
 		li_results = list(results)
 
 		# length should include eligible assays and 2* radius for pos and agreement
-		assert(len(li_results[0][0]) == len(eligible_assays)+len(radii)* 2)
+		assert(len(li_results[0][0]) == len(eligible_cells) * (len(eligible_assays)+len(radii)* 2))
 
-
-	def test_generator_runtime(self):
+	def test_generator_multiple_sim(self):
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_assays = ['DNase','CTCF','RAD21']
 		matrix, cellmap, assaymap = self.getFeatureData(eligible_assays, eligible_cells)
@@ -111,7 +127,8 @@ class GeneratorsTest(EpitomeTestCase):
 		li_results = list(results)
 
 		# length should include eligible assays and 2* radius for pos and agreement
-		assert(len(li_results[0][0]) == len(eligible_assays)+len(radii)* 4)
+		# for each of the 2 similarity assays
+		assert(len(li_results[0][0]) == len(eligible_cells) * (len(eligible_assays)+len(radii)* 4))
 
 
 	def test_generator_dnase_array(self):

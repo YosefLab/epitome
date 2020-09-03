@@ -62,7 +62,7 @@ def load_data(data,
         similarity_assays = [similarity_assays]
     assert('DNase' in similarity_assays)
 
-    # get indices for features.rows are cells and cols are assays
+    # get indices for features. rows are cells and cols are assays
     cellmap_idx = [cellmap[c] for c in list(eval_cell_types)]
     feature_cell_indices = matrix[cellmap_idx,:]
 
@@ -141,11 +141,8 @@ def load_data(data,
 
     def g():
         for i in indices: # for all records specified
-            feature_names = []
 
             for (cell) in label_cell_types: # for all cell types to be used in labels
-                similarities_double_positive = np.empty([len(eval_cell_types),0])
-                similarities_agreement = np.empty([len(eval_cell_types),0])
 
                 # labels for this cell
                 if (mode != Dataset.RUNTIME):
@@ -171,78 +168,54 @@ def load_data(data,
                 # for cell types that are going to be features
                 similarity_indices = feature_cell_indices[:, delete_indices]
 
-                similarity_labels_agreement = []
-                similarity_labels_dp = []
 
-                for r, radius in enumerate(radii):
+                # get indices for each radius in radii
+                radius_ranges = list(map(lambda x: get_radius_indices(radii, x, i, data.shape[-1]), range(len(radii))))
 
-                    min_radius = max(0, i - radius + 1)
-                    max_radius = min(i+radius, data.shape[1])
+                if len(radius_ranges) > 0:
+                    radius_indices = np.concatenate(radius_ranges)
 
-                    # do not featurize chromatin regions
-                    # that were considered in smaller radii
-                    if (r != 0):
-                        radius_range_1 = np.arange(min_radius, max(0, i - radii[r-1]+1))
-                        radius_range_2 = np.arange(i+radii[r-1], max_radius)
+                    cell_train_data = data[similarity_indices[:,:,None],radius_indices]
 
-                        radius_range = np.concatenate([radius_range_1, radius_range_2])
-                    else:
+                    if mode == Dataset.RUNTIME:
 
-                        radius_range = np.arange(min_radius, max_radius)
-
-
-                    ####################################################################
-                    cell_train_data = data[similarity_indices[:,:,None],radius_range]
-
-                    # use similarity matrix, if it is provided
-                    if (mode == Dataset.RUNTIME):
-
-                        # within the radius, fraction of places where they are both 1
-                        similarity_double_positive = np.average(cell_train_data*
-                                                 similarity_matrix[:,radius_range], axis=-1)
-
-                        # within the radius, fraction of places where they are both equal (0 or 1)
-                        similarity_agreement = np.average(cell_train_data==
-                                                 similarity_matrix[:,radius_range], axis=-1)
+                        pos = cell_train_data*similarity_matrix[:,radius_indices]
+                        agree = cell_train_data == similarity_matrix[:,radius_indices]
 
                     else:
-                        cell_label_data = data[label_cell_indices[delete_indices][:,None],radius_range]
+                        cell_label_data = data[label_cell_indices[delete_indices][:,None],radius_indices]
 
-                        similarity_double_positive = np.average(cell_train_data*
-                                                 cell_label_data, axis=-1)
+                        # remove middle dimension and flatten similarity assays
+                        pos = (cell_train_data*cell_label_data)
+                        agree = (cell_train_data == cell_label_data)
 
-                        # within the radius, fraction of places where they are both equal (0 or 1)
-                        similarity_agreement = np.average(cell_train_data ==
-                                                 cell_label_data, axis=-1)
+                    # pos = pos.reshape(cell_train_data.shape[0], cell_train_data.shape[1]*cell_train_data.shape[2])
+                    # pos = agree.reshape(cell_train_data.shape[0], cell_train_data.shape[1]*cell_train_data.shape[2])
+                    #
+                    print("POS", pos.shape)
+                    # get indices to split on. remove last because it is empty
+                    split_indices = np.cumsum([len(i) for i in radius_ranges])[:-1]
+                    # slice arrays by radii
+                    pos_arrays = np.split(pos, split_indices, axis= -1 )
+                    agree_arrays = np.split(agree, split_indices, axis = -1)
 
-                    similarity_labels_agreement.append('r%i_%s' % (radius, 'agree'))
-                    similarity_labels_dp.append('r%i_%s' % (radius, 'dp'))
+                    similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays + agree_arrays)),axis=1)
+                else:
+                    # no radius, so no similarities. just an empty placeholder
+                    similarities = np.zeros((len(eval_cell_types),0,0))
 
-                    similarities_double_positive = np.concatenate([similarities_double_positive,similarity_double_positive],axis=1)
-                    similarities_agreement = np.concatenate([similarities_agreement,similarity_agreement],axis=1)
+                # reshape similarities to flatten 1st dimension, which are the assays
+                # results in the odering:
+                ## row 1: cell 1: pos for each assay and agree for each assay for each radius
+                similarities = similarities.reshape(similarities.shape[0], similarities.shape[1]*similarities.shape[2])
 
-                # rehape agreement assay similarity to Radii by feature_cells
-                similarities = np.concatenate([similarities_agreement, similarities_double_positive], axis=1)
-                similarity_labels = np.concatenate([similarity_labels_agreement, similarity_labels_dp])
+                ##### Concatenate all cell type features together ####
+                final_features = np.concatenate([data[feature_cell_indices,i], similarities],axis=1).flatten()
 
-                final = []
-                for j,c in enumerate(eval_cell_types):
-                    # get indices for this cell that has data
-                    present_indices = feature_cell_indices[j,:]
-                    present_indices = present_indices[present_indices!=-1]
-
-                    cell_features = data[present_indices,i]
-                    cell_similarities = similarities[j,:]
-                    concat = np.concatenate([cell_features, cell_similarities])
-                    final.append(concat)
-
-                    # concatenate together feature names
-                    tmp = np.array(feature_assays)[feature_cell_indices[j,:] != -1]
-                    al = ['%s_%s' % (c, a) for a in tmp]
-                    sl = ['%s_%s' % (c, s) for s in similarity_labels]
-
-                    feature_names.append(np.concatenate([al, sl]))
-
+                # mask missing data
+                f_mask = np.concatenate([feature_cell_indices!=-1,
+                                         np.ones(similarities.shape)],axis=1).flatten()
+                final_features = final_features[f_mask != 0]
 
                 if (mode != Dataset.RUNTIME):
                     labels = data[label_cell_indices_no_similarities,i]
@@ -252,20 +225,35 @@ def load_data(data,
                     labels = garbage_labels # all 0's
 
                 # append labels and assaymask
-                final.append(labels.astype(np.float32))
-                feature_names.append(['lbl_%s_%s' % (cell, a) for a in label_assays]) # of form lbl_cellline_target
+                final= tuple([final_features, labels.astype(np.float32), assay_mask.astype(np.float32)])
 
-                final.append(assay_mask.astype(np.float32))
-                feature_names.append(['mask_%s_%s' % (cell, a) for a in label_assays]) # of form mask_cellline_target
-
+                #### Finish appending feature labels together ####
                 if (return_feature_names):
-                    yield (tuple(final), tuple(feature_names))
+                    all_labels = []
+                    feature_names = []
+                    similarity_labels_agreement = ['r%i_%s' % (radius, 'agree') for radius in radii]
+                    similarity_labels_dp = ['r%i_%s' % (radius, 'dp') for radius in radii]
+                    similarity_labels = np.concatenate([similarity_labels_agreement, similarity_labels_dp])
+
+                    # concatenate together feature names
+                    for j,c in enumerate(eval_cell_types):
+                        tmp = np.array(feature_assays)[feature_cell_indices[j,:] != -1]
+                        al = ['%s_%s' % (c, a) for a in tmp]
+                        sl = ['%s_%s' % (c, s) for s in similarity_labels]
+
+                        feature_names.append(al)
+                        feature_names.append(sl)
+
+                    all_labels.append(np.concatenate(feature_names))
+                    all_labels.append(['lbl_%s_%s' % (cell, a) for a in label_assays]) # of form lbl_cellline_target
+                    all_labels.append(['mask_%s_%s' % (cell, a) for a in label_assays]) # of form mask_cellline_target
+
+                    yield (final, tuple(all_labels))
                 else:
-                    yield tuple(final)
+                    yield final
 
 
     return g
-
 
 
 def generator_to_tf_dataset(g, batch_size, shuffle_size, prefetch_size):
