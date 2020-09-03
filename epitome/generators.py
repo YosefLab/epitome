@@ -189,10 +189,6 @@ def load_data(data,
                         pos = (cell_train_data*cell_label_data)
                         agree = (cell_train_data == cell_label_data)
 
-                    # pos = pos.reshape(cell_train_data.shape[0], cell_train_data.shape[1]*cell_train_data.shape[2])
-                    # pos = agree.reshape(cell_train_data.shape[0], cell_train_data.shape[1]*cell_train_data.shape[2])
-                    #
-                    print("POS", pos.shape)
                     # get indices to split on. remove last because it is empty
                     split_indices = np.cumsum([len(i) for i in radius_ranges])[:-1]
                     # slice arrays by radii
