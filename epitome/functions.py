@@ -537,7 +537,7 @@ def bedtools_intersect(file_triple):
 def bedFile2Vector(bed_file, allpos_bed_file):
     """
     This function takes in a bed file of peaks and converts it to a vector or 0/1s that can be
-    uses as input into an Epitome model. Each 0/1 represents a region in the train/test/validation set from DeepSEA.
+    used as input into an Epitome model. Each 0/1 represents a region in the train/test/validation set from DeepSEA.
 
     Most likely, the bed file will be the output of the IDR function, which detects peaks based on the
     reproducibility of multiple samples.
