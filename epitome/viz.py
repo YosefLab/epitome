@@ -27,7 +27,6 @@ import pandas as pd
 import numpy as np
 from matplotlib.backends import backend_agg
 from matplotlib import figure
-import tensorflow as tf
 from sklearn.calibration import calibration_curve
 
 def joint_plot(dict_model1,
