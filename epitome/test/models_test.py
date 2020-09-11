@@ -30,13 +30,15 @@ class ModelsTest(EpitomeTestCase):
 		test_similarity_peak_file.flush()
 		test_regions_peak_file.flush()
 
-		preds = self.model.score_peak_file([test_similarity_peak_file.name], test_regions_peak_file.name, all_data=None)
+		preds = self.model.score_peak_file([test_similarity_peak_file.name],
+			test_regions_peak_file.name,
+			all_data=None)
 
 		test_regions_peak_file.close()
 		test_similarity_peak_file.close()
 
 		assert(preds.shape[0] == len(regions_pr))
-	
+
 	def test_train_model(self):
 		train_iters = 2
 
@@ -80,3 +82,49 @@ class ModelsTest(EpitomeTestCase):
 		loaded_model = VLP(checkpoint=tmp_path, data = self.model.data)
 		results = loaded_model.test(self.validation_size)
 		assert(results['preds_mean'].shape[0] == self.validation_size)
+
+	def test_score_matrix(self):
+
+		regions_peak_file = tempfile.NamedTemporaryFile(delete=False)
+
+		# Create dummy data
+		regions_dict = {'Chromosome': ['chr1', 'chr1'],
+						'Start': [10000, 30000],
+						'End': [10300, 31200]}
+		regions_pr = pr.from_dict(regions_dict)
+
+		# Write to tmp bed file
+		regions_pr.to_bed(regions_peak_file.name)
+		regions_peak_file.flush()
+
+		accessilibility_peak_matrix = np.random.uniform(low=0., high=1., size=(4,2))
+
+		results = self.model.score_matrix(accessilibility_peak_matrix,
+								regions_peak_file.name, all_data = None)
+
+		assert(results.shape == (4, 2, 1))
+
+	def test_score_matrix_missing_data(self):
+		# if there is a region in the regions file that does not overlap anything
+		# in the training data, it should return ??
+
+		regions_peak_file = tempfile.NamedTemporaryFile(delete=False)
+
+		# Create dummy data
+		regions_dict = {'Chromosome': ['chr1', 'chr1'],
+						'Start': [50, 10000],
+						'End': [150, 10400]}
+
+		regions_pr = pr.from_dict(regions_dict)
+
+		# Write to tmp bed file
+		regions_pr.to_bed(regions_peak_file.name)
+		regions_peak_file.flush()
+
+		accessilibility_peak_matrix = np.random.uniform(low=0., high=1., size=(4,2))
+
+		results = self.model.score_matrix(accessilibility_peak_matrix,
+											regions_peak_file.name,
+											all_data = None)
+
+		assert np.all(np.isnan(results[:,0,:]))

@@ -568,6 +568,68 @@ class VariationalPeakModel():
 
         print("columns for matrices are chr, start, end, %s" % ", ".join(list(self.assaymap)[1:]))
 
+    def score_matrix(self, accessilibility_peak_matrix, regions_peak_file, all_data = None):
+        """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
+        rows are regions from regions_peak_file. rows in accessilibility_peak_matrix should matching
+
+        Args:
+            :param accessilibility_peak_matrix: numpy matrix of (samples by genomic regions)
+            :param regions_peak_file: narrowpeak or bed file containing regions to score. Number of regions Should
+              match rows in accessilibility_peak_matrix
+            :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
+
+        Returns:
+            3-dimensional numpy matrix of predictions: sized (samples by regions by ChIP-seq targets)
+        """
+
+        if all_data is None:
+            all_data = concatenate_all_data(self.data, self.regionsFile)
+
+        regions_bed = bed2Pyranges(regions_peak_file)
+        all_data_regions = bed2Pyranges(self.regionsFile)
+
+        joined = regions_bed.join(all_data_regions, how='left',suffix='_alldata').df
+
+        # select regions with data to score
+        idx = joined['idx_alldata']
+
+        results = []
+
+        # TODO 9/10/2020: should do something more efficiently than a for loop
+        for sample_i in range(accessilibility_peak_matrix.shape[0]):
+            # tuple of means and stds
+            peaks_i = np.zeros((len(all_data_regions)))
+            peaks_i[idx] = accessilibility_peak_matrix[sample_i, joined['idx']]
+
+            means, _ = self.eval_vector(all_data, peaks_i, idx)
+
+            # group means by joined['idx']
+            results.append(means)
+
+        # stack all samples along 0th axis
+        tmp = np.stack(results)
+
+        # get the index break for each region_bed region
+        reduce_indices = joined.drop_duplicates('idx',keep='first').index.values
+
+        # get the number of times there was a scored region for each region_bed region
+        # used to calculate reduced means
+        indices_counts = joined['idx'].value_counts(sort=False).values[:,None]
+
+        # reduce means on middle axis
+        final = np.add.reduceat(tmp, reduce_indices, axis = 1)/indices_counts
+
+        # TODO 9/10/2020: code is currently scoring missing values and setting to nan.
+        # You could be more efficient and remove these so you are not taking
+        # the time to score garbage data.
+
+        # fill missing indices with nans
+        missing_indices = joined[joined['idx_alldata']==-1]['idx'].values
+        final[:,missing_indices, :] = np.NAN
+
+        return final
+
+
     def score_peak_file(self, similarity_peak_files, regions_peak_file, all_data = None):
         """ Runs predictions on a set of peaks defined in a bed or narrowPeak file.
 
