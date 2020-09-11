@@ -596,7 +596,7 @@ class VariationalPeakModel():
         results = []
 
         # TODO 9/10/2020: should do something more efficiently than a for loop
-        for sample_i in range(accessilibility_peak_matrix.shape[0]):
+        for sample_i in tqdm.tqdm(range(accessilibility_peak_matrix.shape[0])):
             # tuple of means and stds
             peaks_i = np.zeros((len(all_data_regions)))
             peaks_i[idx] = accessilibility_peak_matrix[sample_i, joined['idx']]
