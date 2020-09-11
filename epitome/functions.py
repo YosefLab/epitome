@@ -494,7 +494,6 @@ def bed2Pyranges(bed_file):
     
     # check to see whether there is a header
     # usually something of the form "chr start end"
-    
     if mimetypes.guess_type(bed_file)[1] == 'gzip':
             
         with gzip.open(bed_file) as f:
@@ -503,7 +502,6 @@ def bed2Pyranges(bed_file):
     else:
         with open(bed_file) as f:
             header = csv.Sniffer().has_header(f.read(1024))
-
 
     if not header:
         p = pd.read_csv(bed_file, sep='\t',header=None)[[0,1,2]]
