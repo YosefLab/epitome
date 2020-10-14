@@ -23,6 +23,8 @@ Helper functions
 from epitome import *
 import h5py
 from scipy.io import savemat
+import csv
+import mimetypes
 
 import pandas as pd
 import collections
@@ -489,12 +491,30 @@ def bed2Pyranges(bed_file):
     Returns:
         indexed pyranges object
     """
-    # just get chromosome location (first three columns)
-    p = pd.read_csv(bed_file, sep='\t',header=None)[[0,1,2]]
+    
+    # check to see whether there is a header
+    # usually something of the form "chr start end"
+    
+    if mimetypes.guess_type(bed_file)[1] == 'gzip':
+            
+        with gzip.open(bed_file) as f:
+            header = csv.Sniffer().has_header(f.read(1024).decode())
+
+    else:
+        with open(bed_file) as f:
+            header = csv.Sniffer().has_header(f.read(1024))
+
+
+    if not header:
+        p = pd.read_csv(bed_file, sep='\t',header=None)[[0,1,2]]
+    else:
+        # skip header row
+        p = pd.read_csv(bed_file, sep='\t',skiprows=1,header=None)[[0,1,2]]
 
     p['idx']=p.index
     p.columns = ['Chromosome', 'Start','End','idx']
     return pr.PyRanges(p).sort()
+
 
 
 def bedtools_intersect(file_triple):

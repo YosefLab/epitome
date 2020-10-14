@@ -170,19 +170,29 @@ filtered_chip = filtered_chip.drop_duplicates(subset=["Biosample term name","Exp
 
 
 
+
 # only want assays that are shared between more than 3 cells
 filtered_chip = filtered_chip.groupby("Experiment target").filter(lambda x: len(x) >= min_cells_per_chip)
 
 # only want cells that have more than min_chip_per_cell epigenetic marks
 filtered_chip = filtered_chip.groupby("Biosample term name").filter(lambda x: len(x) >= min_chip_per_cell)
 
+# get ATAC-seq data
+filtered_atac = filtered_files[(((filtered_files["Output type"] == "replicated peaks") | (filtered_files["Output type"] == "optimal IDR thresholded peaks"))
+                             & (filtered_files["Assay"].str.contains("ChIP-seq")) )] # or conservative idr thresholded peaks?
+
 # only filter if use requires at least one chip experiment for a cell type.
 if min_chip_per_cell > 0:
     # only want DNase that has chip.
     filtered_dnase = filtered_dnase[(filtered_dnase["Biosample term name"].isin(filtered_chip["Biosample term name"]))]
 
+# get ATAC-seq data
+filtered_atac = filtered_files[(filtered_files["Assay"].str.contains("ATAC-seq")) &  (filtered_files["Output type"] == "IDR thresholded peaks")] 
+filtered_atac = filtered_atac.drop_duplicates(subset=["Biosample term name"] , keep='last')
+filtered_atac = filtered_atac[(filtered_atac["Biosample term name"].isin(filtered_dnase["Biosample term name"]))]
+
 # combine dataframes
-filtered_files = filtered_dnase.append(filtered_chip)
+filtered_files = filtered_dnase.append(filtered_chip).append(filtered_atac)
 logger.info("Processing %i files..." % len(filtered_files))
 
 ##############################################################################################
