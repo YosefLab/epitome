@@ -86,6 +86,8 @@ class VariationalPeakModel():
             :param data: data loaded from datapath. This option is mostly for testing, so users dont have to load in data for
             :param data_path: path to data. Directory should contain all.pos.bed.gz, feature_name,test.npz,train.npz,valid.npz
             each model.
+            :param checkpoint: path to checkpoint data.
+            :param max_valid_records: number of points to validate the model on during training for early-stop validation.
         """
 
         tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
@@ -124,25 +126,25 @@ class VariationalPeakModel():
 
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
         
-        # Reserving chr1 to validate training data while training
-#         chr1_end = range_for_contigs(self.regionsFile)['chr1'][1]
-#         self.train_valid_data = self.data[Dataset.TRAIN][:,0:chr1_end]
-#         self.train_data = self.data[Dataset.TRAIN][:,chr1_end:]
-        chr22_beg, chr22_end = range_for_contigs(self.regionsFile)['chr22']
-        chr22_len = chr22_end - chr22_beg
-        self.train_valid_data = self.data[Dataset.TRAIN][:, -chr22_len:]
-        self.train_data = self.data[Dataset.TRAIN][:, :-chr22_len]
+        self.train_data = self.data[Dataset.TRAIN]
         
-        _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.train_valid_data,
-                                                self.eval_cell_types,
-                                                self.eval_cell_types,
-                                                matrix,
-                                                assaymap,
-                                                cellmap,
-                                                similarity_assays = similarity_assays,
-                                                radii = radii, mode = Dataset.TRAIN),
-#                                                 max_records=max_valid_records),
-                                                batch_size, shuffle_size, prefetch_size)
+        if max_valid_records != None:
+            # Reserving chromosome 22 from the training data to validate model while training
+            chr22_beg, chr22_end = range_for_contigs(self.regionsFile)['chr22']
+            chr22_len = chr22_end - chr22_beg
+            self.train_valid_data = self.data[Dataset.TRAIN][:, -chr22_len:]
+            self.train_data = self.data[Dataset.TRAIN][:, :-chr22_len]
+            
+            # Creating a separate train-validation dataset
+            _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.train_valid_data,
+                                                    self.eval_cell_types,
+                                                    self.eval_cell_types,
+                                                    matrix,
+                                                    assaymap,
+                                                    cellmap,
+                                                    similarity_assays = similarity_assays,
+                                                    radii = radii, mode = Dataset.TRAIN),
+                                                    batch_size, shuffle_size, prefetch_size)
         
         input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.train_data, 
                                                 self.eval_cell_types,
@@ -313,7 +315,6 @@ class VariationalPeakModel():
             return neg_log_likelihood
         
         # Initializing variables
-#         patience, min_delta = 2, 0.001
         mean_valid_loss, iters_dec, best_train_iters = sys.maxsize, 0, 0
         valid_losses = []
         
@@ -326,20 +327,15 @@ class VariationalPeakModel():
                                           str(tf.reduce_mean(loss[1])) +
                                           str(tf.reduce_mean(loss[2])))
                 
-                # EARLY STOPPING VALIDATION CODE
+                # Early Stopping Validation
                 if self.max_valid_records is not None:
                     new_valid_loss = []
-                    # Time Function Validation function
-                    start = timer()
+                    
                     for step_v, f_v in enumerate(self.train_valid_iter.take(self.max_valid_records)):
                         new_valid_loss.append(valid_step(f_v))
-                    end = timer()
-                    generator_time = end - start
-                    tf.compat.v1.logging.info(str(step) + " Validation Generator Time: " + str(generator_time) + " seconds")
                                         
                     new_valid_loss = tf.concat(new_valid_loss, axis=0)
                     new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
-                    # new_mean_valid_loss = new_mean_valid_loss.tonumpy()
                     valid_losses.append(new_mean_valid_loss)
 
                     tf.compat.v1.logging.info(str(step) + " Validation:" + str(new_mean_valid_loss))
@@ -348,7 +344,6 @@ class VariationalPeakModel():
                     # If the loss has increased more than patience consecutive times, the function stops early.
                     # Else it continues training.
                     improvement = mean_valid_loss - new_mean_valid_loss
-#                     if new_mean_valid_loss > mean_valid_loss - min_delta:
                     if improvement < min_delta:
                         iters_dec += 1
                         if iters_dec == patience:
@@ -358,16 +353,11 @@ class VariationalPeakModel():
                         iters_dec = 0
                         mean_valid_loss = new_mean_valid_loss
                         best_train_iters = step
-                        # TODO: Save and checkpoint model
+                        # Saves best model so far
                         self.save(checkpoint_path)
                     
-#                 valid_dict = self.test(20000, Dataset.TRAIN, calculate_metrics=True)
                 tf.compat.v1.logging.info("")
 
-#                 if (self.debug):
-#                     tf.compat.v1.logging.info("On validation")
-#                     _, _, _, _, _ = self.test(40000, log=False)
-#                     tf.compat.v1.logging.info("")
         return best_train_iters, step + 1, valid_losses #step + 1
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):

@@ -26,7 +26,6 @@ def load_data(data,
                  similarity_matrix = None,
                  indices = None,
                  return_feature_names = False,
-                 max_records = None,
                  **kwargs):
     """
     Takes Deepsea data and calculates distance metrics from cell types whose locations
@@ -115,12 +114,6 @@ def load_data(data,
         
         else:
             indices = range(0, data.shape[-1]) # not training mode, set to all points
-            
-        # Ensuring shape for dataset
-        if (max_records is not None) and (max_records < indices.shape[0]):
-            # Not sure if correct shape
-            indices = indices[:max_records]
-
 
     if (mode == Dataset.RUNTIME):
         label_cell_types = ["PLACEHOLDER_CELL"]
