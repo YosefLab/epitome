@@ -339,7 +339,7 @@ class VariationalPeakModel():
         """
         return self.run_predictions(num_samples, ds, calculate_metrics)
 
-    def eval_vector(self, data, matrix, indices):
+    def eval_vector(self, data, matrix, indices, samples = 50):
         """
         Evaluates a new cell type based on its chromatin (DNase or ATAC-seq) vector, as well
         as any other similarity assays (acetylation, methylation, etc.). len(vector) should equal
@@ -387,7 +387,7 @@ class VariationalPeakModel():
             cell_lens = [i.shape[-1] for i in self.train_iter.element_spec[:-2]]
 
             # split matrix inputs into tuple of cell line specific features
-            split_inputs = tf.split(inputs.astype(np.float32), cell_lens, axis=1)
+            split_inputs = tf.split(tf.dtypes.cast(inputs, tf.float32), cell_lens, axis=1)
 
             # predict
             tmp = self.model(split_inputs)
@@ -568,7 +568,7 @@ class VariationalPeakModel():
 
         print("columns for matrices are chr, start, end, %s" % ", ".join(list(self.assaymap)[1:]))
 
-    def score_matrix(self, accessilibility_peak_matrix, regions_peak_file, all_data = None):
+    def score_matrix(self, accessilibility_peak_matrix, regions_peak_file, regions_indices = None, all_data = None):
         """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
         rows are regions from regions_peak_file. rows in accessilibility_peak_matrix should matching
 
@@ -576,6 +576,8 @@ class VariationalPeakModel():
             :param accessilibility_peak_matrix: numpy matrix of (samples by genomic regions)
             :param regions_peak_file: narrowpeak or bed file containing regions to score. Number of regions Should
               match rows in accessilibility_peak_matrix
+            :param regions_indices: indices corresponding to rows in accessilibility_peak_matrix/regions in regions_peak_file
+                that will be scored. If None, will score all of the regions.
             :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
 
         Returns:
@@ -591,8 +593,12 @@ class VariationalPeakModel():
         joined = regions_bed.join(all_data_regions, how='left',suffix='_alldata').df
 
         # select regions with data to score
+        if regions_indices is not None:
+            joined = joined[joined['idx'].isin(regions_indices)]
+            joined = joined.reset_index()
+        
         idx = joined['idx_alldata']
-
+            
         results = []
 
         # TODO 9/10/2020: should do something more efficiently than a for loop
@@ -601,7 +607,7 @@ class VariationalPeakModel():
             peaks_i = np.zeros((len(all_data_regions)))
             peaks_i[idx] = accessilibility_peak_matrix[sample_i, joined['idx']]
 
-            means, _ = self.eval_vector(all_data, peaks_i, idx)
+            means, _ = self.eval_vector(all_data, peaks_i, idx, samples = 1)
 
             # group means by joined['idx']
             results.append(means)
