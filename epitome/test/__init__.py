@@ -22,10 +22,11 @@ class EpitomeTestCase(unittest.TestCase):
 		download_and_unzip(S3_TEST_PATH, os.path.dirname(os.environ["EPITOME_DATA_PATH"]))
 		super(EpitomeTestCase, self).__init__(*args, **kwargs)
 
-	def getFeatureData(self, eligible_assays, eligible_cells):
+	def getFeatureData(self, eligible_assays, eligible_cells, similarity_assays = ['DNase']):
 		# returns matrix, cellmap, assaymap
 		return get_assays_from_feature_file(
 				eligible_assays = eligible_assays,
+				similarity_assays = similarity_assays,
 				eligible_cells = eligible_cells, min_cells_per_assay = 3, min_assays_per_cell = 1)
 
 	def makeSmallModel(self):

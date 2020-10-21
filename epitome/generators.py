@@ -57,10 +57,8 @@ def load_data(data,
         if len(similarity_matrix.shape) == 1:
             similarity_matrix = similarity_matrix[None,:]
 
-    # for now, we require DNase to be part of the similarity comparison
     if type(similarity_assays) is not list:
         similarity_assays = [similarity_assays]
-    assert('DNase' in similarity_assays)
 
     # get indices for features. rows are cells and cols are assays
     cellmap_idx = [cellmap[c] for c in list(eval_cell_types)]
@@ -71,7 +69,7 @@ def load_data(data,
 
     # make sure no similarity comparison data is missing for all cell types
     assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \
-        "missing data at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
+        "missing data for similarity assay at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
 
     # names of labels that are being predicted
     feature_assays = [a for a in list(assaymap)] # assays used as features for each evaluation cell type

@@ -68,6 +68,20 @@ class ModelsTest(EpitomeTestCase):
 		model = VLP(list(eligible_assays))
 		assert(len(model.assaymap) == 4)
 
+	def test_model_similarity_assays(self):
+		# should train a model without using DNAse
+		eligible_assays = ['CTCF', 'RAD21', 'CEBPB']
+
+		model = VLP(list(eligible_assays), similarity_assays = ['H3K27ac'])
+		assert(len(model.assaymap) == 4)
+
+	def test_model_two_similarity_assays(self):
+		# should train a model without using DNAse
+		eligible_assays = ['CTCF', 'RAD21', 'CEBPB']
+
+		model = VLP(list(eligible_assays), similarity_assays = ['DNase', 'H3K27ac'])
+		assert(len(model.assaymap) == 5)
+
 	def test_eval_vector(self):
 
 		# should be able to evaluate on a dnase vector
