@@ -10,12 +10,9 @@ Models
   VariationalPeakModel
   VLP
 """
-
-
 from epitome import *
 import tensorflow as tf
 import tensorflow_probability as tfp
-# import tensorflow_datasets as tfds
 
 from .functions import *
 from .constants import *
@@ -87,7 +84,7 @@ class VariationalPeakModel():
             :param data_path: path to data. Directory should contain all.pos.bed.gz, feature_name,test.npz,train.npz,valid.npz
             each model.
             :param checkpoint: path to checkpoint data.
-            :param max_valid_records: number of points to validate the model on during training for early-stop validation.
+            :param max_valid_records: number of points to validate the model on during training for early-stop validation. If set to None, model will not attempt to stop early by validating performance while training.
         """
 
         tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
@@ -126,9 +123,9 @@ class VariationalPeakModel():
 
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
         
-        self.train_data = self.data[Dataset.TRAIN]
-        
-        if max_valid_records != None:
+        if max_valid_records is None:
+            self.train_data = self.data[Dataset.TRAIN]
+        else:
             # Reserving chromosome 22 from the training data to validate model while training
             chr22_beg, chr22_end = range_for_contigs(self.regionsFile)['chr22']
             chr22_len = chr22_end - chr22_beg
@@ -281,7 +278,17 @@ class VariationalPeakModel():
 
         return tf.math.reduce_sum(loss, axis=0)
 
-    def train(self, num_steps, lr=None, checkpoint_path = None, patience=1, min_delta=0):
+    def train(self, num_steps, lr=None, checkpoint_path= None, patience=1, min_delta=0):
+        """
+        Trains keras model.
+        :param num_steps (int): number of training points
+        :param lr (float): learning rate. (TODO: akmorrow verify param explaination).
+        :param checkpoint_path (string): path to save the best model thus far while training.
+        :param patience (int): number of iterations (1000 steps) with no improvement after which training will be stopped.
+        :param min_delta (float): minimum change in the monitored quantity to qualify as an improvement, i.e. an absolute change of less than min_delta, will count as no improvement.
+
+        :return triple of number of steps trained for the best model, number of steps the model has trained total, the train_validation losses (returns an empty list if self.max_valid_records is None).
+        """
         if lr == None:
             lr = self.lr
 
@@ -315,7 +322,7 @@ class VariationalPeakModel():
             return neg_log_likelihood
         
         # Initializing variables
-        mean_valid_loss, iters_dec, best_train_iters = sys.maxsize, 0, 0
+        mean_valid_loss, iterations_decreasing, best_model_steps = sys.maxsize, 0, 0
         valid_losses = []
         
         for step, f in enumerate(self.train_iter.take(num_steps)):
@@ -329,6 +336,9 @@ class VariationalPeakModel():
                 
                 # Early Stopping Validation
                 if self.max_valid_records is not None:
+                    
+                    assert checkpoint_path is not None, "specify a checkpoint_path."
+                    
                     new_valid_loss = []
                     
                     for step_v, f_v in enumerate(self.train_valid_iter.take(self.max_valid_records)):
@@ -345,20 +355,20 @@ class VariationalPeakModel():
                     # Else it continues training.
                     improvement = mean_valid_loss - new_mean_valid_loss
                     if improvement < min_delta:
-                        iters_dec += 1
-                        if iters_dec == patience:
-                            return best_train_iters, step, valid_losses
+                        iterations_decreasing += 1
+                        if iterations_decreasing == patience:
+                            return best_model_steps, step, valid_losses
                     else:
-                        # If val_loss increases before patience epochs, reset iters_dec and mean_valid_loss.
-                        iters_dec = 0
+                        # If val_loss increases before patience epochs, reset iterations_decreasing and mean_valid_loss.
+                        iterations_decreasing = 0
                         mean_valid_loss = new_mean_valid_loss
-                        best_train_iters = step
+                        best_model_steps = step
                         # Saves best model so far
                         self.save(checkpoint_path)
                     
                 tf.compat.v1.logging.info("")
 
-        return best_train_iters, step + 1, valid_losses #step + 1
+        return best_model_steps, step + 1, valid_losses
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
         """
