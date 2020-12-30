@@ -21,7 +21,6 @@ from .metrics import *
 import numpy as np
 
 import tqdm
-from timeit import default_timer as timer
 
 # for saving model
 import pickle
@@ -278,20 +277,15 @@ class VariationalPeakModel():
 
         return tf.math.reduce_sum(loss, axis=0)
 
-    def train(self, num_steps, lr=None, checkpoint_path= None, patience=1, min_delta=0):
+    def train(self, num_steps, patience=0, min_delta=0):
         """
-        Trains keras model.
+        Trains keras model. If patience and min_delta are not specified, the model will train on num_step points. Else, the model will either train on num_step points or stop training early if the train_valid_loss is converging (based on the patience and/or min_delta hyper-parameters)-- whatever comes first.
         :param num_steps (int): number of training points
-        :param lr (float): learning rate. (TODO: akmorrow verify param explaination).
-        :param checkpoint_path (string): path to save the best model thus far while training.
-        :param patience (int): number of iterations (1000 steps) with no improvement after which training will be stopped.
+        :param patience (int): number of iterations (200 steps) with no improvement after which training will be stopped.
         :param min_delta (float): minimum change in the monitored quantity to qualify as an improvement, i.e. an absolute change of less than min_delta, will count as no improvement.
 
         :return triple of number of steps trained for the best model, number of steps the model has trained total, the train_validation losses (returns an empty list if self.max_valid_records is None).
         """
-        if lr == None:
-            lr = self.lr
-
         tf.compat.v1.logging.info("Starting Training")
 
         @tf.function
@@ -323,7 +317,7 @@ class VariationalPeakModel():
         
         # Initializing variables
         mean_valid_loss, iterations_decreasing, best_model_steps = sys.maxsize, 0, 0
-        valid_losses = []
+        train_valid_losses = []
         
         for step, f in enumerate(self.train_iter.take(num_steps)):
             loss = train_step(f)
@@ -336,9 +330,6 @@ class VariationalPeakModel():
                 
                 # Early Stopping Validation
                 if self.max_valid_records is not None:
-                    
-                    assert checkpoint_path is not None, "specify a checkpoint_path."
-                    
                     new_valid_loss = []
                     
                     for step_v, f_v in enumerate(self.train_valid_iter.take(self.max_valid_records)):
@@ -346,9 +337,9 @@ class VariationalPeakModel():
                                         
                     new_valid_loss = tf.concat(new_valid_loss, axis=0)
                     new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
-                    valid_losses.append(new_mean_valid_loss)
+                    train_valid_losses.append(new_mean_valid_loss)
 
-                    tf.compat.v1.logging.info(str(step) + " Validation:" + str(new_mean_valid_loss))
+                    tf.compat.v1.logging.info(str(step) + " Train Validation:" + str(new_mean_valid_loss))
                     
                     # Check if the improvement in loss is at least min_delta. 
                     # If the loss has increased more than patience consecutive times, the function stops early.
@@ -357,18 +348,16 @@ class VariationalPeakModel():
                     if improvement < min_delta:
                         iterations_decreasing += 1
                         if iterations_decreasing == patience:
-                            return best_model_steps, step, valid_losses
+                            return best_model_steps, step, train_valid_losses
                     else:
-                        # If val_loss increases before patience epochs, reset iterations_decreasing and mean_valid_loss.
+                        # If val_loss increases before patience train_valid_steps, reset iterations_decreasing and mean_valid_loss.
                         iterations_decreasing = 0
                         mean_valid_loss = new_mean_valid_loss
                         best_model_steps = step
-                        # Saves best model so far
-                        self.save(checkpoint_path)
                     
                 tf.compat.v1.logging.info("")
 
-        return best_model_steps, step + 1, valid_losses
+        return best_model_steps, step + 1, train_valid_losses
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
         """
