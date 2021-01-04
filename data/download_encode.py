@@ -323,7 +323,7 @@ if os.path.exists(matrix_path_all):
 
 else:
     h5_file = h5py.File(matrix_path_all, "w")
-    matrix = h5_file.create_dataset("data", (len(filtered_files), nregions), dtype='i',
+    matrix = h5_file.create_dataset("data", (len(filtered_files), nregions), dtype='i8',
         compression='gzip', compression_opts=9)
 
 
@@ -426,7 +426,7 @@ def save_epitome_numpy_data(download_dir, output_path):
         logger.info("saving new matrix")
         # resave h5 file without 0 columns
         h5_file = h5py.File(matrix_path, "w")
-        matrix = h5_file.create_dataset("data", nonzero_data.shape, dtype='i',
+        matrix = h5_file.create_dataset("data", nonzero_data.shape, dtype='i8',
             compression='gzip', compression_opts=9)
         matrix[:,:] = nonzero_data
 
