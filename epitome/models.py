@@ -94,7 +94,8 @@ class VariationalPeakModel():
             assays = list(set(assays + similarity_assays))
 
             # get list of TFs that have minimum number of cell lines
-            matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = assays)
+            matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = assays,
+                                                                     similarity_assays = similarity_assays)
             assert len(assays) == len(list(assaymap))
 
 
@@ -596,9 +597,9 @@ class VariationalPeakModel():
         if regions_indices is not None:
             joined = joined[joined['idx'].isin(regions_indices)]
             joined = joined.reset_index()
-        
+
         idx = joined['idx_alldata']
-            
+
         results = []
 
         # TODO 9/10/2020: should do something more efficiently than a for loop

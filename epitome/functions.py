@@ -285,6 +285,7 @@ def get_assays_from_feature_file(feature_name_file = None,
                                  eligible_assays = None,
                                  eligible_cells = None,
                                  min_cells_per_assay= 3,
+                                 similarity_assays = ['DNase'],
                                  min_assays_per_cell = 2):
     ''' Parses a feature name file. File can be found in repo at ../data/feature_name.
     Returns at matrix of cell type/assays which exist for a subset of cell types.
@@ -292,7 +293,6 @@ def get_assays_from_feature_file(feature_name_file = None,
     Args:
         :param: feature_name_file: Path to file containing cell, ChIP metadata. Defaults to module data feature file.
         :param eligible_assays: list of assays to filter by (ie ["CTCF", "EZH2", ..]). If None, then returns all assays.
-        Note that DNase will always be included in the factors, as it is required by Epitome.
         :param eligible_cells: list of cells to filter by (ie ["HepG2", "GM12878", ..]). If None, then returns all cell types.
         :param min_cells_per_assay: number of cell types an assay must have to be considered
         :param min_assays_per_cell: number of assays a cell type must have to be considered. Includes DNase.
@@ -308,7 +308,7 @@ def get_assays_from_feature_file(feature_name_file = None,
 
     # check argument validity
     if (min_assays_per_cell < 2):
-         warnings.warn("min_assays_per_cell should not be < 2 (this means it only has DNase) but was set to %i" % min_assays_per_cell)
+         warnings.warn("min_assays_per_cell should not be < 2 (this means it only has a similarity assay) but was set to %i" % min_assays_per_cell)
 
 
     if (min_cells_per_assay < 2):
@@ -320,9 +320,10 @@ def get_assays_from_feature_file(feature_name_file = None,
         if type(eligible_assays) == str:
             eligible_assays = [eligible_assays]
 
-        # DNase must be in list
-        if 'DNase' not in eligible_assays:
-            eligible_assays = ['DNase'] + eligible_assays
+        # similarity assays must be in the list
+        for a in similarity_assays:
+          if a not in eligible_assays:
+            eligible_assays = [a] + eligible_assays
 
         if (len(eligible_assays) + 1 < min_assays_per_cell):
             raise Exception("""%s is less than the minimum assays required (%i).
@@ -351,7 +352,7 @@ def get_assays_from_feature_file(feature_name_file = None,
 
             # check if cell and assay is valid
             valid_cell = (eligible_cells == None) or (cell in eligible_cells)
-            valid_assay = (eligible_assays == None) or (assay in eligible_assays) or (assay == "DNase")
+            valid_assay = (eligible_assays == None) or (assay in eligible_assays)
 
             # if cell and assay is valid, add it in
             if valid_cell and valid_assay:
@@ -362,8 +363,8 @@ def get_assays_from_feature_file(feature_name_file = None,
 
 
 
-    # finally filter out cell types with < min_assays_per_cell and have DNase
-    indexed_assays = {k: v for k, v in indexed_assays.items() if 'DNase' in v.keys() and len(v) >= min_assays_per_cell}
+    # finally filter out cell types with < min_assays_per_cell and have data for similarity_assays
+    indexed_assays = {k: v for k, v in indexed_assays.items() if np.all([s in v.keys() for s in similarity_assays]) and len(v) >= min_assays_per_cell}
 
     # make flatten list of assays from cells
     tmp = [list(v) for k, v in indexed_assays.items()]
@@ -387,11 +388,6 @@ def get_assays_from_feature_file(feature_name_file = None,
 
     # sort assays alphabetically
     potential_assays = sorted(potential_assays, reverse=True)
-
-    # make sure DNase is first assay. This is because the model
-    # assumes the first column specifies DNase
-    potential_assays.remove("DNase")
-    potential_assays.insert(0,"DNase")
 
     cellmap = {cell: i for i, cell in enumerate(cells)}
     assaymap = {assay: i for i, assay in enumerate(potential_assays)}
@@ -491,19 +487,17 @@ def bed2Pyranges(bed_file):
     Returns:
         indexed pyranges object
     """
-    
+
     # check to see whether there is a header
     # usually something of the form "chr start end"
-    
     if mimetypes.guess_type(bed_file)[1] == 'gzip':
-            
+
         with gzip.open(bed_file) as f:
             header = csv.Sniffer().has_header(f.read(1024).decode())
 
     else:
         with open(bed_file) as f:
             header = csv.Sniffer().has_header(f.read(1024))
-
 
     if not header:
         p = pd.read_csv(bed_file, sep='\t',header=None)[[0,1,2]]
@@ -596,6 +590,7 @@ def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights =
     The greater the weight, the more the positives for this factor matters.
     """
 
+    raise Exception("This function has not been modified to not use DNase")
     # only take rows that will be used in set
     # drop DNase from indices in assaymap first
     selected_assays = list(assaymap.values())[1:]
