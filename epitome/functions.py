@@ -298,9 +298,9 @@ def get_assays_from_feature_file(feature_name_file = None,
         :param min_assays_per_cell: number of assays a cell type must have to be considered. Includes DNase.
 
     Returns:
-        matrix: cell type by assay matrix
-        cellmap: index of cells
-        assaymap: index of assays
+        matrix: cell type by assay matrix, contains indices at which there is epitome data for cell type `i` and transcription factor `j` \n
+        cellmap: dictionary containing indices of cells (rows of the returned matrix) \n
+        assaymap: dictionary containing indices of assays (columns of the returned matrix)
     '''
 
     if not feature_name_file:
@@ -705,7 +705,7 @@ def concatenate_all_data(data, region_file):
         :param regions_file: bed file containg regions of train, valid and test.
 
     Returns:
-        np matrix of concatenated data
+        numpy matrix of concatenated data
     """
 
     # Get chr6 cutoff. takes about 3s.
