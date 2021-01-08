@@ -90,7 +90,7 @@ def joint_plot(dict_model1,
 
 
 def plot_assay_heatmap(matrix, cellmap, assaymap):
-    """ Plots a matrix of available assays from available cells.
+    """ Plots a matrix of available assays from available cells. This function takes in the numpy matrix and two dictionaries returned by :code:`get_assays_from_feature_file`.
 
     Args:
         :param matrix: numpy matrix of indices that index into Epitome data
