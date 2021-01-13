@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from epitome.models import *
+from epitome.dataset import *
 
 # set Epitome data path to test data files for testing
 # this data was saved using functions.saveToyData(<epitome_repo_path>/epitome/test/daata)
@@ -22,24 +23,32 @@ class EpitomeTestCase(unittest.TestCase):
 		download_and_unzip(S3_TEST_PATH, os.path.dirname(os.environ["EPITOME_DATA_PATH"]))
 		super(EpitomeTestCase, self).__init__(*args, **kwargs)
 
-	def getFeatureData(self, eligible_assays, eligible_cells, similarity_assays = ['DNase']):
+	def getFeatureData(self,
+					targets,
+					cells,
+					similarity_targets = ['DNase'],
+					min_cells_per_target = 3,
+					min_targets_per_cell = 1):
+
 		# returns matrix, cellmap, assaymap
-		return get_assays_from_feature_file(
-				eligible_assays = eligible_assays,
-				similarity_assays = similarity_assays,
-				eligible_cells = eligible_cells, min_cells_per_assay = 3, min_assays_per_cell = 1)
+		return EpitomeDataset.get_assays(
+				targets = targets,
+				cells = cells,
+				similarity_targets = similarity_targets,
+				min_cells_per_target = min_cells_per_target,
+				min_targets_per_cell = min_targets_per_cell)
 
 	def makeSmallModel(self):
 
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
-		eligible_assays = ['DNase','CTCF']
-		matrix, cellmap, assaymap = self.getFeatureData(eligible_assays, eligible_cells)
+		eligible_targets = ['DNase','CTCF']
 
-		return VLP(list(eligible_assays),
-			test_celltypes = ['K562'],
-			matrix = matrix,
-			assaymap = assaymap,
-			cellmap = cellmap)
+		dataset = EpitomeDataset(targets = eligible_targets,
+			cells = eligible_cells)
+
+
+		return VLP(dataset,
+			test_celltypes = ['K562'])
 
 
 	def tmpFile(self):

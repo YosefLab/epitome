@@ -25,9 +25,42 @@ S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/data.zip'
 EPITOME_DATA_PATH_ENV="EPITOME_DATA_PATH"
 
 # data files required by epitome
-POSITIONS_FILE = "all.pos.bed.gz"
-FEATURE_NAME_FILE = "feature_name"
-REQUIRED_FILES = [POSITIONS_FILE,"train.npz","valid.npz", FEATURE_NAME_FILE,"test.npz"]
+# data.h5 contains data, row information (celltypes and targets) and
+# column information (chr, start, binSize)
+EPITOME_H5_FILE = "data.h5"
+REQUIRED_FILES = [EPITOME_H5_FILE]
+# required keys in h5 file
+REQUIRED_KEYS = ['/',
+ '/columns',
+ '/columns/binSize',
+ '/columns/chr',
+ '/columns/index',
+ '/columns/index/TEST',
+ '/columns/index/TRAIN',
+ '/columns/index/VALID',
+ '/columns/start',
+ '/data',
+ '/meta',
+ '/meta/assembly',
+ '/meta/source',
+ '/rows',
+ '/rows/celltypes',
+ '/rows/targets',
+ '/columns',
+ '/columns/binSize',
+ '/columns/chr',
+ '/columns/index',
+ '/columns/index/TEST',
+ '/columns/index/TRAIN',
+ '/columns/index/VALID',
+ '/columns/start',
+ '/data',
+ '/meta',
+ '/meta/assembly',
+ '/meta/source',
+ '/rows',
+ '/rows/celltypes',
+ '/rows/targets']
 
 def GET_EPITOME_USER_PATH():
     return os.path.join(os.path.expanduser('~'), '.epitome')
@@ -36,7 +69,7 @@ def GET_DATA_PATH():
 	"""
 	Check if user has set env variable that specifies data path.
 	Otherwise, use default location.
-	
+
 	Returns:
 		location of epitome data with all required files
 	"""

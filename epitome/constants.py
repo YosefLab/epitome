@@ -55,3 +55,8 @@ class Dataset(Enum):
     r"""
     Runtime mode: Allows a new cell type to be predicted on.
     """
+
+    ALL = 5  # All data. Not divided by test, train, or valid.
+    r"""
+    All mode: Specifies that data should not be divided by train, valid, and test.
+    """

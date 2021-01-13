@@ -19,6 +19,8 @@ Helper functions
   saveToyData
 """
 
+# TODO: remove all unused functions!
+
 # imports
 from epitome import *
 import h5py
@@ -53,52 +55,52 @@ import shutil
 import multiprocessing
 
 ################### CLASSES ##########################
-# TODO move to separate file
-class Region:
-    """Genomic Region"""
+# # TODO move to separate file
+# class Region:
+#     """Genomic Region"""
 
-    def __init__(self, chrom, start, end):
-        self.chrom = chrom
-        self.start = start
-        self.end = end
+#     def __init__(self, chrom, start, end):
+#         self.chrom = chrom
+#         self.start = start
+#         self.end = end
 
-    def __str__(self):
-        return("%s:%d-%d" % (self.chrom, self.start, self.end))
+#     def __str__(self):
+#         return("%s:%d-%d" % (self.chrom, self.start, self.end))
 
-    def __eq__(self, other):
-        """Overrides the default implementation"""
-        if isinstance(other, Region):
-            return self.chrom == other.chrom and self.start == other.start and self.end == other.end
-        return False
+#     def __eq__(self, other):
+#         """Overrides the default implementation"""
+#         if isinstance(other, Region):
+#             return self.chrom == other.chrom and self.start == other.start and self.end == other.end
+#         return False
 
-    def overlaps(self, other, min_bp = 1):
-        #assert(type(other) == Region), "overlaps analysis must take Region as input but got %s" % type(other)
-        return(other.chrom == self.chrom and Region.overlap([self.start, self.end], [other.start, other.end]) > min_bp)
+#     def overlaps(self, other, min_bp = 1):
+#         #assert(type(other) == Region), "overlaps analysis must take Region as input but got %s" % type(other)
+#         return(other.chrom == self.chrom and Region.overlap([self.start, self.end], [other.start, other.end]) > min_bp)
 
-    @staticmethod
-    def overlap(interval1, interval2):
-        """
-        Computes overlap between two intervals
-        """
-        if interval2[0] <= interval1[0] <= interval2[1]:
-            start = interval1[0]
-        elif interval1[0] <= interval2[0] <= interval1[1]:
-            start = interval2[0]
-        else:
-            return 0
+#     @staticmethod
+#     def overlap(interval1, interval2):
+#         """
+#         Computes overlap between two intervals
+#         """
+#         if interval2[0] <= interval1[0] <= interval2[1]:
+#             start = interval1[0]
+#         elif interval1[0] <= interval2[0] <= interval1[1]:
+#             start = interval2[0]
+#         else:
+#             return 0
 
-        if interval2[0] <= interval1[1] <= interval2[1]:
-            end = interval1[1]
-        elif interval1[0] <= interval2[1] <= interval1[1]:
-            end = interval2[1]
-        else:
-            return 0
+#         if interval2[0] <= interval1[1] <= interval2[1]:
+#             end = interval1[1]
+#         elif interval1[0] <= interval2[1] <= interval1[1]:
+#             end = interval2[1]
+#         else:
+#             return 0
 
-        return(end - start)
+#         return(end - start)
 
-    def greaterThan(self, other):
-        assert(type(other) == Region), "overlaps analysis must take Region as input but got %s" % type(other)
-        return(self.chrom > other.chrom or ( self.chrom == other.chrom and self.start > other.end ))
+#     def greaterThan(self, other):
+#         assert(type(other) == Region), "overlaps analysis must take Region as input but got %s" % type(other)
+#         return(self.chrom > other.chrom or ( self.chrom == other.chrom and self.start > other.end ))
 
 
 ################### FUNCTIONS ########################
@@ -121,33 +123,33 @@ def get_y_indices_for_cell(matrix, cellmap, cell):
     return np.copy(matrix[cellmap[cell],:])
 
 
-def get_y_indices_for_assay(matrix, assaymap, assay):
+def get_y_indices_for_target(matrix, targetmap, target):
     """
     Gets indices for a assay.
 
     :param matrix: cell type by assay matrix with locations
     label space.
-    :param cellmap: map of celltype to iloc row in matrix
-    :param cell: str cell name
+    :param targetmap: map of target to iloc row in matrix
+    :param target: str target
 
     :return locations of indices for the cell name specified
     """
-    return np.copy(matrix[:,assaymap[assay]])
+    return np.copy(matrix[:,targetmap[target]])
 
-def get_missing_indices_for_cell(matrix, cellmap, cell):
-    """
-    Gets indices of missing factors for a given cell type.
+# def get_missing_indices_for_cell(matrix, cellmap, cell):
+#     """
+#     Gets indices of missing factors for a given cell type.
 
-    :param matrix: cell type by assay matrix with locations
-    label space.
-    :param cellmap: map of celltype to iloc row in matrix
-    :param cell: str cell name
+#     :param matrix: cell type by assay matrix with locations
+#     label space.
+#     :param cellmap: map of celltype to iloc row in matrix
+#     :param cell: str cell name
 
-    :return indices where this cell has no data (==-1)
-    """
+#     :return indices where this cell has no data (==-1)
+#     """
 
-    indices = get_y_indices_for_cell(matrix, cellmap, cell)
-    return np.where(indices == -1)[0]
+#     indices = get_y_indices_for_cell(matrix, cellmap, cell)
+#     return np.where(indices == -1)[0]
 
 
 ################## LOADING DATA ######################
@@ -198,33 +200,33 @@ def download_and_unzip(url, dst):
             # delete old zip to free space
             os.remove(dst)
 
-def load_epitome_data(data_dir=None):
-    """
-    Loads data processed using data/download_encode.py. This will load three sparse matrix files
-    (.npz). One for train, valid (chr7) and test (chr 8 and 9). If data is not available,
-    downloads Epitome data from S3.
+# def load_epitome_data(data_dir=None):
+#     """
+#     Loads data processed using data/download_encode.py. This will load three sparse matrix files
+#     (.npz). One for train, valid (chr7) and test (chr 8 and 9). If data is not available,
+#     downloads Epitome data from S3.
 
 
-    Args:
-        :param data_dir: Directory containing train.npz, valid.npz, test.npz,
-        all.pos.bed.gz file and feature_name files saved by data/download_encode.py script.
-        Defaults to data in module.
+#     Args:
+#         :param data_dir: Directory containing train.npz, valid.npz, test.npz,
+#         all.pos.bed.gz file and feature_name files saved by data/download_encode.py script.
+#         Defaults to data in module.
 
-    :returns: train_data, valid_data, and test_data
-        3 numpy ndarrays for train, valid and test
-    """
+#     :returns: train_data, valid_data, and test_data
+#         3 numpy ndarrays for train, valid and test
+#     """
 
-    if not data_dir:
-        data_dir = GET_DATA_PATH()
-        download_and_unzip(S3_DATA_PATH, GET_EPITOME_USER_PATH())
+#     if not data_dir:
+#         data_dir = GET_DATA_PATH()
+#         download_and_unzip(S3_DATA_PATH, GET_EPITOME_USER_PATH())
 
-    # make sure all required files exist
-    required_paths = [os.path.join(data_dir, x) for x in REQUIRED_FILES]
-    assert(np.all([os.path.exists(x) for x in required_paths]))
-    npz_files = list(filter(lambda x: x.endswith(".npz"), required_paths))
+#     # make sure all required files exist
+#     required_paths = [os.path.join(data_dir, x) for x in REQUIRED_FILES]
+#     assert(np.all([os.path.exists(x) for x in required_paths]))
+#     npz_files = list(filter(lambda x: x.endswith(".npz"), required_paths))
 
-    sparse_matrices = [scipy.sparse.load_npz(x).toarray() for x in npz_files]
-    return {Dataset.TRAIN: sparse_matrices[0], Dataset.VALID: sparse_matrices[1], Dataset.TEST: sparse_matrices[2]}
+#     sparse_matrices = [scipy.sparse.load_npz(x).toarray() for x in npz_files]
+#     return {Dataset.TRAIN: sparse_matrices[0], Dataset.VALID: sparse_matrices[1], Dataset.TEST: sparse_matrices[2]}
 
 ################### Parsing Deepsea Files ########################
 
@@ -250,33 +252,33 @@ def load_bed_regions(bedfile):
     return list(map(lambda x: fromString(x), liPositions))
 
 
-def list_assays(feature_name_file = None):
+# def list_assays(feature_name_file = None):
 
-    ''' Parses a feature name file from DeepSea. File can be found in repo at ../data/feature_name.
-    Returns at matrix of cell type/assays which exist for a subset of cell types.
+#     ''' Parses a feature name file from DeepSea. File can be found in repo at ../data/feature_name.
+#     Returns at matrix of cell type/assays which exist for a subset of cell types.
 
-    Args:
-        :param: feature_name_file. Path to file containing cell, ChIP metadata. Defaults to module data feature file.
+#     Args:
+#         :param: feature_name_file. Path to file containing cell, ChIP metadata. Defaults to module data feature file.
 
-    Returns:
-        assays: list of assay names
-    '''
-    if not feature_name_file:
-        feature_name_file = os.path.join(GET_DATA_PATH(), FEATURE_NAME_FILE)
+#     Returns:
+#         assays: list of assay names
+#     '''
+#     if not feature_name_file:
+#         feature_name_file = os.path.join(GET_DATA_PATH(), FEATURE_NAME_FILE)
 
-    with open(feature_name_file) as f:
+#     with open(feature_name_file) as f:
 
-        assays=[]    # dict of {cell: {dict of indexed assays} }
-        for i,l in enumerate(f):
-            if (i == 0):
-                continue
+#         assays=[]    # dict of {cell: {dict of indexed assays} }
+#         for i,l in enumerate(f):
+#             if (i == 0):
+#                 continue
 
-            # for example, split '8988T|DNase|None'
-            _, assay = l.split('\t')[1].split('|')[:2]
-            assays.append(assay)
+#             # for example, split '8988T|DNase|None'
+#             _, assay = l.split('\t')[1].split('|')[:2]
+#             assays.append(assay)
 
-    # return unique list
-    return list(set(assays))
+#     # return unique list
+#     return list(set(assays))
 
 
 
@@ -304,7 +306,7 @@ def get_assays_from_feature_file(feature_name_file = None,
     '''
 
     if not feature_name_file:
-        feature_name_file = os.path.join(GET_DATA_PATH(), FEATURE_NAME_FILE)
+        feature_name_file = os.path.join(GET_DATA_PATH(), "feature_name")
 
     # check argument validity
     if (min_assays_per_cell < 2):
@@ -361,8 +363,6 @@ def get_assays_from_feature_file(feature_name_file = None,
                 else:
                     indexed_assays[cell][assay] = i-1
 
-
-
     # finally filter out cell types with < min_assays_per_cell and have data for similarity_assays
     indexed_assays = {k: v for k, v in indexed_assays.items() if np.all([s in v.keys() for s in similarity_assays]) and len(v) >= min_assays_per_cell}
 
@@ -410,68 +410,68 @@ def get_assays_from_feature_file(feature_name_file = None,
     return matrix, cellmap, assaymap
 
 
-def saveToyData(toy_path):
-        '''
-        Creates a toy dataset for test from original dataset.
+# def saveToyData(toy_path):
+#         '''
+#         Creates a toy dataset for test from original dataset.
 
-        Copies over feature_name, then generates synthetic bed file and numpy matrices
-        for 22 chrs
+#         Copies over feature_name, then generates synthetic bed file and numpy matrices
+#         for 22 chrs
 
-        Args:
-            :param toy_path: path to save toy dataset to.
-        '''
+#         Args:
+#             :param toy_path: path to save toy dataset to.
+#         '''
 
-        if not os.path.exists(toy_path):
-            os.makedirs(toy_path)
+#         if not os.path.exists(toy_path):
+#             os.makedirs(toy_path)
 
-        # 1. copy feature_name file
-        new_feature_path = os.path.join(toy_path, FEATURE_NAME_FILE)
-        shutil.copyfile(os.path.join(data_dir, FEATURE_NAME_FILE), new_feature_path)
+#         # 1. copy feature_name file
+#         new_feature_path = os.path.join(toy_path, FEATURE_NAME_FILE)
+#         shutil.copyfile(os.path.join(data_dir, FEATURE_NAME_FILE), new_feature_path)
 
-        # 2. generate 100 records for each chromosome and save to gzip compressed bed file
-        regions = []
+#         # 2. generate 100 records for each chromosome and save to gzip compressed bed file
+#         regions = []
 
-        PER_CHR_RECORDS=100
-        chrs = range(1,22)
+#         PER_CHR_RECORDS=100
+#         chrs = range(1,22)
 
-        for i in chrs:
-            chrom = 'chr' + str(i)
-            for j in range(1,PER_CHR_RECORDS+1):
-                regions.append(Region(chrom, j * 200, j * 200 + 200))
+#         for i in chrs:
+#             chrom = 'chr' + str(i)
+#             for j in range(1,PER_CHR_RECORDS+1):
+#                 regions.append(Region(chrom, j * 200, j * 200 + 200))
 
-        # convert region to byte string
-        bytes_str = '\n'.join(list(map(lambda i: '%s\t%i\t%i' % (i.chrom, i.start, i.end), regions))).encode('utf-8')
+#         # convert region to byte string
+#         bytes_str = '\n'.join(list(map(lambda i: '%s\t%i\t%i' % (i.chrom, i.start, i.end), regions))).encode('utf-8')
 
-        # save regions as gzip bed file
-        with gzip.open(os.path.join(toy_path,  POSITIONS_FILE), 'wb') as f:
-            f.write(bytes_str)
-
-
-        # 3. generate random small toy matrices and save
-        valid_shape = PER_CHR_RECORDS
-        test_shape = PER_CHR_RECORDS * 2
-        train_shape = PER_CHR_RECORDS * len(chrs) - valid_shape - test_shape
-
-        np.random.seed(1)
-
-        fcount = len(open(new_feature_path).readlines())
-
-        train_data = np.random.randint(2, size=(fcount, train_shape))
-        valid_data = np.random.randint(2, size=(fcount, valid_shape))
-        test_data = np.random.randint(2, size=(fcount, test_shape))
-
-        # save npz files
-        train_output_np = os.path.join(toy_path, "train.npz")
-        valid_output_np = os.path.join(toy_path, "valid.npz")
-        test_output_np = os.path.join(toy_path, "test.npz")
-
-        scipy.sparse.save_npz(train_output_np, scipy.sparse.csc_matrix(train_data,dtype=np.int8))
-        scipy.sparse.save_npz(valid_output_np, scipy.sparse.csc_matrix(valid_data, dtype=np.int8))
-        scipy.sparse.save_npz(test_output_np, scipy.sparse.csc_matrix(test_data, dtype=np.int8))
+#         # save regions as gzip bed file
+#         with gzip.open(os.path.join(toy_path,  POSITIONS_FILE), 'wb') as f:
+#             f.write(bytes_str)
 
 
-        # 4. make sure all required files exist
-        assert np.all([os.path.exists(os.path.join(toy_path,i)) for i in REQUIRED_FILES])
+#         # 3. generate random small toy matrices and save
+#         valid_shape = PER_CHR_RECORDS
+#         test_shape = PER_CHR_RECORDS * 2
+#         train_shape = PER_CHR_RECORDS * len(chrs) - valid_shape - test_shape
+
+#         np.random.seed(1)
+
+#         fcount = len(open(new_feature_path).readlines())
+
+#         train_data = np.random.randint(2, size=(fcount, train_shape))
+#         valid_data = np.random.randint(2, size=(fcount, valid_shape))
+#         test_data = np.random.randint(2, size=(fcount, test_shape))
+
+#         # save npz files
+#         train_output_np = os.path.join(toy_path, "train.npz")
+#         valid_output_np = os.path.join(toy_path, "valid.npz")
+#         test_output_np = os.path.join(toy_path, "test.npz")
+
+#         scipy.sparse.save_npz(train_output_np, scipy.sparse.csc_matrix(train_data,dtype=np.int8))
+#         scipy.sparse.save_npz(valid_output_np, scipy.sparse.csc_matrix(valid_data, dtype=np.int8))
+#         scipy.sparse.save_npz(test_output_np, scipy.sparse.csc_matrix(test_data, dtype=np.int8))
+
+
+#         # 4. make sure all required files exist
+#         assert np.all([os.path.exists(os.path.join(toy_path,i)) for i in REQUIRED_FILES])
 
 
 ################### Parsing data from bed file ########################
@@ -513,25 +513,25 @@ def bed2Pyranges(bed_file):
 
 
 
-def bedtools_intersect(file_triple):
+def pyranges_intersect(triple):
     """
     Runs intersection between 2 bed files and returns a vector of 0/1s
     indicating absense or presense of overlap.
 
     Args:
-        :param file_triple: triple of (bed_file_1, bed_file_2, boolean).
-            bed_file_1: bed file to run intersection against.
-            bed_file_2: bed file to check for overlaps with bed_file_1.
+        :param triple: triple of (pr1, pr2, boolean).
+            pr1: pyranges object to run intersection against.
+            pr2: pyranges object to check for overlaps with pr1.
             boolean: boolean determines wheather to return
-            original peaks from bed_file_1.
+            original peaks from pr1.
 
     Returns:
-        tuple of (bed_file_1 peaks, vector of 0/1s) whose length is len(bed_file_1).
-        1s in vector indicate overlap of bed_file_1 and bed_file_2).
+        tuple of (pr1 peaks, vector of 0/1s) whose length is len(pr1).
+        1s in vector indicate overlap of pr1 and pr2).
 
     """
-    bed1 = bed2Pyranges(file_triple[0])
-    bed2 = bed2Pyranges(file_triple[1])
+    bed1 = triple[0]
+    bed2 = triple[1]
 
     res = bed1.join(bed2, how='left')
     overlap_vector = np.zeros(len(bed1),dtype=bool)
@@ -541,26 +541,25 @@ def bedtools_intersect(file_triple):
     if not res_df.empty: # throws error if empty because no columns
         overlap_vector[res_df[res_df['Start_b'] != -1]['idx']] = 1
 
-    if (file_triple[2]):
+    if (triple[2]):
         # for some reason chaining takes a lot longer, so we run ops separately.
         t1 = bed1.df.sort_values(by='idx')[['Chromosome','Start','End']]
-        t2 = t1.values
-        t3 = t2.tolist()
-        return (list(map(lambda x: Region(x[0],x[1],x[2]), t3)), overlap_vector)
+        t1.reset_index(inplace=True)
+        return (t1, overlap_vector)
     else:
         return (None, overlap_vector)
 
-def bedFile2Vector(bed_file, allpos_bed_file):
+def pyranges2Vector(pr1, pr2):
     """
-    This function takes in a bed file of peaks and converts it to a vector or 0/1s that can be
+    This function takes in a pyranges of peaks and converts it to a vector or 0/1s that can be
     used as input into an Epitome model. Each 0/1 represents a region in the train/test/validation set from DeepSEA.
 
     Most likely, the bed file will be the output of the IDR function, which detects peaks based on the
     reproducibility of multiple samples.
 
     Args:
-        :param bed_file: bed file containing peaks
-        :param allpos_bed_file: bed file containing all positions in the dataset
+        :param pr1: pyranges object containing peaks (should have idx column specifying original index)
+        :param pr2: pyranges object containing all positions in the dataset (should have idx column specifying original index)
 
     Returns:
         :return: tuple (numpy_train_array, (bed_peaks, numpy_bed_array).
@@ -569,9 +568,9 @@ def bedFile2Vector(bed_file, allpos_bed_file):
         numpy_bed_array: boolean numpy array indicating presence or absense of each bed_peak region in the training dataset.
     """
 
-    bed_files = [(allpos_bed_file, bed_file, False), (bed_file, allpos_bed_file, True)]
+    prs = [(pr2, pr1, False), (pr1, pr2, True)]
     pool = multiprocessing.Pool(processes=2)
-    results = pool.map(bedtools_intersect, bed_files)
+    results = pool.map(pyranges_intersect, prs)
 
     pool.close()
     pool.join()
@@ -632,90 +631,90 @@ def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights =
 
 
 ##################### Functions for parsing allpos.bed file ################
-def range_for_contigs(all_regions_file):
-    """
-    Traverses through feature_name_file to get contig ranges.
+# def range_for_contigs(all_regions_file):
+#     """
+#     Traverses through feature_name_file to get contig ranges.
 
-    Args:
-        :param all_regions_file: path to bed file of genomic regions. must be gzipped.
+#     Args:
+#         :param all_regions_file: path to bed file of genomic regions. must be gzipped.
 
-    Returns:
-        list of contigs and their start/end position all_regions_file
-    """
-    with gzip.open(all_regions_file,'rt') as f:
+#     Returns:
+#         list of contigs and their start/end position all_regions_file
+#     """
+#     with gzip.open(all_regions_file,'rt') as f:
 
-        contigs = {}
-        this_contig = "placeholder"
-        this_range = [0,0]
-        for num, line in enumerate(f):
-            contig = line.split("\t")[0]
+#         contigs = {}
+#         this_contig = "placeholder"
+#         this_range = [0,0]
+#         for num, line in enumerate(f):
+#             contig = line.split("\t")[0]
 
-            if (this_contig != contig):
-                # update last contig and save information
-                this_range[1] = num
-                contigs[this_contig] = this_range
+#             if (this_contig != contig):
+#                 # update last contig and save information
+#                 this_range[1] = num
+#                 contigs[this_contig] = this_range
 
-                # reset contig to new
-                this_contig = contig
-                this_range = [0,0]
-                this_range[0] = num
-            else:
-                continue
+#                 # reset contig to new
+#                 this_contig = contig
+#                 this_range = [0,0]
+#                 this_range[0] = num
+#             else:
+#                 continue
 
-        # add last contig
-        this_range[1] = num + 1
-        contigs[this_contig] = this_range
+#         # add last contig
+#         this_range[1] = num + 1
+#         contigs[this_contig] = this_range
 
-        del contigs["placeholder"]
+#         del contigs["placeholder"]
 
-        return contigs
+#         return contigs
 
-def calculate_epitome_regions(all_regions_file):
-    """
-    Gets line numbers for train/valid/test boundaries.
-    Assumes that chr7,8,9 are all in a row (only true if sex chrs are removed).
-
-
-    Args:
-        :param all_pos_file: bed file containing a row for each genomic region.
-
-    Returns:
-        triple of train,valid,test regions
-    """
-
-    contig_ranges = range_for_contigs(all_regions_file)
-
-    EPITOME_VALID_REGIONS = contig_ranges["chr7"]
-    # 227512 for test (chr8 and chr9)
-    chr8_start = contig_ranges["chr8"][0]
-    chr9_end = contig_ranges["chr9"][1]
-    EPITOME_TEST_REGIONS  = [chr8_start, chr9_end] # chr 8 and 9
-
-    EPITOME_TRAIN_REGIONS = [[0,EPITOME_VALID_REGIONS[0]],
-                             [EPITOME_TEST_REGIONS[1],contig_ranges["chr21"][1]]]
+# def calculate_epitome_regions(all_regions_file):
+#     """
+#     Gets line numbers for train/valid/test boundaries.
+#     Assumes that chr7,8,9 are all in a row (only true if sex chrs are removed).
 
 
-    return(EPITOME_TRAIN_REGIONS, EPITOME_VALID_REGIONS, EPITOME_TEST_REGIONS)
+#     Args:
+#         :param all_pos_file: bed file containing a row for each genomic region.
+
+#     Returns:
+#         triple of train,valid,test regions
+#     """
+
+#     contig_ranges = range_for_contigs(all_regions_file)
+
+#     EPITOME_VALID_REGIONS = contig_ranges["chr7"]
+#     # 227512 for test (chr8 and chr9)
+#     chr8_start = contig_ranges["chr8"][0]
+#     chr9_end = contig_ranges["chr9"][1]
+#     EPITOME_TEST_REGIONS  = [chr8_start, chr9_end] # chr 8 and 9
+
+#     EPITOME_TRAIN_REGIONS = [[0,EPITOME_VALID_REGIONS[0]],
+#                              [EPITOME_TEST_REGIONS[1],contig_ranges["chr21"][1]]]
 
 
-def concatenate_all_data(data, region_file):
-    """
-    Puts data back in correct order to be indexed by the allpos file.
+#     return(EPITOME_TRAIN_REGIONS, EPITOME_VALID_REGIONS, EPITOME_TEST_REGIONS)
 
-    Args:
-        :param data: data dictionary of train, valid and test
-        :param regions_file: bed file containg regions of train, valid and test.
 
-    Returns:
-        np matrix of concatenated data
-    """
+# def concatenate_all_data(data, region_file):
+#     """
+#     Puts data back in correct order to be indexed by the allpos file.
 
-    # Get chr6 cutoff. takes about 3s.
-    chr6_end = range_for_contigs(region_file)['chr6'][1]
-    return np.concatenate([data[Dataset.TRAIN][:,0:chr6_end], # chr 1-6, range_for_contigs is 1 based
-                           data[Dataset.VALID], # chr7
-                           data[Dataset.TEST], # chr 8 and 9
-                           data[Dataset.TRAIN][:,chr6_end:]],axis=1) # all the rest of the chromosomes
+#     Args:
+#         :param data: data dictionary of train, valid and test
+#         :param regions_file: bed file containg regions of train, valid and test.
+
+#     Returns:
+#         np matrix of concatenated data
+#     """
+
+#     # Get chr6 cutoff. takes about 3s.
+#     chr6_end = range_for_contigs(region_file)['chr6'][1]
+#     return np.concatenate([data[Dataset.TRAIN][:,0:chr6_end], # chr 1-6, range_for_contigs is 1 based
+#                            data[Dataset.VALID], # chr7
+#                            data[Dataset.TEST], # chr 8 and 9
+#                            data[Dataset.TRAIN][:,chr6_end:]],axis=1) # all the rest of the chromosomes
 
 
 def get_radius_indices(radii, r, i, max_index):
@@ -753,27 +752,27 @@ def get_radius_indices(radii, r, i, max_index):
 
     return radius_range
 
-def order_by_similarity(matrix, cellmap, assaymap, cell, data, compare_assay = 'DNase'):
-    """
-    Orders list of cellmap names by similarity to comparison cell.
+# def order_by_similarity(matrix, cellmap, assaymap, cell, data, compare_assay = 'DNase'):
+#     """
+#     Orders list of cellmap names by similarity to comparison cell.
 
-    Args:
-        :param numpy matrix specifying location of each assay/cellmap in data
-        :param cellmap: map of cell: index in matrix
-        :param assaymap: map of assay: index in matrix
-        :param cell: name of cell type, should be in cellmap
-        :param data: numpy matrix of data to run comparison. rows index into assay/cell
-        :compare_assay: assay to use to compare cell types. Default = DNase
+#     Args:
+#         :param numpy matrix specifying location of each assay/cellmap in data
+#         :param cellmap: map of cell: index in matrix
+#         :param assaymap: map of assay: index in matrix
+#         :param cell: name of cell type, should be in cellmap
+#         :param data: numpy matrix of data to run comparison. rows index into assay/cell
+#         :compare_assay: assay to use to compare cell types. Default = DNase
 
-    Returns:
-        list of cellline names ordered by DNase similarity to cell (most similar is first)
-    """
+#     Returns:
+#         list of cellline names ordered by DNase similarity to cell (most similar is first)
+#     """
 
-    # data for cell line to compare all other cell lines to
-    compare_arr = data[matrix[cellmap[cell], assaymap[compare_assay]],:]
+#     # data for cell line to compare all other cell lines to
+#     compare_arr = data[matrix[cellmap[cell], assaymap[compare_assay]],:]
 
-    # calculate jaccard score
-    corrs = np.array([jaccard_score(data[matrix[cellmap[c], assaymap[compare_assay]],:], compare_arr) for c in list(cellmap)])
+#     # calculate jaccard score
+#     corrs = np.array([jaccard_score(data[matrix[cellmap[c], assaymap[compare_assay]],:], compare_arr) for c in list(cellmap)])
 
-    tmp = sorted(zip(corrs, list(cellmap)), key = lambda x: x[0], reverse=True)
-    return list(map(lambda x: x[1],tmp))
+#     tmp = sorted(zip(corrs, list(cellmap)), key = lambda x: x[0], reverse=True)
+#     return list(map(lambda x: x[1],tmp))

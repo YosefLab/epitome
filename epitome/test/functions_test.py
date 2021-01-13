@@ -1,6 +1,7 @@
 from epitome.test import EpitomeTestCase
 from epitome.test import *
 from epitome.functions import *
+from epitome.dataset import *
 import pytest
 import warnings
 
@@ -15,40 +16,15 @@ class FunctionsTest(EpitomeTestCase):
         datapath = GET_DATA_PATH()
         assert(datapath == os.environ["EPITOME_DATA_PATH"])
 
-    def test_get_assays_single_assay(self):
-        TF = ['DNase', 'JUND']
+    def test_pyranges_intersect(self):
 
-        matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = TF,
-                min_cells_per_assay = 2,
-                min_assays_per_cell = 2)
+        dataset = EpitomeDataset()
 
-        assays = list(assaymap)
-        # Make sure only JUND and DNase are in list of assays
-        assert(len(assays)) == 2
+        pr1 = dataset.regions.head(10)
+        pr2 = dataset.regions
+        res = pyranges2Vector(pr1, pr2)
 
-        for t in TF:
-            assert(t in assays)
-
-    def test_get_assays_without_DNase(self):
-        TF = 'JUND'
-
-        matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = TF,
-                similarity_assays = ['H3K27ac'],
-                min_cells_per_assay = 2,
-                min_assays_per_cell = 1)
-
-        assays = list(assaymap)
-        # Make sure only JUND and is in list of assays
-        assert(len(assays)) == 2
-        assert(TF in assays)
-        assert('H3K27ac' in assays)
-
-    def test_assays_SPI1_PAX5(self):
-        # https://github.com/YosefLab/epitome/issues/22
-        with warnings.catch_warnings(record=True) as warning_list:
-            warnings.simplefilter('always')
-            assays = list_assays()
-            matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = assays)
-
-            assert(len(warning_list) == 2) # one for SPI1 and PAX5
-            assert(all(item.category == UserWarning for item in warning_list))
+        assert np.all(res[0][:10] == True)
+        assert np.all(res[0][10:] == False)
+        assert res[1][1].shape[0] == len(pr1)
+        assert len(res[1][0]) == len(pr1)
