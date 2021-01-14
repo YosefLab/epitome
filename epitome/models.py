@@ -569,16 +569,16 @@ class VariationalPeakModel():
 
         print("columns for matrices are chr, start, end, %s" % ", ".join(list(self.assaymap)[1:]))
 
-    def score_matrix(self, accessilibility_peak_matrix, regions_peak_file, regions_indices = None, all_data = None):
+    def score_matrix(self, accessilibility_peak_matrix, regions, all_data = None):
         """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
         rows are regions from regions_peak_file. rows in accessilibility_peak_matrix should matching
 
         Args:
             :param accessilibility_peak_matrix: numpy matrix of (samples by genomic regions)
-            :param regions_peak_file: narrowpeak or bed file containing regions to score. Number of regions Should
-              match rows in accessilibility_peak_matrix
-            :param regions_indices: indices corresponding to rows in accessilibility_peak_matrix/regions in regions_peak_file
-                that will be scored. If None, will score all of the regions.
+            :param regions_peak_file: either narrowpeak or bed file containing regions to score, OR a pyranges object
+                with columns [Chomosome, Start, End, idx]. Index matches each genomic region to a row in 
+                accessilibility_peak_matrix. In both cases, number of regions Should
+                match rows in accessilibility_peak_matrix
             :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
 
         Returns:
@@ -587,16 +587,15 @@ class VariationalPeakModel():
 
         if all_data is None:
             all_data = concatenate_all_data(self.data, self.regionsFile)
+        
+        if type(regions) == str:
+            regions_bed = bed2Pyranges(regions)
+        else:
+            regions_bed = regions
 
-        regions_bed = bed2Pyranges(regions_peak_file)
         all_data_regions = bed2Pyranges(self.regionsFile)
 
         joined = regions_bed.join(all_data_regions, how='left',suffix='_alldata').df
-
-        # select regions with data to score
-        if regions_indices is not None:
-            joined = joined[joined['idx'].isin(regions_indices)]
-            joined = joined.reset_index()
 
         idx = joined['idx_alldata']
 
