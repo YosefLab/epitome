@@ -148,7 +148,6 @@ files = pd.read_csv(metadata_file, sep="\t")
 assembly_column = files.filter(regex=re.compile('Assembly', re.IGNORECASE)).columns[0]
 
 filtered_files = files[(files[assembly_column] == assembly) &
-#                   (files["Biosample genetic modifications targets"].isnull()) & Need for ENCODE3
                   (files["Audit ERROR"].isnull()) &
                   (files["Biosample treatments"].isnull())]
 
@@ -183,7 +182,7 @@ if min_chip_per_cell > 0:
     filtered_dnase = filtered_dnase[(filtered_dnase["Biosample term name"].isin(filtered_chip["Biosample term name"]))]
 
 # get ATAC-seq data
-filtered_atac = filtered_files[(filtered_files["Assay"].str.contains("ATAC-seq")) &  (filtered_files["Output type"] == "IDR thresholded peaks")] 
+filtered_atac = filtered_files[(filtered_files["Assay"].str.contains("ATAC-seq")) &  (filtered_files["Output type"] == "IDR thresholded peaks")]
 filtered_atac = filtered_atac.drop_duplicates(subset=["Biosample term name"] , keep='last')
 filtered_atac = filtered_atac[(filtered_atac["Biosample term name"].isin(filtered_dnase["Biosample term name"]))]
 
