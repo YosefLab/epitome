@@ -591,9 +591,7 @@ class VariationalPeakModel():
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set,
         # and their indices are stored in missing_idx for future use
         similarity_peak_prs = [bed2Pyranges(f) for f in similarity_peak_files]
-        peak_vectors = [pyranges2Vector(f, self.dataset.regions)[0] for f in similarity_peak_prs]
-        peak_matrix = np.vstack(peak_vectors)
-        del peak_vectors
+        peak_matrix = np.vstack([pyranges2Vector(f, self.dataset.regions)[0] for f in similarity_peak_prs])
 
         peak_vector_regions, all_peaks_regions = pyranges2Vector(bed2Pyranges(regions_peak_file), self.dataset.regions)
 
