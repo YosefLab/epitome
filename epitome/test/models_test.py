@@ -87,12 +87,21 @@ class ModelsTest(EpitomeTestCase):
 		model = VLP(dataset)
 		assert(len(model.dataset.targetmap) == 5)
 
+	def test_model_similarity_assays(self):
+		# should train a model without using DNAse
+		eligible_targets = ['CTCF', 'RAD21', 'CEBPB']
+
+		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['H3K27ac'])
+
+		model = VLP(dataset)
+		assert(len(model.dataset.targetmap) == 4)
+
 	def test_eval_vector(self):
 
 		# should be able to evaluate on a dnase vector
 		similarity_matrix = np.ones(self.model.dataset.get_data(Dataset.TRAIN).shape[1])[None,:]
 		results = self.model.eval_vector(similarity_matrix, np.arange(0,20))
-		# assert(results[0].shape[0] == 20)
+		assert(results[0].shape[0] == 20)
 
 	def test_save_model(self):
 		# should save and re-load model

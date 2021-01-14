@@ -13,6 +13,8 @@ This dataset contains the following files:
 
 - **feature_name**: ChIP-seq and DNase-seq assays corresponding to rows in the data matrices.
 
+The downloaded data can be accessed under :code:`~/.epitome/`.
+
 
 Generating data for Epitome
 ---------------------------

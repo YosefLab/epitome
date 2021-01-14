@@ -60,12 +60,15 @@ def load_data(data,
     if type(similarity_targets) is not list:
         similarity_targets = [similarity_targets]
 
+    if len(similarity_targets) == 0 and len(radii) > 0:
+        raise ValueError("Cannot set radii to anything if there are no similarity assays, but found len(radii)=%i" % len(radii))
+
     # get indices for features. rows are cells and cols are targets
     cellmap_idx = [cellmap[c] for c in list(eval_cell_types)]
     feature_cell_indices = matrix[cellmap_idx,:]
 
     # indices to be deleted. used for similarity comparison, not predictions.
-    delete_indices = np.array([targetmap[s] for s in similarity_targets])
+    delete_indices = np.array([targetmap[s] for s in similarity_targets]).astype(int)
 
     # make sure no similarity comparison data is missing for all cell types
     assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \

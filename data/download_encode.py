@@ -177,10 +177,6 @@ filtered_chip = filtered_chip.groupby("Experiment target").filter(lambda x: len(
 # only want cells that have more than min_chip_per_cell epigenetic marks
 filtered_chip = filtered_chip.groupby("Biosample term name").filter(lambda x: len(x) >= min_chip_per_cell)
 
-# get ATAC-seq data
-filtered_atac = filtered_files[(((filtered_files["Output type"] == "replicated peaks") | (filtered_files["Output type"] == "optimal IDR thresholded peaks"))
-                             & (filtered_files["Assay"].str.contains("ChIP-seq")) )] # or conservative idr thresholded peaks?
-
 # only filter if use requires at least one chip experiment for a cell type.
 if min_chip_per_cell > 0:
     # only want DNase that has chip.
@@ -327,7 +323,7 @@ if os.path.exists(matrix_path_all):
 
 else:
     h5_file = h5py.File(matrix_path_all, "w")
-    matrix = h5_file.create_dataset("data", (len(filtered_files), nregions), dtype='i',
+    matrix = h5_file.create_dataset("data", (len(filtered_files), nregions), dtype='i8',
         compression='gzip', compression_opts=9)
 
 
@@ -430,7 +426,7 @@ def save_epitome_numpy_data(download_dir, output_path):
         logger.info("saving new matrix")
         # resave h5 file without 0 columns
         h5_file = h5py.File(matrix_path, "w")
-        matrix = h5_file.create_dataset("data", nonzero_data.shape, dtype='i',
+        matrix = h5_file.create_dataset("data", nonzero_data.shape, dtype='i8',
             compression='gzip', compression_opts=9)
         matrix[:,:] = nonzero_data
 

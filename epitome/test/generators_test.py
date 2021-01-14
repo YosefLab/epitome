@@ -45,6 +45,35 @@ class GeneratorsTest(EpitomeTestCase):
 		print(li_results[pos_position][-2])
 		assert(np.all(li_results[pos_position][-2] == 1))
 
+
+	def test_generator_no_similarity(self):
+		# generate consistent data
+		data = np.zeros(self.train_shape)
+		data[::2] = 1 # every 2nd row is 1s
+
+		eligible_cells = ['K562','HepG2','H1','HeLa-S3']
+		eligible_targets = ['CTCF']
+		matrix, cellmap, targetmap = self.getFeatureData(eligible_targets, eligible_cells, similarity_targets = [])
+		assert(len(list(targetmap)) == 1) # should not have added DNase
+
+		label_cell_types = ['K562']
+		eligible_cells.remove(label_cell_types[0])
+
+		results = load_data(data,
+			['K562'],
+			eligible_cells,
+			matrix,
+			targetmap,
+			cellmap,
+			radii = [],
+			mode = Dataset.VALID,
+			similarity_targets = [],
+			indices=np.arange(0,2), return_feature_names = True)()
+
+		li_results = list(results)
+		labels = li_results[0][1][0]
+		assert(labels[0] =='HepG2_CTCF')
+
 	def test_generator_only_H3(self):
 
 		# generate consistent data

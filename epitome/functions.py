@@ -300,9 +300,9 @@ def get_assays_from_feature_file(feature_name_file = None,
         :param min_assays_per_cell: number of assays a cell type must have to be considered. Includes DNase.
 
     Returns:
-        matrix: cell type by assay matrix
-        cellmap: index of cells
-        assaymap: index of assays
+        matrix: cell type by assay matrix, contains indices at which there is epitome data for cell type `i` and transcription factor `j` \n
+        cellmap: dictionary containing indices of cells (rows of the returned matrix) \n
+        assaymap: dictionary containing indices of assays (columns of the returned matrix)
     '''
 
     if not feature_name_file:
@@ -500,7 +500,6 @@ def bed2Pyranges(bed_file):
         with open(bed_file) as f:
             header = csv.Sniffer().has_header(f.read(1024))
 
-
     if not header:
         p = pd.read_csv(bed_file, sep='\t',header=None)[[0,1,2]]
     else:
@@ -695,7 +694,6 @@ def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights =
 
 
 #     return(EPITOME_TRAIN_REGIONS, EPITOME_VALID_REGIONS, EPITOME_TEST_REGIONS)
-
 
 # def concatenate_all_data(data, region_file):
 #     """
