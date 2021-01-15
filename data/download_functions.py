@@ -14,16 +14,17 @@ import sys
 import h5py
 import subprocess
 from epitome.dataset import *
+import urllib
 
 ##################################### LOG INFO ################################
-def set_logger(name):
+def set_logger():
     """
     Set up logger
 
     Args:
         :param name: logger name
     """
-    logger = logging.getLogger(name)
+    logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
 
     # create console handler with a low log level
@@ -37,6 +38,8 @@ def set_logger(name):
 
     return logger
 
+logger = set_logger()
+
 def count_lines(file_path):
     """
     Counts number of lines in a file
@@ -47,7 +50,7 @@ def count_lines(file_path):
     :return int: number of lines in file
     """
     count = 0
-    for line in open(file_path).xreadlines(  ): count += 1
+    for line in open(file_path).readlines(  ): count += 1
     return count
 
 def lojs_overlap(feature_files, compare_pr):
@@ -88,7 +91,42 @@ def lojs_overlap(feature_files, compare_pr):
     arr[arr>0] = 1
     return arr
 
-def processGroups(n, tmp_download_path):
+def download_url(f, bed_download_path, tries = 0):
+    '''
+    Downloads a file from filtered_files dataframe row
+
+    Returns path to downloaded file
+    '''
+
+    path = f["Peak-call (BED) (q < 1E-05)"]
+    id_ = f["Experimental ID"]
+    file_basename = os.path.basename(path)
+
+    if tries == 2:
+        raise Exception("File accession %s from URL %s failed for download 3 times. Exiting 1..." % (id_, path))
+
+    outname_bed = os.path.join(bed_download_path, file_basename)
+
+    # make sure file does not exist before downloading
+    try:
+        if not os.path.exists(outname_bed):
+
+            logger.warning("Trying to download %s for the %ith time..." % (path, tries))
+
+            if sys.version_info[0] < 3:
+                # python 2
+                urllib.urlretrieve(path, filename=outname_bed)
+            else:
+                # python 3
+                urllib.request.urlretrieve(path, filename=outname_bed)
+
+    except:
+        # increment tries by one and re-try download
+        return download_url(f, tries + 1)
+
+    return outname_bed
+
+def processGroups(n, tmp_download_path,bed_download_path):
     '''
     Process set of enumerated dataframe rows, a group of (antigen, cell types)
 
@@ -116,9 +154,9 @@ def processGroups(n, tmp_download_path):
         logger.info("Skipping %s, %s, already written to %s" % (target,cell, tmp_file_save))
         arr = np.load(tmp_file_save + ".npz", allow_pickle=True)['data'].astype('i1') # int8
     else:
-        logger.info("writing into matrix for %s, %s" % (target_cell))
+        logger.info("writing into matrix for %s, %s" % (target,cell))
 
-        downloaded_files = [download_url(sample) for i, sample in samples.iterrows()]
+        downloaded_files = [download_url(sample,bed_download_path) for i, sample in samples.iterrows()]
 
         # filter out bed files with less than 200 peaks
         downloaded_files = list(filter(lambda x: count_lines(x) > 200, downloaded_files))

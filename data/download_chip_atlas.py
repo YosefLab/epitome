@@ -26,7 +26,7 @@ import glob
 from download_functions import *
 
 ##################################### LOG INFO ################################
-logger = set_logger('DOWNLOAD ChIP-Atlas')
+logger = set_logger()
 
 # number of threads
 threads = mp.cpu_count()
@@ -62,9 +62,18 @@ min_cells_per_chip = parser.parse_args().min_cells_per_chip
 all_regions_file_unfiltered = parser.parse_args().regions_file
 bgzip = parser.parse_args().bgzip
 
+# append assembly to all output paths so you don't overwrite previous runs
+meta_download_path = download_path
+download_path = os.path.join(download_path, assembly)
+output_path = os.path.join(output_path, assembly)
+
 # where to temporarily store np files
 tmp_download_path = os.path.join(download_path, "tmp_np")
 bed_download_path = os.path.join(download_path, "downloads")
+
+# TODO RM
+assert len(glob.glob(os.path.join(tmp_download_path,'*')))>1000
+assert len(glob.glob(os.path.join(bed_download_path,'*.bed')))>1000
 
 # make paths if they do not exist
 if not os.path.exists(download_path):
@@ -88,7 +97,7 @@ else:
 all_regions_file_unfiltered_gz = all_regions_file_unfiltered + ".gz"
 
 # download metadata if it does not exist
-metadata_file = os.path.join(download_path, os.path.basename(metadata_path).replace('.zip','.csv'))
+metadata_file = os.path.join(meta_download_path, os.path.basename(metadata_path).replace('.zip','.csv'))
 
 if not os.path.exists(metadata_file):
     zipped = os.path.join(download_path, os.path.basename(metadata_path))
@@ -165,45 +174,6 @@ logger.info("Processing %i antigens and %i experiments" % (len(set(replicate_gro
 replicate_groups = replicate_groups.groupby(['Antigen', 'Cell type'])
 
 ##############################################################################################
-##################################### download all files #####################################
-##############################################################################################
-
-def download_url(f, tries = 0):
-    '''
-    Downloads a file from filtered_files dataframe row
-
-    Returns path to downloaded file
-    '''
-
-    path = f["Peak-call (BED) (q < 1E-05)"]
-    id_ = f["Experimental ID"]
-    file_basename = os.path.basename(path)
-
-    if tries == 2:
-        raise Exception("File accession %s from URL %s failed for download 3 times. Exiting 1..." % (id_, path))
-
-    outname_bed = os.path.join(bed_download_path, file_basename)
-
-    # make sure file does not exist before downloading
-    try:
-        if not os.path.exists(outname_bed):
-
-            logger.warning("Trying to download %s for the %ith time..." % (path, tries))
-
-            if sys.version_info[0] < 3:
-                # python 2
-                urllib.urlretrieve(path, filename=outname_bed)
-            else:
-                # python 3
-                urllib.request.urlretrieve(path, filename=outname_bed)
-
-    except:
-        # increment tries by one and re-try download
-        return download_url(f, tries + 1)
-
-    return outname_bed
-
-##############################################################################################
 ############################# window chromsizes into 200bp ###################################
 ##############################################################################################
 nregions = window_genome(all_regions_file_unfiltered,
@@ -215,6 +185,7 @@ nregions = window_genome(all_regions_file_unfiltered,
 #############################################################################################
 ################################ save all files to matrix ###################################
 #############################################################################################
+# make a separate file for parallel downloading 
 
 # create matrix or load in existing
 matrix_path_all = os.path.join(download_path, 'train_total.h5') # all sites
@@ -225,7 +196,7 @@ pyDF = pr.read_bed(all_regions_file_unfiltered)
 tmp = list(replicate_groups)
 with Pool(threads) as p:
     # list of tuples for each file, where tuple is (i, filename, featurename)
-    results = p.starmap(processGroups, list(zip( tmp, [tmp_download_path]* len(tmp))))
+    results = p.starmap(processGroups, list(zip( tmp, [tmp_download_path]* len(tmp), [bed_download_path]* len(tmp) )))
 
 results = [i for i in results if i is not None]
 
