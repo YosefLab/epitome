@@ -18,7 +18,6 @@ import scipy.sparse
 from epitome.functions import *
 import sys
 import shutil
-import gzip
 import logging
 import traceback
 import glob
@@ -46,7 +45,6 @@ parser.add_argument('--min_chip_per_cell', help='Minimum ChIP-seq experiments fo
 parser.add_argument('--min_cells_per_chip', help='Minimum cells a given ChIP-seq target must be observed in.', type=int, default=3)
 
 parser.add_argument('--regions_file', help='File to read regions from', type=str, default=None)
-parser.add_argument('--bgzip', help='Path to bgzip executable', type=str, default='bgzip')
 
 
 download_path = parser.parse_args().download_path
@@ -56,7 +54,6 @@ metadata_path = parser.parse_args().metadata_url
 min_chip_per_cell = parser.parse_args().min_chip_per_cell
 min_cells_per_chip = parser.parse_args().min_cells_per_chip
 all_regions_file_unfiltered = parser.parse_args().regions_file
-bgzip = parser.parse_args().bgzip
 
 # append assembly to all output paths so you don't overwrite previous runs
 meta_download_path = download_path
@@ -89,8 +86,6 @@ else:
     if os.path.normpath(os.path.dirf(all_regions_file_unfiltered)) != os.path.normpath(output_path):
         shutil.copyfile(all_regions_file_unfiltered, os.path.join(output_path, "all.pos_unfiltered.bed"))
 
-# gzipped tmp file
-all_regions_file_unfiltered_gz = all_regions_file_unfiltered + ".gz"
 
 # download metadata if it does not exist
 metadata_file = os.path.join(meta_download_path, os.path.basename(metadata_path).replace('.zip','.csv'))
@@ -173,10 +168,8 @@ if not os.path.exists(metadata_file):
 ############################# window chromsizes into 200bp ###################################
 ##############################################################################################
 window_genome(all_regions_file_unfiltered,
-                all_regions_file_unfiltered_gz,
                 download_path,
-                assembly,
-                bgzip = bgzip)
+                assembly)
 
 #############################################################################################
 ################################ save all files to matrix ###################################
@@ -189,7 +182,17 @@ parallel_cmd = [script, download_path, assembly,
                         '--min_cells_per_chip', min_cells_per_chip,
                         '--all_regions_file',all_regions_file_unfiltered
                         ]
-subprocess.check_call(parallel_cmd)
+
+process = subprocess.Popen(parallel_cmd, stdout=subprocess.PIPE)
+stdout = process.communicate()[0]
+
+while True:
+    output = process.stdout.readline()
+    if output == '' and process.poll() is not None:
+        break
+    if output:
+        print output.strip()
+rc = process.poll()
 
 # create matrix or load in existing
 matrix_path_all = os.path.join(download_path, 'train_total.h5') # all sites
@@ -246,7 +249,6 @@ save_epitome_dataset(download_path,
 
 # rm tmp unfiltered bed files
 os.remove(all_regions_file_unfiltered)
-os.remove(all_regions_file_unfiltered_gz)
 os.remove(all_regions_file_unfiltered + ".tmp")
 # remove h5 file with all zeros
 os.remove(matrix_path_all) # remove h5 file with all zeros

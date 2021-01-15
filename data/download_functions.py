@@ -344,19 +344,15 @@ def save_epitome_dataset(download_dir,
 
 
 def window_genome(all_regions_file_unfiltered,
-                all_regions_file_unfiltered_gz,
                 download_path,
-                assembly,
-                bgzip = 'bgzip'):
+                assembly):
     """
-    Window genome into 200bp regions. Remove nonautosomal chromosomes and gzip.
+    Window genome into 200bp regions. Remove nonautosomal chromosomes.
 
     Args:
         :param all_regions_file_unfiltered: ungzipped bed file to save regions to
-        :param all_regions_file_unfiltered_gz: gzipped regions
         :param download_path: where to download files to
         :param assembly: genome assembly
-        :param bgzip: path to bgzip executable. defaults to 'bgzip'
 
     Returns:
         number of regions in all_regions_file_unfiltered bed file
@@ -384,12 +380,4 @@ def window_genome(all_regions_file_unfiltered,
         # filter out chrM, _random and _cl chrs
         stdout = open(all_regions_file_unfiltered,"wb")
         subprocess.check_call(["grep", "-vE", "_|chrM|chrM|chrX|chrY", tmpFile], stdout = stdout)
-        stdout.close()
-
-    # zip and index pos file
-    # used in inference for faster file reading.
-    if not os.path.exists(all_regions_file_unfiltered_gz):
-
-        stdout = open(all_regions_file_unfiltered_gz,"wb")
-        subprocess.call([bgzip, "--index", "-c", all_regions_file_unfiltered],stdout=stdout)
         stdout.close()
