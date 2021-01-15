@@ -35,16 +35,17 @@ parser.add_argument('--min_cells_per_chip', help='Minimum cells a given ChIP-seq
 parser.add_argument('--all_regions_file', help='File to read regions from', type=str, default=None)
 
 download_path = parser.parse_args().download_path
-all_regions_file_unfiltered = parser.parse_args().all_regions_file_unfiltered
+all_regions_file_unfiltered = parser.parse_args().all_regions_file
 metadata_path = parser.parse_args().metadata_path
 min_chip_per_cell = parser.parse_args().min_chip_per_cell
 min_cells_per_chip = parser.parse_args().min_cells_per_chip
+assembly = parser.parse_args().assembly
 
 # where to temporarily store np files
 tmp_download_path = os.path.join(download_path, "tmp_np")
 bed_download_path = os.path.join(download_path, "downloads")
 
-replicate_groups = get_metadata_groups(metadata_path)
+replicate_groups = get_metadata_groups(metadata_path,assembly, min_chip_per_cell = min_chip_per_cell ,min_cells_per_chip = min_chip_per_cell)
 
 # create matrix or load in existing
 matrix_path_all = os.path.join(download_path, 'train_total.h5') # all sites

@@ -12,9 +12,6 @@ import subprocess
 import math
 import argparse
 import h5py
-import re
-from itertools import islice
-import scipy.sparse
 from epitome.functions import *
 import sys
 import shutil
@@ -81,10 +78,11 @@ if not os.path.exists(bed_download_path):
 if all_regions_file_unfiltered is None:
     # path to save regions to. must be defined before loj_overlap function
     all_regions_file_unfiltered = os.path.join(output_path,"all.pos_unfiltered.bed")
-else:
+#else:
     # copy all regions file to output path if not already there
-    if os.path.normpath(os.path.dirf(all_regions_file_unfiltered)) != os.path.normpath(output_path):
-        shutil.copyfile(all_regions_file_unfiltered, os.path.join(output_path, "all.pos_unfiltered.bed"))
+    # TODO: remove this? not needed?
+    #if os.path.normpath(os.path.dirf(all_regions_file_unfiltered)) != os.path.normpath(output_path):
+    #    shutil.copyfile(all_regions_file_unfiltered, os.path.join(output_path, "all.pos_unfiltered.bed"))
 
 
 # download metadata if it does not exist
@@ -177,23 +175,19 @@ window_genome(all_regions_file_unfiltered,
 # call parallel download code
 this_dir = os.path.dirname(os.path.abspath(__file__))
 script = os.path.join(this_dir, 'parallel_download.py')
-parallel_cmd = [script, download_path, assembly,
-                        '--metadata_path', metadata_path,
-                        '--min_chip_per_cell',min_chip_per_cell,
-                        '--min_cells_per_chip', min_cells_per_chip,
+parallel_cmd = [sys.executable, script, download_path, assembly,
+                        '--metadata_path', metadata_file,
+                        '--min_chip_per_cell',str(min_chip_per_cell),
+                        '--min_cells_per_chip', str(min_cells_per_chip),
                         '--all_regions_file',all_regions_file_unfiltered
                         ]
-
-process = subprocess.Popen(parallel_cmd, stdout=subprocess.PIPE)
+logger.info(' '.join(parallel_cmd))
+process = subprocess.Popen(parallel_cmd)
 stdout = process.communicate()[0]
-
-while True:
-    output = process.stdout.readline()
-    if output == '' and process.poll() is not None:
-        break
-    if output:
-        print output.strip()
-rc = process.poll()
+logger.info(stdout)
+rc = process.returncode
+if rc != 0:
+    raise Exception("%s failed with error %i" % (' '.join(parallel_cmd), rc))
 
 # create matrix or load in existing
 matrix_path_all = os.path.join(download_path, 'train_total.h5') # all sites

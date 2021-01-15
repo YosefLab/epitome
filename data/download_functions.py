@@ -15,6 +15,7 @@ import h5py
 import subprocess
 from epitome.dataset import *
 import urllib
+import re
 
 ##################################### LOG INFO ################################
 def set_logger():
@@ -217,7 +218,7 @@ def get_ChIPAtlas_metadata(metadata_file, assembly, min_chip_per_cell = 1 ,min_c
     # assembly column is either 'Assembly' or 'File assembly'
     assembly_column = files.filter(regex=re.compile('Assembly', re.IGNORECASE)).columns[0]
 
-    assert assembly in files[assembly_column], "Assembly %s is not in column %s" % (assembly, assembly_column)
+    assert assembly in list(set(files[assembly_column])), "Assembly %s is not in column %s" % (assembly, ','.join(list(set(files[assembly_column]))))
 
     antigen_classes = ['DNase-seq','Histone','TFs and others']
 
@@ -261,7 +262,9 @@ def get_ChIPAtlas_metadata(metadata_file, assembly, min_chip_per_cell = 1 ,min_c
     TF_categories.replace({'DNase': 'DNase-Seq'}, inplace=True)
 
     # sanity check that all antigens are accounted for in TF_categories
-    assert len([i for i in set(replicate_groups['Antigen']) if i not in list(TF_categories['Name'])]) == 0
+    missing = [i for i in set(replicate_groups['Antigen']) if i not in list(TF_categories['Name'])]
+    logger.info("Missing antigens ChIP_target_types.csv: %s" % ",".join(missing))
+    assert len(missing) == 0, "Missing some antigens"
 
     # Filter out ChIP-seq not in TFs, accessibility, histones, etc. We lose about 1100 rows
     filtered_names = TF_categories[TF_categories['Group'].isin(['TF','chromatin accessibility','chromatin modifier','histone',
