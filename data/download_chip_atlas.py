@@ -175,6 +175,7 @@ window_genome(all_regions_file_unfiltered,
 ################################ save all files to matrix ###################################
 #############################################################################################
 # call parallel download code
+this_dir = os.path.dirname(os.path.abspath(__file__))
 script = os.path.join(this_dir, 'parallel_download.py')
 parallel_cmd = [script, download_path, assembly,
                         '--metadata_path', metadata_path,
