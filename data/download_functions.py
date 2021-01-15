@@ -170,6 +170,110 @@ def processGroups(n, tmp_download_path,bed_download_path):
     else:
         return (tmp_file_save, cell, target)
 
+def get_metadata_groups(metadata_file, assembly, min_chip_per_cell = 1 ,min_cells_per_chip = 3):
+    """
+    Gets metadata from file and groups by cell/target. Can filter either ChIP-Atlas or ENCODE file.
+
+    Args:
+        :param metadata_file: local path to unzipped csv file
+        :param assembly: genome assembly
+        :param min_chip_per_cell: min chip experiments required for a cell type to be considered. Default = 1
+        :param min_cells_per_chip: min cells required for each chip experiment. Default = 3
+
+    :return pd: pandas grouped dataframe of experiments, grouped by (cell type, ChIP-seq target)
+
+    """
+
+    if "chip_atlas" in metadata_file:
+        return get_ChIPAtlas_metadata(metadata_file,
+            assembly,
+            min_chip_per_cell = min_chip_per_cell,
+            min_cells_per_chip = min_cells_per_chip)
+    elif "metadata.tsv" in metadata_file:
+        raise Exception("write code for Encode")
+    else:
+        raise Exception("Unknown metadata file")
+
+def get_ChIPAtlas_metadata(metadata_file, assembly, min_chip_per_cell = 1 ,min_cells_per_chip = 3):
+    """
+    Gets ChIP-Atlas metadata for a specific assembly. Metadata file can be
+    downloaded from ftp://ftp.biosciencedbc.jp/archive/chip-atlas/LATEST/chip_atlas_experiment_list.zip.
+
+    Args:
+        :param metadata_file: local path to unzipped csv file
+        :param assembly: genome assembly
+        :param min_chip_per_cell: min chip experiments required for a cell type to be considered. Default = 1
+        :param min_cells_per_chip: min cells required for each chip experiment. Default = 3
+
+    :return pd: pandas grouped dataframe of experiments, grouped by (cell type, ChIP-seq target)
+    """
+
+    files = pd.read_csv(metadata_file, engine='python') # needed for decoding
+
+    ##############################################################################################
+    ######### get all files that are peak files for histone marks or TF ChiP-seq #################
+    ##############################################################################################
+
+    # assembly column is either 'Assembly' or 'File assembly'
+    assembly_column = files.filter(regex=re.compile('Assembly', re.IGNORECASE)).columns[0]
+
+    assert assembly in files[assembly_column], "Assembly %s is not in column %s" % (assembly, assembly_column)
+
+    antigen_classes = ['DNase-seq','Histone','TFs and others']
+
+    assembly_files = files[(files[assembly_column] == assembly) &
+                                       (files['Antigen class'].isin(antigen_classes))]
+
+    # Get unique by Antigen class, Antigen, Cell type class, Cell type, Cell type description.
+    rm_dups = assembly_files[['Antigen class', 'Antigen', 'Cell type class', 'Cell type', 'Cell type description']].drop_duplicates()
+    filtered_files = assembly_files.loc[rm_dups.index]
+
+    # get unique dnase experiments
+    filtered_dnase = filtered_files[((filtered_files["Antigen class"] == "DNase-seq"))]
+
+    chip_files = filtered_files[(((filtered_files["Antigen class"] == 'Histone') | (filtered_files["Antigen class"] == 'TFs and others')))]
+
+    # only want ChIP-seq from cell lines that have DNase
+    filtered_chip = chip_files[(chip_files["Cell type"].isin(filtered_dnase["Cell type"]))]
+
+    # only want assays that are shared between more than 3 cells
+    filtered_chip = filtered_chip.groupby("Antigen").filter(lambda x: len(x) >= min_cells_per_chip)
+
+    # only want cells that have more than min_chip_per_cell epigenetic marks
+    filtered_chip = filtered_chip.groupby("Cell type").filter(lambda x: len(x) >= min_chip_per_cell)
+
+    # only filter if use requires at least one chip experiment for a cell type.
+    if min_chip_per_cell > 0:
+        # only want DNase that has chip.
+        filtered_dnase = filtered_dnase[(filtered_dnase["Cell type"].isin(filtered_chip["Cell type"]))]
+
+    # combine dataframes
+    filtered_files = filtered_dnase.append(filtered_chip)
+    filtered_files.reset_index(inplace = True)
+
+    # group by antigen/celltype combinations. Iterate over these
+    replicate_groups = assembly_files[(assembly_files['Antigen'].isin(filtered_files['Antigen'])) &
+                                      (assembly_files['Cell type'].isin(filtered_files['Cell type']))]
+
+    # read in annotated Antigens
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    TF_categories = pd.read_csv(os.path.join(this_dir,'ChIP_target_types.csv'),sep=',')
+    TF_categories.replace({'DNase': 'DNase-Seq'}, inplace=True)
+
+    # sanity check that all antigens are accounted for in TF_categories
+    assert len([i for i in set(replicate_groups['Antigen']) if i not in list(TF_categories['Name'])]) == 0
+
+    # Filter out ChIP-seq not in TFs, accessibility, histones, etc. We lose about 1100 rows
+    filtered_names = TF_categories[TF_categories['Group'].isin(['TF','chromatin accessibility','chromatin modifier','histone',
+     'histone modification'])]
+
+    replicate_groups = replicate_groups[replicate_groups['Antigen'].isin(filtered_names['Name'])]
+    replicate_groups.reset_index(inplace = True)
+
+    logger.info("Processing %i antigens and %i experiments" % (len(set(replicate_groups['Antigen'])), len(replicate_groups)))
+
+    # group experiments together
+    return replicate_groups.groupby(['Antigen', 'Cell type'])
 
 
 def save_epitome_dataset(download_dir,
@@ -289,9 +393,3 @@ def window_genome(all_regions_file_unfiltered,
         stdout = open(all_regions_file_unfiltered_gz,"wb")
         subprocess.call([bgzip, "--index", "-c", all_regions_file_unfiltered],stdout=stdout)
         stdout.close()
-
-
-    # get number of genomic regions in all.pos.bed file
-    nregions = count_lines(all_regions_file_unfiltered)
-    logger.info("Completed windowing genome with %i regions" % nregions)
-    return nregions

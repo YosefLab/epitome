@@ -1,6 +1,6 @@
 # Code for running file downloads in parallel
 
-# imports 
+# imports
 from multiprocessing import Pool
 import multiprocessing as mp
 import argparse
@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 import pyranges as pr
 
-logger = set_logger(__name__)
+logger = set_logger()
 
 # number of threads
 threads = mp.cpu_count()
@@ -26,14 +26,13 @@ parser = argparse.ArgumentParser(description='Downloads bed files in parallel an
 parser.add_argument('download_path', help='Temporary path to download temporary files to.', type=str)
 parser.add_argument('assembly', help='assembly to filter files in metadata.tsv file by.', choices=['ce10', 'ce11', 'dm3', 'dm6', 'hg19', 'hg38', 'mm10', 'mm9', 'rn6', 'sacCer3'], type=str)
 
-parser.add_argument('--metadata_path',type=str, 
+parser.add_argument('--metadata_path',type=str,
                     help='Path to ChIP-Atlas metadata csv file.')
 
 parser.add_argument('--min_chip_per_cell', help='Minimum ChIP-seq experiments for each cell type.', type=int, default=1)
 parser.add_argument('--min_cells_per_chip', help='Minimum cells a given ChIP-seq target must be observed in.', type=int, default=3)
 
 parser.add_argument('--all_regions_file', help='File to read regions from', type=str, default=None)
-parser.add_argument('--bgzip', help='Path to bgzip executable', type=str, default='bgzip')
 
 download_path = parser.parse_args().download_path
 all_regions_file_unfiltered = parser.parse_args().all_regions_file_unfiltered
@@ -41,17 +40,21 @@ metadata_path = parser.parse_args().metadata_path
 min_chip_per_cell = parser.parse_args().min_chip_per_cell
 min_cells_per_chip = parser.parse_args().min_cells_per_chip
 
-# TODO: need to define:
-# repliate Groups
-# nregions
-# tmp_download_path, bed_download_path
+# where to temporarily store np files
+tmp_download_path = os.path.join(download_path, "tmp_np")
+bed_download_path = os.path.join(download_path, "downloads")
 
+replicate_groups = get_metadata_groups(metadata_path)
 
 # create matrix or load in existing
 matrix_path_all = os.path.join(download_path, 'train_total.h5') # all sites
 
 # collect all regions and merge by chromsome, count number of 200bp bins
 pyDF = pr.read_bed(all_regions_file_unfiltered)
+
+# get number of genomic regions in all.pos.bed file
+nregions = len(all_regions_file_unfiltered)
+logger.info("Counted %i total unfiltered regions" % nregions)
 
 def processGroups(n):
     '''
@@ -131,4 +134,13 @@ else:
 
     h5_file.close()
 
+# save row_df to be loaded into maain
+row_df.to_csv(os.path.join(download_path, "row_df.csv"))
+
 logger.info("Done saving sparse data")
+
+
+# can read matrix back in using:
+# > import h5py
+# > tmp = h5py.File(os.path.join(download, 'train.h5'), "r")
+# > tmp['data']

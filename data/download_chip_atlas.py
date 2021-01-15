@@ -28,10 +28,6 @@ from download_functions import *
 ##################################### LOG INFO ################################
 logger = set_logger()
 
-# number of threads
-threads = mp.cpu_count()
-logger.info("%i threads available for processing" % threads)
-
 ##############################################################################################
 ############################################# PARSE USER ARGUMENTS ###########################
 ##############################################################################################
@@ -108,75 +104,75 @@ if not os.path.exists(metadata_file):
     # gunzip file
     subprocess.check_call(["unzip", zipped])
 
-files = pd.read_csv(metadata_file, engine='python') # needed for decoding
-
-##############################################################################################
-######### get all files that are peak files for histone marks or TF ChiP-seq #################
-##############################################################################################
-
-# assembly column is either 'Assembly' or 'File assembly'
-assembly_column = files.filter(regex=re.compile('Assembly', re.IGNORECASE)).columns[0]
-
-antigen_classes = ['DNase-seq','Histone','TFs and others']
-
-assembly_files = files[(files[assembly_column] == assembly) &
-                                   (files['Antigen class'].isin(antigen_classes))]
-
-# Get unique by Antigen class, Antigen, Cell type class, Cell type, Cell type description.
-rm_dups = assembly_files[['Antigen class', 'Antigen', 'Cell type class', 'Cell type', 'Cell type description']].drop_duplicates()
-filtered_files = assembly_files.loc[rm_dups.index]
-
-# get unique dnase experiments
-filtered_dnase = filtered_files[((filtered_files["Antigen class"] == "DNase-seq"))]
-
-chip_files = filtered_files[(((filtered_files["Antigen class"] == 'Histone') | (filtered_files["Antigen class"] == 'TFs and others')))]
-
-# only want ChIP-seq from cell lines that have DNase
-filtered_chip = chip_files[(chip_files["Cell type"].isin(filtered_dnase["Cell type"]))]
-
-# only want assays that are shared between more than 3 cells
-filtered_chip = filtered_chip.groupby("Antigen").filter(lambda x: len(x) >= min_cells_per_chip)
-
-# only want cells that have more than min_chip_per_cell epigenetic marks
-filtered_chip = filtered_chip.groupby("Cell type").filter(lambda x: len(x) >= min_chip_per_cell)
-
-# only filter if use requires at least one chip experiment for a cell type.
-if min_chip_per_cell > 0:
-    # only want DNase that has chip.
-    filtered_dnase = filtered_dnase[(filtered_dnase["Cell type"].isin(filtered_chip["Cell type"]))]
-
-# combine dataframes
-filtered_files = filtered_dnase.append(filtered_chip)
-filtered_files.reset_index(inplace = True)
-
-# group by antigen/celltype combinations. Iterate over these
-replicate_groups = assembly_files[(assembly_files['Antigen'].isin(filtered_files['Antigen'])) &
-                                  (assembly_files['Cell type'].isin(filtered_files['Cell type']))]
-
-# read in annotated Antigens
-this_dir = os.path.dirname(os.path.abspath(__file__))
-TF_categories = pd.read_csv(os.path.join(this_dir,'ChIP_target_types.csv'),sep=',')
-TF_categories.replace({'DNase': 'DNase-Seq'}, inplace=True)
-
-# sanity check that all antigens are accounted for in TF_categories
-assert len([i for i in set(replicate_groups['Antigen']) if i not in list(TF_categories['Name'])]) == 0
-
-# Filter out ChIP-seq not in TFs, accessibility, histones, etc. We lose about 1100 rows
-filtered_names = TF_categories[TF_categories['Group'].isin(['TF','chromatin accessibility','chromatin modifier','histone',
- 'histone modification'])]
-
-replicate_groups = replicate_groups[replicate_groups['Antigen'].isin(filtered_names['Name'])]
-replicate_groups.reset_index(inplace = True)
-
-logger.info("Processing %i antigens and %i experiments" % (len(set(replicate_groups['Antigen'])), len(replicate_groups)))
-
-# group experiments together
-replicate_groups = replicate_groups.groupby(['Antigen', 'Cell type'])
+# files = pd.read_csv(metadata_file, engine='python') # needed for decoding
+#
+# ##############################################################################################
+# ######### get all files that are peak files for histone marks or TF ChiP-seq #################
+# ##############################################################################################
+#
+# # assembly column is either 'Assembly' or 'File assembly'
+# assembly_column = files.filter(regex=re.compile('Assembly', re.IGNORECASE)).columns[0]
+#
+# antigen_classes = ['DNase-seq','Histone','TFs and others']
+#
+# assembly_files = files[(files[assembly_column] == assembly) &
+#                                    (files['Antigen class'].isin(antigen_classes))]
+#
+# # Get unique by Antigen class, Antigen, Cell type class, Cell type, Cell type description.
+# rm_dups = assembly_files[['Antigen class', 'Antigen', 'Cell type class', 'Cell type', 'Cell type description']].drop_duplicates()
+# filtered_files = assembly_files.loc[rm_dups.index]
+#
+# # get unique dnase experiments
+# filtered_dnase = filtered_files[((filtered_files["Antigen class"] == "DNase-seq"))]
+#
+# chip_files = filtered_files[(((filtered_files["Antigen class"] == 'Histone') | (filtered_files["Antigen class"] == 'TFs and others')))]
+#
+# # only want ChIP-seq from cell lines that have DNase
+# filtered_chip = chip_files[(chip_files["Cell type"].isin(filtered_dnase["Cell type"]))]
+#
+# # only want assays that are shared between more than 3 cells
+# filtered_chip = filtered_chip.groupby("Antigen").filter(lambda x: len(x) >= min_cells_per_chip)
+#
+# # only want cells that have more than min_chip_per_cell epigenetic marks
+# filtered_chip = filtered_chip.groupby("Cell type").filter(lambda x: len(x) >= min_chip_per_cell)
+#
+# # only filter if use requires at least one chip experiment for a cell type.
+# if min_chip_per_cell > 0:
+#     # only want DNase that has chip.
+#     filtered_dnase = filtered_dnase[(filtered_dnase["Cell type"].isin(filtered_chip["Cell type"]))]
+#
+# # combine dataframes
+# filtered_files = filtered_dnase.append(filtered_chip)
+# filtered_files.reset_index(inplace = True)
+#
+# # group by antigen/celltype combinations. Iterate over these
+# replicate_groups = assembly_files[(assembly_files['Antigen'].isin(filtered_files['Antigen'])) &
+#                                   (assembly_files['Cell type'].isin(filtered_files['Cell type']))]
+#
+# # read in annotated Antigens
+# this_dir = os.path.dirname(os.path.abspath(__file__))
+# TF_categories = pd.read_csv(os.path.join(this_dir,'ChIP_target_types.csv'),sep=',')
+# TF_categories.replace({'DNase': 'DNase-Seq'}, inplace=True)
+#
+# # sanity check that all antigens are accounted for in TF_categories
+# assert len([i for i in set(replicate_groups['Antigen']) if i not in list(TF_categories['Name'])]) == 0
+#
+# # Filter out ChIP-seq not in TFs, accessibility, histones, etc. We lose about 1100 rows
+# filtered_names = TF_categories[TF_categories['Group'].isin(['TF','chromatin accessibility','chromatin modifier','histone',
+#  'histone modification'])]
+#
+# replicate_groups = replicate_groups[replicate_groups['Antigen'].isin(filtered_names['Name'])]
+# replicate_groups.reset_index(inplace = True)
+#
+# logger.info("Processing %i antigens and %i experiments" % (len(set(replicate_groups['Antigen'])), len(replicate_groups)))
+#
+# # group experiments together
+# replicate_groups = replicate_groups.groupby(['Antigen', 'Cell type'])
 
 ##############################################################################################
 ############################# window chromsizes into 200bp ###################################
 ##############################################################################################
-nregions = window_genome(all_regions_file_unfiltered,
+window_genome(all_regions_file_unfiltered,
                 all_regions_file_unfiltered_gz,
                 download_path,
                 assembly,
@@ -185,66 +181,68 @@ nregions = window_genome(all_regions_file_unfiltered,
 #############################################################################################
 ################################ save all files to matrix ###################################
 #############################################################################################
-# make a separate file for parallel downloading 
+# call parallel download code
+script = os.path.join(this_dir, 'parallel_download.py')
+parallel_cmd = [script, download_path, assembly,
+                        '--metadata_path', metadata_path,
+                        '--min_chip_per_cell',min_chip_per_cell,
+                        '--min_cells_per_chip', min_cells_per_chip,
+                        '--all_regions_file',all_regions_file_unfiltered
+                        ]
+subprocess.check_call(parallel_cmd)
 
 # create matrix or load in existing
 matrix_path_all = os.path.join(download_path, 'train_total.h5') # all sites
 
-# collect all regions and merge by chromsome, count number of 200bp bins
-pyDF = pr.read_bed(all_regions_file_unfiltered)
-
-tmp = list(replicate_groups)
-with Pool(threads) as p:
-    # list of tuples for each file, where tuple is (i, filename, featurename)
-    results = p.starmap(processGroups, list(zip( tmp, [tmp_download_path]* len(tmp), [bed_download_path]* len(tmp) )))
-
-results = [i for i in results if i is not None]
-
-# load in cells and targets into a dataframe
-cellTypes = [i[1] for i in results]
-targets = [i[2] for i in results]
-row_df = pd.DataFrame({'cellType': cellTypes,'target': targets})
-
-### save matrix
-if os.path.exists(matrix_path_all):
-
-    # make sure the dataset hasnt changed if you are appending
-    assert(matrix[0,:].shape[0] == nregions)
-    assert(matrix[:,0].shape[0] == len(results))
-
-else:
-    h5_file = h5py.File(matrix_path_all, "w")
-    matrix = h5_file.create_dataset("data", (len(results), nregions), dtype='i1', # int8
-        compression='gzip', compression_opts=9)
-
-    for i, (f, cell, target) in enumerate(results):
-
-        matrix[i,:] = np.load(f + ".npz", allow_pickle=True)['data'].astype('i1') # int8
-
-        if i % 100 == 0:
-            logger.info("Writing %i, feature %s..." % (i, feature_name))
-
-    h5_file.close()
+# written in parralel_download.py
+row_df = pd.read_csv(os.path.join(download_path, "row_df.csv"))
+#
+# # collect all regions and merge by chromsome, count number of 200bp bins
+# pyDF = pr.read_bed(all_regions_file_unfiltered)
+#
+# tmp = list(replicate_groups)
+# with Pool(threads) as p:
+#     # list of tuples for each file, where tuple is (i, filename, featurename)
+#     results = p.starmap(processGroups, list(zip( tmp, [tmp_download_path]* len(tmp), [bed_download_path]* len(tmp) )))
+#
+# results = [i for i in results if i is not None]
+#
+# # load in cells and targets into a dataframe
+# cellTypes = [i[1] for i in results]
+# targets = [i[2] for i in results]
+# row_df = pd.DataFrame({'cellType': cellTypes,'target': targets})
+#
+# ### save matrix
+# if os.path.exists(matrix_path_all):
+#
+#     # make sure the dataset hasnt changed if you are appending
+#     assert(matrix[0,:].shape[0] == nregions)
+#     assert(matrix[:,0].shape[0] == len(results))
+#
+# else:
+#     h5_file = h5py.File(matrix_path_all, "w")
+#     matrix = h5_file.create_dataset("data", (len(results), nregions), dtype='i1', # int8
+#         compression='gzip', compression_opts=9)
+#
+#     for i, (f, cell, target) in enumerate(results):
+#
+#         matrix[i,:] = np.load(f + ".npz", allow_pickle=True)['data'].astype('i1') # int8
+#
+#         if i % 100 == 0:
+#             logger.info("Writing %i, feature %s..." % (i, feature_name))
+#
+#     h5_file.close()
 
 logger.info("Done saving sparse data")
-
-# can read matrix back in using:
-# > import h5py
-# > tmp = h5py.File(os.path.join(download, 'train.h5'), "r")
-# > tmp['data']
-
 
 # finally, save outputs
 save_epitome_dataset(download_path,
                         output_path,
                         matrix_path_all,
-                        all_regions_file_unfiltered_gz,
-                        matrix_path,
                         all_regions_file_unfiltered,
                         row_df,
                         assembly,
                         "CHIPATLAS")
-
 
 # rm tmp unfiltered bed files
 os.remove(all_regions_file_unfiltered)
