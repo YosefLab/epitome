@@ -155,8 +155,8 @@ def load_data(data,
                     # Copy target_index_no_similarities and turn into mask of 0/1 for whether data for this cell type for
                     # a given label is available.
                     target_mask = np.copy(label_cell_indices_no_similarities)
+                    target_mask[target_mask > -1] = 1
                     target_mask[target_mask == -1] = 0
-                    target_mask[target_mask > 0] = 1
 
                 else:
                     label_count = len(get_y_indices_for_cell(matrix, cellmap, random_cell))-len(similarity_targets)

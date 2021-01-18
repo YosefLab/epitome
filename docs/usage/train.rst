@@ -10,11 +10,7 @@ First, import Epitome:
 
 .. code:: python
 
-	from epitome.constants import *
 	from epitome.models import *
-	from epitome.generators import *
-	from epitome.functions import *
-	from epitome.viz import *
 
 Quick Start
 ^^^^^^^^^^^

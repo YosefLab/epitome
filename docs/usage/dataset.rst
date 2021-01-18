@@ -1,20 +1,31 @@
 Configuring data
 ================
 
-Epitome pre-processes ChIP-seq peaks and DNase-seq peaks from ENCODE for usage
-in the Epitome models. Pre-processed datasets hg19 are lazily downloaded from `Amazon S3 <../https://epitome-data.s3-us-west-1.amazonaws.com/data.zip>`__ when users run an Epitome model.
+Epitome pre-processes ChIP-seq peaks and DNase-seq peaks from ENCODE and ChIP-Atlas for usage
+in the Epitome models. Pre-processed datasets for hg19 are lazily downloaded from
+`Amazon S3 <https://epitome-data.s3-us-west-1.amazonaws.com/hg19/data.zip>`__
+when users run an Epitome model.
 
 
-This dataset contains the following files:
+Each downloaded dataset contains an h5 file (data.h5). This h5 file contains the following
+keys:
 
-- **train.npz, valid.npz, and test.npz**: compressed numpy data matrices. Valid.npz includes chr7 data, test.npz includes chr8 and chr9, and train.npz includes data from all other chromosomes.
-
-- **all.pos.bed.gz**: gzipped genomic regions matching columns in the numpy data matrices.
-
-- **feature_name**: ChIP-seq and DNase-seq assays corresponding to rows in the data matrices.
-
-The downloaded data can be accessed under :code:`~/.epitome/`.
-
+- data: a numerical matrix where rows indicate different assays and columns indicate genomic locations
+- rows: row information for the data matrix.
+  - rows/celltypes: which cell type corresponds to each row
+  - rows/targets: which ChIP-seq target corresponds to each row. Can also be DNase-seq
+- columns: contains information on the genomic locations that correspond to each
+  - columns/binSize: size of genome regions (default is 200bp)
+  - columns/index/test_chrs: test chromosomes (default is chrs 8/9)
+  - columns/index/valid_chrs: validation chromosomes (default is chr 7)
+  - columns/index/TEST: indices that specify the test set
+  - columns/index/VALID: indices that specify the validation set
+  - columns/index/TRAIN: indices that specify the train set (all autosomal chromosomes, excluding VALID and TEST
+  - columns/start: start of each genomic location for each column
+  - columns/chr: chromosome for each column
+- /meta: metadata for how this dataset was generated
+  - meta/assembly: genome assembly
+  - meta/source: source for data. Either 'ChIP-Atlas' or 'ENCODE'.
 
 Generating data for Epitome
 ---------------------------

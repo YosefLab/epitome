@@ -155,3 +155,19 @@ class ModelsTest(EpitomeTestCase):
 											regions_peak_file.name)
 
 		assert np.all(np.isnan(results[:,0,:]))
+
+	def test_correct_weights(self):
+		# make sure that assays with position 0 in matrix were cut off
+		# For example, TCFL2 in Panc1 has position 0 when loaded. It
+		# was previously being masked in the generator, even though the data was present.
+
+		ds = EpitomeDataset(targets = ['TCF7L2'], cells=['Panc1', 'MCF-7','K562'])
+
+		# make sure you are getting position 0
+		# this is where the bug was
+		assert np.where(ds.matrix == -1)[0].shape[0] == 0
+
+		model = VLP(ds)
+		model.train(1)
+		results = model.test(1000, calculate_metrics = True)
+		assert np.where(results['weights']==0)[0].shape[0] == 0

@@ -19,6 +19,7 @@ Epitome is a computational model that leverages chromatin accessibility data to 
    :caption: Usage and Examples
    :maxdepth: 2
 
+   usage/dataset
    usage/train
    usage/predict
    usage/api
