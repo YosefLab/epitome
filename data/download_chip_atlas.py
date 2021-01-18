@@ -61,10 +61,6 @@ output_path = os.path.join(output_path, assembly)
 tmp_download_path = os.path.join(download_path, "tmp_np")
 bed_download_path = os.path.join(download_path, "downloads")
 
-# TODO RM
-assert len(glob.glob(os.path.join(tmp_download_path,'*')))>1000
-assert len(glob.glob(os.path.join(bed_download_path,'*.bed')))>1000
-
 # make paths if they do not exist
 if not os.path.exists(download_path):
     os.makedirs(download_path)
