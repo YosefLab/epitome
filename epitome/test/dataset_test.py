@@ -172,5 +172,9 @@ class DatasetTest(EpitomeTestCase):
     def test_all_keys(self):
         data = h5py.File(os.path.join(self.dataset.data_dir, EPITOME_H5_FILE), 'r')
         keys = sorted(set(EpitomeDataset.all_keys(data)))
+
+        # bin size should be positive
+        assert data['columns']['binSize'][:][0] > 0
+
         data.close()
         assert np.all([i in REQUIRED_KEYS for i in keys])

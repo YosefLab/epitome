@@ -408,8 +408,8 @@ class EpitomeDataset:
             start = cols.create_dataset("start", (len(regions_df),),
                                         dtype="i",compression="gzip", compression_opts=9)
 
-            binSize = cols.create_dataset("binSize", (1,), dtype="i")
-            binSize[:]=binSize
+            bs = cols.create_dataset("binSize", (1,), dtype="i")
+            bs[:]=binSize
 
             tmp = [c.encode() for c in regions_df['Chromosome'].values]
             chrs[:]=tmp

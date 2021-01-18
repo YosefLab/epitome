@@ -551,14 +551,14 @@ def pyranges_intersect(triple):
 def pyranges2Vector(pr1, pr2):
     """
     This function takes in a pyranges of peaks and converts it to a vector or 0/1s that can be
-    used as input into an Epitome model. Each 0/1 represents a region in the train/test/validation set from DeepSEA.
+    used as input into an Epitome model. Each 0/1 represents a region in pr2.
 
     Most likely, the bed file will be the output of the IDR function, which detects peaks based on the
     reproducibility of multiple samples.
-
+i
     Args:
         :param pr1: pyranges object containing peaks (should have idx column specifying original index)
-        :param pr2: pyranges object containing all positions in the dataset (should have idx column specifying original index)
+        :param pr2: pyranges object containing all genomic positions in the dataset (should have idx column specifying original index)
 
     Returns:
         :return: tuple (numpy_train_array, (bed_peaks, numpy_bed_array).
