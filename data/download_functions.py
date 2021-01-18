@@ -120,7 +120,9 @@ def download_url(f, bed_download_path, tries = 0):
             else:
                 # python 3
                 urllib.request.urlretrieve(path, filename=outname_bed)
-
+    except urllib.error.HTTPError as e:
+        logger.warning("Could not download %s with error %s" % (path,e))
+        return None
     except:
         # increment tries by one and re-try download
         return download_url(f, tries + 1)
@@ -158,6 +160,9 @@ def processGroups(n, tmp_download_path,bed_download_path):
         logger.info("writing into matrix for %s, %s" % (target,cell))
 
         downloaded_files = [download_url(sample,bed_download_path) for i, sample in samples.iterrows()]
+        
+        # filter out failed
+        downloaded_files = list(filter(lambda x: x is not None, downloaded_files))
 
         # filter out bed files with less than 200 peaks
         downloaded_files = list(filter(lambda x: count_lines(x) > 200, downloaded_files))

@@ -54,7 +54,7 @@ matrix_path_all = os.path.join(download_path, 'train_total.h5') # all sites
 pyDF = pr.read_bed(all_regions_file_unfiltered)
 
 # get number of genomic regions in all.pos.bed file
-nregions = len(all_regions_file_unfiltered)
+nregions = len(pyDF)
 logger.info("Counted %i total unfiltered regions" % nregions)
 
 def processGroups(n):
@@ -89,6 +89,8 @@ def processGroups(n):
 
         downloaded_files = [download_url(sample, bed_download_path) for i, sample in samples.iterrows()]
 
+        downloaded_files = list(filter(lambda x: x is not None, downloaded_files))
+    
         # filter out bed files with less than 200 peaks
         downloaded_files = list(filter(lambda x: count_lines(x) > 200, downloaded_files))
 
@@ -116,10 +118,10 @@ row_df = pd.DataFrame({'cellType': cellTypes,'target': targets})
 
 ### save matrix
 if os.path.exists(matrix_path_all):
-    h5_file = h5py.File(matrix_path_all, "w")
+    h5_file = h5py.File(matrix_path_all, "r")['data']
     # make sure the dataset hasnt changed if you are appending
-    assert(h5_file[0,:].shape[0] == nregions)
-    assert(h5_file[:,0].shape[0] == len(results))
+    assert h5_file[0,:].shape[0] == nregions, "%s has wrong ncols %i, should be %i" % (matrix_path_all, h5_file[0,:].shape[0], nregions)
+    assert h5_file[:,0].shape[0] == len(results) , "%s has wrong nrows %i, should be %i" % (matrix_path_all, h5_file[:,0].shape[0], len(results))
 
 else:
     h5_file = h5py.File(matrix_path_all, "w")
@@ -131,9 +133,9 @@ else:
         matrix[i,:] = np.load(f + ".npz", allow_pickle=True)['data'].astype('i1') # int8
 
         if i % 100 == 0:
-            logger.info("Writing %i, feature %s..." % (i, feature_name))
+            logger.info("Writing %i, feature %s,%s..." % (i, cell,target))
 
-    h5_file.close()
+h5_file.close()
 
 # save row_df to be loaded into maain
 row_df.to_csv(os.path.join(download_path, "row_df.csv"))
