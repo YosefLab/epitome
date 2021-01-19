@@ -24,7 +24,7 @@ logger.info("%i threads available for processing" % threads)
 parser = argparse.ArgumentParser(description='Downloads bed files in parallel and processes them to npy files')
 
 parser.add_argument('download_path', help='Temporary path to download temporary files to.', type=str)
-parser.add_argument('assembly', help='assembly to filter files in metadata.tsv file by.', choices=['ce10', 'ce11', 'dm3', 'dm6', 'hg19', 'hg38', 'mm10', 'mm9', 'rn6', 'sacCer3'], type=str)
+parser.add_argument('assembly', help='assembly to filter files in metadata.tsv file by.', choices=['ce10', 'ce11', 'dm3', 'dm6', 'hg19', 'hg38', 'GRCh38', 'mm10', 'mm9', 'rn6', 'sacCer3'], type=str)
 
 parser.add_argument('--metadata_path',type=str,
                     help='Path to ChIP-Atlas metadata csv file.')
@@ -33,6 +33,7 @@ parser.add_argument('--min_chip_per_cell', help='Minimum ChIP-seq experiments fo
 parser.add_argument('--min_cells_per_chip', help='Minimum cells a given ChIP-seq target must be observed in.', type=int, default=3)
 
 parser.add_argument('--all_regions_file', help='File to read regions from', type=str, default=None)
+parser.add_argument('--bigBedToBed', help='Path to bigBedToBed executable, downloaded from http://hgdownload.cse.ucsc.edu/admin/exe/', type=str, default='bigBedToBed')
 
 download_path = parser.parse_args().download_path
 all_regions_file_unfiltered = parser.parse_args().all_regions_file
@@ -40,6 +41,7 @@ metadata_path = parser.parse_args().metadata_path
 min_chip_per_cell = parser.parse_args().min_chip_per_cell
 min_cells_per_chip = parser.parse_args().min_cells_per_chip
 assembly = parser.parse_args().assembly
+bigBedToBed = parser.parse_args().bigBedToBed
 
 # where to temporarily store np files
 tmp_download_path = os.path.join(download_path, "tmp_np")
@@ -96,7 +98,10 @@ def processGroups(n):
     else:
         logger.info("writing into matrix for %s, %s" % (target, cell))
 
-        downloaded_files = [download_url(sample, bed_download_path) for i, sample in samples.iterrows()]
+        if samples.iloc[0]['Source'] == "ENCODE":
+            downloaded_files = [download_ENCODE_url(sample,bed_download_path, bigBedToBed) for i, sample in samples.iterrows()]
+        else:
+            downloaded_files = [download_CHIPAtlas_url(sample,bed_download_path) for i, sample in samples.iterrows()]
 
         downloaded_files = list(filter(lambda x: x is not None, downloaded_files))
 

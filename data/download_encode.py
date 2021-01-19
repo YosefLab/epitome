@@ -121,7 +121,8 @@ parallel_cmd = [sys.executable, script, download_path, assembly,
                         '--metadata_path', metadata_file,
                         '--min_chip_per_cell',str(min_chip_per_cell),
                         '--min_cells_per_chip', str(min_cells_per_chip),
-                        '--all_regions_file',all_regions_file_unfiltered
+                        '--all_regions_file',all_regions_file_unfiltered,
+                        '--bigBedToBed', bigBedToBed
                         ]
 logger.info(' '.join(parallel_cmd))
 process = subprocess.Popen(parallel_cmd)

@@ -39,7 +39,7 @@ def set_logger():
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
     # create formatter and add it to the handlers
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('[%(asctime)s] p%(process)s {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s','%m-%d %H:%M:%S')
     ch.setFormatter(formatter)
     # add the handlers to the logger
     logger.addHandler(ch)
@@ -100,7 +100,7 @@ def lojs_overlap(feature_files, compare_pr):
     return arr
 
 
-def download_ENCODE_url(f, bed_download_path, tries = 0):
+def download_ENCODE_url(f, bed_download_path, bigBedToBed, tries = 0):
 
 
     if tries == 2:
@@ -114,9 +114,11 @@ def download_ENCODE_url(f, bed_download_path, tries = 0):
         ext = "bed.gz"
 
     file_basename = os.path.basename(path).split('.')[0]
-
+    logging.error("bed_download_path",bed_download_path)
+    logging.error("file_basename",file_basename)
+    logging.error("ext", ext)
     outname_bb = os.path.join(bed_download_path, "%s.%s" % (file_basename, ext))
-    outname_bed = os.path.join(bed_download_path, "%s.%s" % (file_basename, bed))
+    outname_bed = os.path.join(bed_download_path, "%s.%s" % (file_basename, 'bed'))
 
     # make sure file does not exist before downloading
     try:
@@ -178,56 +180,6 @@ def download_CHIPAtlas_url(f, bed_download_path, tries = 0):
         return download_CHIPAtlas_url(f, tries + 1)
 
     return outname_bed
-
-def processGroups(n, tmp_download_path,bed_download_path):
-    '''
-    Process set of enumerated dataframe rows, a group of (antigen, cell types)
-
-    Args:
-        :param n: row from a grouped dataframe, ((antigen, celltype), samples)
-        :param tmp_download_path: where npz files should be saved to
-
-    :return tuple: tuple of (tmp_file_save, cell, target)
-
-    '''
-    target, cell = n[0] # tuple of  ((antigen, celltype), samples)
-    samples = n[1]
-
-    id_ = samples.iloc[0][COL_ID] # just use first as ID for filename
-
-    if target == 'DNase-Seq' or target == 'DNase-seq' or target == "ATAC-seq":
-        target = target.split("-")[0] # remove "Seq/seq"
-
-    # create a temporaryfile
-    # save appends 'npy' to end of filename
-    tmp_file_save = os.path.join(tmp_download_path, id_)
-
-    # if there is data in this row, it was already written, so skip it.
-    if os.path.exists(tmp_file_save + ".npz"):
-        logger.info("Skipping %s, %s, already written to %s" % (target,cell, tmp_file_save))
-        arr = np.load(tmp_file_save + ".npz", allow_pickle=True)['data'].astype('i1') # int8
-    else:
-        logger.info("writing into matrix for %s, %s" % (target,cell))
-
-        if samples.iloc[0]['Source'] == "ENCODE":
-            downloaded_files = [download_ENCODE_url(sample,bed_download_path) for i, sample in samples.iterrows()]
-        else:
-            downloaded_files = [download_CHIPAtlas_url(sample,bed_download_path) for i, sample in samples.iterrows()]
-
-        # filter out failed
-        downloaded_files = list(filter(lambda x: x is not None, downloaded_files))
-
-        # filter out bed files with less than 200 peaks
-        downloaded_files = list(filter(lambda x: count_lines(x) > 200, downloaded_files))
-
-        arr = lojs_overlap(downloaded_files, pyDF)
-
-        np.savez_compressed(tmp_file_save, data=arr)
-
-    if np.sum(arr) == 0:
-        return None
-    else:
-        return (tmp_file_save, cell, target)
 
 def get_metadata_groups(metadata_file, assembly, min_chip_per_cell = 1 ,min_cells_per_chip = 3):
     """
@@ -391,8 +343,9 @@ def get_metadata(metadata_file,
 
     # sanity check that all antigens are accounted for in TF_categories
     missing = [i for i in set(replicate_groups[COL_ANTIGEN]) if i not in list(TF_categories['Name'])]
-    for i in missing:
-        print("Missing antigen %s" % i)
+    if len(missing)>0:
+        logging.error("Missing antigens:")
+        logging.error(','.join(missing))
 
     assert len(missing) == 0, "Missing %i antigens" % len(missing)
 
