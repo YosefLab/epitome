@@ -473,19 +473,19 @@ class VariationalPeakModel():
 
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set,
         # and their indices are stored in missing_idx for future use
-        peak_vectors = [bedFile2Vector(f, self.dataset.regions)[0] for f in similarity_peak_files]
+        peak_vectors = [pyranges2Vector(bed2Pyranges(f), self.dataset.regions)[0] for f in similarity_peak_files]
         peak_matrix = np.vstack(peak_vectors)
         del peak_vectors
 
-        liRegions = list(enumerate(self.dataset.regions))
+        regions  = self.dataset.regions
 
-        # filter liRegions by chrs
+        # filter regions by chrs
         if chrs is not None:
-            liRegions = [i for i in liRegions if i[1].chrom in chrs]
+            regions = regions[regions.Chromosome.isin(chrs)]
 
-        # get indices to score
-        idx = np.array([i[0] for i in liRegions])
-        liRegions = [i[1] for i in liRegions]
+
+        # get sorted indices to score
+        idx = np.array(sorted(list(regions.idx)))
 
         print("scoring %i regions" % idx.shape[0])
 
@@ -493,23 +493,22 @@ class VariationalPeakModel():
         predictions = self.eval_vector(peak_matrix, idx)
         print("finished predictions...", predictions[0].shape)
 
-        # zip together means and stdevs for each position in idx
+        # zip together means for each position in idx
 
-        # return matrix of region, TF information
-        npRegions = np.array(list(map(lambda x: np.array([x.chrom, x.start, x.end]),liRegions)))
+        # return matrix of region, TF information. trim off idx column
+        npRegions = regions.df.sort_values(by='idx').values[:,:-1]
         # TODO turn into right types (all strings right now)
         # predictions[0] is means of size n regions by # ChIP-seq peaks predicted
         means = np.concatenate([npRegions, predictions[0]], axis=1)
-        stds = np.concatenate([npRegions, predictions[1]], axis=1)
 
         # can load back in using:
         # > loaded = np.load('file_prefix.npz')
         # > loaded['means'], loaded['stds']
         # TODO: save the right types!  (currently all strings!)
-        np.savez_compressed(file_prefix, means = means, stds=stds,
-                            names=np.array(['chr','start','end'] + list(self.dataset.targetmap)[1:]))
+        np.savez_compressed(file_prefix, means = means,
+                            names=np.array(['chr','start','end'] + self.dataset.predict_targets))
 
-        print("columns for matrices are chr, start, end, %s" % ", ".join(list(self.dataset.targetmap)[1:]))
+        print("columns for matrices are chr, start, end, %s" % ", ".join(self.dataset.predict_targets))
 
     def score_matrix(self, accessilibility_peak_matrix, regions_peak_file, regions_indices = None):
         """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
@@ -614,8 +613,9 @@ class VariationalPeakModel():
             means = means.numpy()
             stds = stds.numpy()
 
-        means_df =  pd.DataFrame(data=means, columns=list(self.dataset.targets)[1:])
-        std_cols = list(map(lambda x: x + "_stds",list(self.dataset.targets)[1:]))
+
+        means_df =  pd.DataFrame(data=means, columns=self.dataset.predict_targets)
+        std_cols = list(map(lambda x: x + "_stds",self.dataset.predict_targets))
         stds_df =  pd.DataFrame(data=stds, columns=std_cols)
 
         # read in regions file and filter by indices that were scored

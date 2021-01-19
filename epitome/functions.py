@@ -12,7 +12,7 @@ Helper functions
   get_assays_from_feature_file
   bed2Pyranges
   bedtools_intersect
-  bedFile2Vector
+  pyranges2Vector
   range_for_contigs
   calculate_epitome_regions
   concatenate_all_data
@@ -490,7 +490,6 @@ def bed2Pyranges(bed_file):
 
     # check to see whether there is a header
     # usually something of the form "chr start end"
-
     if mimetypes.guess_type(bed_file)[1] == 'gzip':
 
         with gzip.open(bed_file) as f:
