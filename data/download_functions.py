@@ -140,7 +140,7 @@ def download_ENCODE_url(f, bed_download_path, tries = 0):
         return outname_bed
     except:
         # increment tries by one and re-try download
-        return download_url(f, tries + 1)
+        return download_ENCODE_url(f, tries + 1)
 
 def download_CHIPAtlas_url(f, bed_download_path, tries = 0):
     '''
@@ -175,7 +175,7 @@ def download_CHIPAtlas_url(f, bed_download_path, tries = 0):
         return None
     except:
         # increment tries by one and re-try download
-        return download_url(f, tries + 1)
+        return download_CHIPAtlas_url(f, tries + 1)
 
     return outname_bed
 
