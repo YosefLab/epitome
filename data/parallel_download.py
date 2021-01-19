@@ -45,7 +45,16 @@ assembly = parser.parse_args().assembly
 tmp_download_path = os.path.join(download_path, "tmp_np")
 bed_download_path = os.path.join(download_path, "downloads")
 
-replicate_groups = get_metadata_groups(metadata_path,assembly, min_chip_per_cell = min_chip_per_cell ,min_cells_per_chip = min_chip_per_cell)
+# make paths if they do not exist
+if not os.path.exists(tmp_download_path):
+    os.makedirs(tmp_download_path)
+if not os.path.exists(bed_download_path):
+    os.makedirs(bed_download_path)
+
+replicate_groups = get_metadata_groups(metadata_path,
+                        assembly,
+                        min_chip_per_cell = min_chip_per_cell,
+                        min_cells_per_chip = min_chip_per_cell)
 
 # create matrix or load in existing
 matrix_path_all = os.path.join(download_path, 'train_total.h5') # all sites
@@ -73,7 +82,7 @@ def processGroups(n):
 
     id_ = samples.iloc[0]['Experimental ID'] # just use first as ID for filename
 
-    if target == 'DNase-Seq' or target == 'DNase-seq':
+    if target == 'DNase-Seq' or target == 'DNase-seq' or target == "ATAC-seq":
         target = target.split("-")[0] # remove "Seq/seq"
 
     # create a temporaryfile
@@ -90,7 +99,7 @@ def processGroups(n):
         downloaded_files = [download_url(sample, bed_download_path) for i, sample in samples.iterrows()]
 
         downloaded_files = list(filter(lambda x: x is not None, downloaded_files))
-    
+
         # filter out bed files with less than 200 peaks
         downloaded_files = list(filter(lambda x: count_lines(x) > 200, downloaded_files))
 

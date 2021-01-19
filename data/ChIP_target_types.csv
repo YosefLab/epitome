@@ -2811,6 +2811,7 @@ CUX1,TF,
 DNMT3A,chromatin modifier,
 DNMT3B,chromatin modifier,
 DNase,chromatin accessibility,
+ATAC,chromatin accessibility,
 DPF2,chromatin modifier,apoptotic response and hematopoietic cell growth
 E2F1,TF,
 E2F4,TF,
