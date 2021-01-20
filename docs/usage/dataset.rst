@@ -1,72 +1,74 @@
-Configuring data
-================
+Creating an Epitome Dataset
+===========================
 
-Epitome pre-processes ChIP-seq peaks and DNase-seq peaks from ENCODE and ChIP-Atlas for usage
-in the Epitome models. Pre-processed datasets for hg19 are lazily downloaded from
-`Amazon S3 <https://epitome-data.s3-us-west-1.amazonaws.com/hg19/data.zip>`__
-when users run an Epitome model.
+This section explains how to load in an Epitome Dataset. If you
+are interested in pre-processing your own dataset from ENCODE or
+ChIP-Atlas, see `Configuring data <./create_dataset.html>`__.
 
+First, import EpitomeDataset:
 
-Each downloaded dataset contains an h5 file (data.h5). This h5 file contains the following
-keys:
+.. code:: python
 
-- data: a numerical matrix where rows indicate different assays and columns indicate genomic locations
-- rows: row information for the data matrix.
-  - rows/celltypes: which cell type corresponds to each row
-  - rows/targets: which ChIP-seq target corresponds to each row. Can also be DNase-seq
-- columns: contains information on the genomic locations that correspond to each
-  - columns/binSize: size of genome regions (default is 200bp)
-  - columns/index/test_chrs: test chromosomes (default is chrs 8/9)
-  - columns/index/valid_chrs: validation chromosomes (default is chr 7)
-  - columns/index/TEST: indices that specify the test set
-  - columns/index/VALID: indices that specify the validation set
-  - columns/index/TRAIN: indices that specify the train set (all autosomal chromosomes, excluding VALID and TEST
-  - columns/start: start of each genomic location for each column
-  - columns/chr: chromosome for each column
-- /meta: metadata for how this dataset was generated
-  - meta/assembly: genome assembly
-  - meta/source: source for data. Either 'ChIP-Atlas' or 'ENCODE'.
+	from epitome.dataset import *
 
-Generating data for Epitome
----------------------------
+Create an Epitome Dataset
+-------------------------
 
-You can generate your own Epitome dataset from ENCODE using the following command:
-``download_encode.py``.
+First, create an Epitome Dataset. In the dataset, you will define the
+ChIP-seq targets you want to predict, the cell types you want to train from,
+and the assays you want to use to compute cell type similarity.
 
-.. code:: bash
+.. code:: python
 
-  python download_encode.py -h
+ 	targets = ['CTCF','RAD21','SMC3']
+	celltypes = ['K562', 'A549', 'GM12878']
 
-    positional arguments:
-    download_path         Temporary path to download bed/bigbed files to.
-    {hg19,mm10,GRCh38}    assembly to filter files in metadata.tsv file by.
-    output_path           path to save file data to
+	dataset = EpitomeDataset(targets, celltypes)
 
-  optional arguments:
-    -h, --help            show this help message and exit
-    --metadata_url METADATA_URL
-                          ENCODE metadata URL.
-    --min_chip_per_cell MIN_CHIP_PER_CELL
-                          Minimum ChIP-seq experiments for each cell type.
-    --min_cells_per_chip MIN_CELLS_PER_CHIP
-                          Minimum cells a given ChIP-seq target must be observed
-                          in.
-    --regions_file REGIONS_FILE
-                          File to read regions from
-    --bgzip BGZIP         Path to bgzip executable
-    --bigBedToBed BIGBEDTOBED
-                          Path to bigBedToBed executable, downloaded from
-                          http://hgdownload.cse.ucsc.edu/admin/exe/
+Note that you do not have to define ``celltypes``. If you leave ``celltypes``
+blank, the Epitome dataset will choose cell types that have coverage  for the
+ChIP-seq targets chosen. The parameters ``min_cells_per_target`` and ``min_targets_per_cell``
+specify the minimum number of cells required for a ChIP-seq target, and the minimum
+number of ChIP-seq targets required to include a celltype. By default,
+``min_cells_per_target = 3`` and ``min_targets_per_cell = 2``.
 
 
-To use your own dataset in an Epitome model, make sure to set the environment environment variable
-``EPITOME_DATA_PATH`` that points to your custom dataset. This will tell Epitome where to load
-data from.
+.. code:: python
 
-.. code:: bash
+ 	targets = ['CTCF','RAD21','SMC3']
 
-  import os
-  os.environ["EPITOME_DATA_PATH"] = 'path/to/my/epitome/dataset'
-  ...
+	dataset = EpitomeDataset(targets,
+		min_cells_per_target = 4, # requires that each ChIP-seq target has data from at least 4 cell types
+		min_targets_per_cell = 3) # requires that each cell type has data for all three ChIP-seq targets
 
-TODO: need to add this script as a binary in the module.
+
+Note that by default, EpitomeDataset sets DNase-seq (DNase) to be used to compute
+cell type similarity between cell types. To specify a different assay to compute
+cell type similarity, you can specify in the Epitome dataset:
+
+.. code:: python
+
+	dataset = EpitomeDataset(targets, celltypes, similarity_targets = ['DNase', 'H3K27ac'])
+
+You can then visualize the ChIP-seq targets and cell types in your dataset by
+using the ``view()`` function:
+
+.. code:: python
+
+	dataset.view()
+
+
+To list all of the ChIP-seq targets that an Epitome dataset has available data for,
+you can define an Epitome Dataset without specifying ``targets`` or ``cells``.
+You can then use the ``list_targets()`` function to print all available ChIP-seq targets
+in the dataset:
+
+.. code:: python
+
+	dataset = EpitomeDataset()
+
+	dataset.list_targets() # prints > 200 ChIP-seq targets
+
+
+
+You can now use your ``dataset`` in an Epitome model.
