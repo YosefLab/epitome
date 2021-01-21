@@ -114,9 +114,6 @@ def download_ENCODE_url(f, bed_download_path, bigBedToBed, tries = 0):
         ext = "bed.gz"
 
     file_basename = os.path.basename(path).split('.')[0]
-    logging.error("bed_download_path",bed_download_path)
-    logging.error("file_basename",file_basename)
-    logging.error("ext", ext)
     outname_bb = os.path.join(bed_download_path, "%s.%s" % (file_basename, ext))
     outname_bed = os.path.join(bed_download_path, "%s.%s" % (file_basename, 'bed'))
 
