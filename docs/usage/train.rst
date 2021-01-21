@@ -10,43 +10,29 @@ First, import Epitome:
 
 .. code:: python
 
+	from epitome.dataset import *
 	from epitome.models import *
 
-Quick Start
-^^^^^^^^^^^
+Create an Epitome Dataset
+-------------------------
 
-First, define the assays you would like to train. Then you can create a `VLP` model:
-
-.. code:: python
-
-	print(list_assays()) # prints all targets that epitome can train
-
-	assays = ['CTCF','RAD21','SMC3']
-	model = VLP(assays, test_celltypes = ["K562"]) # cell line reserved for testing
-
-To train a model on a specific set of targets and cell lines, you will need to first specify the assays and cell lines you would like to train with:
-
-.. code:: bash
-
-	matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = None,
-		eligible_cells = None,
-		min_assays_per_cell=6,
-		min_cells_per_assay=8)
-
-	# visualize cell lines and ChIP-seq peaks you have selected
-	plot_assay_heatmap(matrix, cellmap, assaymap)
-
-
-Next define a model:
+First, create an Epitome Dataset. In the dataset, you will define the
+ChIP-seq targets you want to predict, the cell types you want to train from,
+and the assays you want to use to compute cell type similarity. For more information
+on creating an Epitome dataset, see `Configuring data <./dataset.html>`__.
 
 .. code:: python
 
-	model = VLP(list(assaymap),
-		matrix = matrix,
-		assaymap = assaymap,
-		cellmap = cellmap,
-		test_celltypes = ["K562"]) # cell line reserved for testing)
+ 	targets = ['CTCF','RAD21','SMC3']
+	celltypes = ['K562', 'A549', 'GM12878']
 
+	dataset = EpitomeDataset(targets, celltypes)
+
+Now, you can create a model:
+
+.. code:: python
+
+	model = VLP(dataset, test_celltypes = ["K562"]) # cell line reserved for testing
 
 Next, train the model. Here, we train the model for 5000 iterations:
 
@@ -55,7 +41,6 @@ Next, train the model. Here, we train the model for 5000 iterations:
 	model.train(5000)
 
 You can then evaluate model performance on held out test cell lines specified in the model declaration. In this case, we will evaluate on K562 on the first 10,000 points.
-
 
 .. code:: python
 

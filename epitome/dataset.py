@@ -1,3 +1,16 @@
+r"""
+==============
+EpitomeDataset
+==============
+.. currentmodule:: epitome.dataset
+
+.. autosummary::
+  :toctree: _generate/
+
+  EpitomeDataset
+"""
+
+
 import pyranges as pr
 import h5py
 import numpy as np
@@ -14,6 +27,11 @@ from .functions import download_and_unzip
 from .viz import plot_assay_heatmap
 
 class EpitomeDataset:
+    '''
+    Dataset for holding Epitome data.
+    Data processing scripts can be found in epitome/data.
+
+    '''
 
     def __init__(self,
                  data_dir=None,
@@ -22,6 +40,21 @@ class EpitomeDataset:
                  min_cells_per_target = 3,
                  min_targets_per_cell = 2,
                  similarity_targets = ['DNase']):
+        '''
+        Initializes an EpitomeDataset.
+
+        :param str data_dir: path to data directory containing data.h5.
+          By default, accesses data in ~/.epitome/data
+        :param list targets: list of ChIP-seq targets to include in dataset
+        :param list cells: list of celltypes to use in dataset
+        :param int min_cells_per_target: minimum number of cell types required for
+          a given ChIP-seq target
+        :param int min_targets_per_cell: minimum number of ChIP-seq targets required
+          for each celltype
+        :param list similarity_targets: list of targets to be used to compute similarity
+          (ie. DNase, H3K27ac, etc.)
+        '''
+
 
         # get directory where h5 file is stored
         self.data_dir = EpitomeDataset.get_data_dir(data_dir)
@@ -51,7 +84,7 @@ class EpitomeDataset:
         for i,v in enumerate(self.row_indices):
             self.matrix[self.full_matrix == v] = i
 
-        # set similarity targets and list of targets to be predicteds
+        # set similarity targets and list of targets to be predicted
         self.similarity_targets = similarity_targets
         self.predict_targets = list(self.targetmap)
         [self.predict_targets.remove(i) for i in self.similarity_targets]
@@ -97,7 +130,8 @@ class EpitomeDataset:
     def get_parameter_dict(self):
         ''' Returns dict of all parameters required to reconstruct this dataset
 
-        Returns: dict containing all parameters to reconstruct dataset.
+        :return: dict containing all parameters to reconstruct dataset.
+        :rtype: dict
         '''
 
         return {'data_dir':self.data_dir,
@@ -108,14 +142,14 @@ class EpitomeDataset:
                 'similarity_targets': self.similarity_targets}
 
     def get_data(self, mode):
-        """
+        '''
         Lazily loads all data into memory.
 
-        Args:
-            :param mode: Dataset enum. Dataset.TRAIN, Dataset.TEST, Dataset.VALID, or Dataset.ALL
+        :param Dataset enum mode: Dataset enumeration. Dataset.TRAIN, Dataset.TEST, Dataset.VALID, or Dataset.ALL
 
-        Returns: self._all_data, concatenated train, valid and test
-        """
+        :return: self._data for a given mode
+        :rtype: numpy.matrix
+        '''
 
         if self._data is None:
             dataset = h5py.File(self.h5_path, 'r')
@@ -133,17 +167,41 @@ class EpitomeDataset:
         else:
             return self._data[:,self.indices[mode]]
 
+
+
+    def get_y_indices_for_cell(self, cell):
+        '''
+        Gets indices for a cell.
+
+        :param str cell: celltype name
+
+        :return: locations of indices for the cell name specified
+        :rtype: numpy.array
+        '''
+
+        return np.copy(self.matrix[self.cellmap[cell],:])
+
+
+    def get_y_indices_for_target(self, target):
+        '''
+        Gets indices for a assay.
+
+        :param str target: str target
+        :return: locations of indices for the cell name specified
+        :rtype: numpy.array
+        '''
+        return np.copy(self.matrix[:,self.targetmap[target]])
+
     @staticmethod
     def get_data_dir(data_dir=None):
-        """
+        '''
         Loads data processed from data/download_encode.py. This will check that all required files
         exist.
 
-        Args:
-            :param data_dir: Directory containing data.h5 file saved in data/download_encode.py script.
-
-        :returns: directory containing data.h5 file
-        """
+        :param str data_dir: Directory containing data.h5 file saved in data/download_encode.py script.
+        :return: directory containing data.h5 file
+        :rtype: str
+        '''
 
         if not data_dir:
             data_dir = GET_DATA_PATH()
@@ -156,36 +214,36 @@ class EpitomeDataset:
         return data_dir
 
     def list_targets(self):
-        ''' Returns available ChIP-seq targets/chromatin accessibility targets
+        '''
+        Returns available ChIP-seq targets/chromatin accessibility targets
         available in the curretn dataset.
 
-        Returns:
-            targets: list of target names
+        :return: list of target names
+        :rtype str
         '''
         return list(self.targetmap)
 
 
     @staticmethod
     def get_assays(targets = None,
-                                 cells = None,
-                                 data_dir = None,
-                                 min_cells_per_target = 3,
-                                 min_targets_per_cell = 2,
-                                 similarity_targets = ['DNase']):
-        '''Returns at matrix of cell type/targets which exist for a subset of cell types.
+                     cells = None,
+                     data_dir = None,
+                     min_cells_per_target = 3,
+                     min_targets_per_cell = 2,
+                     similarity_targets = ['DNase']):
+        '''
+        Returns at matrix of cell type/targets which exist for a subset of cell types.
 
-        Args:
-            :param targets: list of targets to filter by (ie ["CTCF", "EZH2", ..]). If None, then returns all targets.
-            :param cells: list of cells to filter by (ie ["HepG2", "GM12878", ..]). If None, then returns all cell types.
-            :param data_dir: path to data. should have data.h5 here
-            :param min_cells_per_target: number of cell types an target must have to be considered
-            :param min_targets_per_cell: number of targets a cell type must have to be considered. Includes DNase.
-            :param similarity_targets: target to use for computing similarity
-
-        Returns:
-            matrix: cell type by target matrix
-            cellmap: index of cells
-            targetmap: index of targets
+        :param list targets: list of targets to filter by (ie ["CTCF", "EZH2", ..]). If None, then returns all targets.
+        :param list cells: list of cells to filter by (ie ["HepG2", "GM12878", ..]). If None, then returns all cell types.
+        :param str data_dir: path to data. should have data.h5 here
+        :param int min_cells_per_target: number of cell types an target must have to be considered
+        :param int min_targets_per_cell: number of targets a cell type must have to be considered. Includes DNase.
+        :param list similarity_targets: target to use for computing similarity
+        :return: matrix: cell type by target matrix
+                cellmap: index of cells
+                targetmap: index of targets
+        :rtype: tuple
         '''
 
         if not data_dir:
@@ -294,7 +352,14 @@ class EpitomeDataset:
 
     @staticmethod
     def all_keys(obj, keys=[]):
-        ''' Recursively find all keys in an openh5py dataset '''
+        '''
+        Recursively find all keys in an openh5py dataset
+
+        :param h5py.Group obj: h5py group to recurse
+        :param list keys: list of keys to returns
+        :return: list of keys
+        :rtype: list
+        '''
         keys.append(obj.name)
         if isinstance(obj, h5py.Group):
             for item in obj:
@@ -305,17 +370,15 @@ class EpitomeDataset:
         return keys
 
     def order_by_similarity(self, cell, mode, compare_target = 'DNase'):
-        """
+        '''
         Orders list of cellmap names by similarity to comparison cell.
 
-        Args:
-            :param cell: name of cell type, should be in cellmap
-            :param mode: Dataset mode to select data.
-            :compare_target: target to use to compare cell types. Default = DNase
-
-        Returns:
-            list of cellline names ordered by DNase similarity to cell (most similar is first)
-        """
+        :param str cell: name of cell type, should be in cellmap
+        :param Dataset mode: Dataset mode to select data.
+        :param str compare_target: target to use to compare cell types. Default = DNase
+        :return: list of cellline names ordered by DNase similarity to cell (most similar is first)
+        :rtype: list
+        '''
 
         data = self.get_data(mode)
 
@@ -342,15 +405,14 @@ class EpitomeDataset:
             test_chrs = ['chr8','chr9']):
         ''' Saves an Epitome dataset.
 
-        Args:
-            :param out_path: directory to save data.h5 file to
-            :param all_data: binary numpy matrix of shaple (len(row_df), len(regions_df))
-            :param row_df: dataframe containing row information. Should have column names "cellType" and "target"
-            :param regions_df: dataframe containing column genomic regions. Should have column names
-                ['Chromosome', 'Start']. End-Start should always be the same width (200bp or so).
-            :param binSize: size of each genomic region in regions_df.
-            :param valid_chrs: list of validation chromsomes, str
-            :param test_chrs: list of test chromsomes, str
+        :param str out_path: directory to save data.h5 file to
+        :param numpy.matrix all_data: binary numpy matrix of shaple (len(row_df), len(regions_df))
+        :param pandas.dataframe row_df: dataframe containing row information. Should have column names "cellType" and "target"
+        :param pandas.dataframe regions_df: dataframe containing column genomic regions. Should have column names
+            ['Chromosome', 'Start']. End-Start should always be the same width (200bp or so).
+        :param int binSize: size of each genomic region in regions_df.
+        :param list valid_chrs: list of validation chromsomes, str
+        :param list test_chrs: list of test chromsomes, str
 
         '''
 
@@ -476,8 +538,7 @@ class EpitomeDataset:
             Copies over targets and cells, then generates synthetic regions and matrix
             for 22 chrs
 
-            Args:
-                :param toy_path: path to save toy dataset to.
+            :param str toy_path: path to save toy dataset to.
             '''
 
             try:
@@ -524,7 +585,8 @@ class EpitomeDataset:
 
 
     def view(self):
-        """ Plots a matrix of available targets from available cells.
-        """
+        '''
+        Plots a matrix of available targets from available cells.
+        '''
 
         plot_assay_heatmap(self.matrix, self.cellmap, self.targetmap)
