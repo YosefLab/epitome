@@ -53,7 +53,6 @@ meta_download_path = download_path
 download_path = os.path.join(download_path, assembly)
 output_path = os.path.join(output_path, assembly)
 
-
 # make paths if they do not exist
 if not os.path.exists(download_path):
     os.makedirs(download_path)
