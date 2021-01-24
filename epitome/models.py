@@ -372,6 +372,12 @@ class VariationalPeakModel():
 
     @tf.function
     def predict_step_matrix(self, inputs):
+        """
+        Runs predictions on numpy matrix from _predict
+        :param inputs: numpy matrix of examples x features
+
+        :return mean and standard deviations of predictions
+        """
 
         # get the shapes for the cell type specific features.
         # they are not even, because some cells have missing data.
@@ -396,6 +402,13 @@ class VariationalPeakModel():
     
     @tf.function
     def predict_step_generator(self, inputs_b, samples = 50):
+        """
+        Runs predictions on inputs from run_predictions
+        :param inputs_: batch of input data
+        :param samples: number of samples t test. Defaults to 50.
+
+        :return mean and standard deviations of predictions
+        """
 
         # sample n times by tiling batch by rows, running
         # predictions for each row
@@ -421,8 +434,6 @@ class VariationalPeakModel():
             auROC = average macro area under ROC for all factors with truth values
             auPRC = average area under PRC for all factors with truth values
         """
-
-        # inv_assaymap = {v: k for k, v in self.assaymap.items()}
 
         batches = int(num_samples / self.batch_size)+1
 
