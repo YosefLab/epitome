@@ -168,10 +168,13 @@ class EpitomeDataset:
             return self._data[:,self.indices[mode]]
 
 
-
-    def get_y_indices_for_cell(self, cell):
+    @staticmethod
+    def get_y_indices_for_cell(matrix, cellmap,  cell):
         '''
         Gets indices for a cell.
+        TODO: this function is called in genertors.py.
+        Once generators.py is rebased to use dataset, 
+        this function should NOT be static.
 
         :param str cell: celltype name
 
@@ -179,18 +182,21 @@ class EpitomeDataset:
         :rtype: numpy.array
         '''
 
-        return np.copy(self.matrix[self.cellmap[cell],:])
+        return np.copy(matrix[cellmap[cell],:])
 
-
-    def get_y_indices_for_target(self, target):
+    @staticmethod
+    def get_y_indices_for_target(matrix, targetmap, target):
         '''
         Gets indices for a assay.
+        TODO: this function is called in genertors.py.
+        Once generators.py is rebased to use dataset, 
+        this function should NOT be static.
 
         :param str target: str target
         :return: locations of indices for the cell name specified
         :rtype: numpy.array
         '''
-        return np.copy(self.matrix[:,self.targetmap[target]])
+        return np.copy(matrix[:,targetmap[target]])
 
     @staticmethod
     def get_data_dir(data_dir=None):

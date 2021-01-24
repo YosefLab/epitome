@@ -643,7 +643,7 @@ class VariationalPeakModel():
         stds_df =  pd.DataFrame(data=stds, columns=std_cols)
 
         # read in regions file and filter by indices that were scored
-            p = self.dataset.regions.df
+        p = self.dataset.regions.df
         p['idx']=p.index # keep original bed region ordering using idx column
         p.columns = ['Chromosome', 'Start','End','idx']
         prediction_positions = p[p['idx'].isin(idx)] # select regions that were scored

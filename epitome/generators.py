@@ -7,6 +7,7 @@ import tensorflow as tf
 from .constants import *
 from .functions import *
 from .sampling import *
+from .dataset import *
 import glob
 
 ######################### Original Data Generator: Only peak based #####################
@@ -84,14 +85,14 @@ def load_data(data,
     if (not isinstance(indices, np.ndarray) and not isinstance(indices, list)):
         # model performs better when there are less 0s
         if mode == Dataset.TRAIN:
-            feature_indices = np.concatenate(list(map(lambda c: get_y_indices_for_cell(matrix, cellmap, c),
+            feature_indices = np.concatenate(list(map(lambda c: EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, c),
                                      list(cellmap))))
             feature_indices = feature_indices[feature_indices != -1]
 
             # need to re-proportion the indices to oversample underrepresented labels
             if (len(list(targetmap)) > 2):
                 # configure y: label matrix of ChIP for all targets from all cell lines in train
-                indices = np.concatenate([get_y_indices_for_target(matrix, targetmap, target) for target in label_targets])
+                indices = np.concatenate([EpitomeDataset.get_y_indices_for_target(matrix, targetmap, target) for target in label_targets])
                 indices = indices[indices != -1]
                 y = data[indices, :].T
                 m = MLSMOTE(y)
@@ -100,7 +101,7 @@ def load_data(data,
             else:
                 # single TF model
                 # get indices for DNAse and chip for this mark
-                feature_indices = np.concatenate(list(map(lambda c: get_y_indices_for_cell(matrix, cellmap, c),
+                feature_indices = np.concatenate(list(map(lambda c: EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, c),
                                                      list(cellmap))))
 
                 # chop off targets being used in similarity metric
@@ -147,7 +148,7 @@ def load_data(data,
 
                 # labels for this cell
                 if (mode != Dataset.RUNTIME):
-                    label_cell_indices = get_y_indices_for_cell(matrix, cellmap, cell)
+                    label_cell_indices = EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, cell)
 
                     # delete all indices being used in the similarity computation
                     label_cell_indices_no_similarities = np.delete(label_cell_indices, delete_indices)
@@ -159,7 +160,7 @@ def load_data(data,
                     target_mask[target_mask == -1] = 0
 
                 else:
-                    label_count = len(get_y_indices_for_cell(matrix, cellmap, random_cell))-len(similarity_targets)
+                    label_count = len(EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, random_cell))-len(similarity_targets)
 
                     # Mask and labels are all 0's because labels are missing during runtime
                     garbage_labels = target_mask = np.zeros(label_count)
