@@ -15,13 +15,18 @@ Vizualization functions
 ################### Visualization functions #########################
 #####################################################################
 
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+   import matplotlib
+   matplotlib.use('PS')
+   import matplotlib.pyplot as plt
+
 import seaborn as sns; sns.set()
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from matplotlib.backends import backend_agg
 from matplotlib import figure
-import tensorflow as tf
 from sklearn.calibration import calibration_curve
 
 def joint_plot(dict_model1,
@@ -85,7 +90,7 @@ def joint_plot(dict_model1,
 
 
 def plot_assay_heatmap(matrix, cellmap, assaymap):
-    """ Plots a matrix of available assays from available cells.
+    """ Plots a matrix of available assays from available cells. This function takes in the numpy matrix and two dictionaries returned by :code:`get_assays_from_feature_file`.
 
     Args:
         :param matrix: numpy matrix of indices that index into Epitome data
