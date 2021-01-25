@@ -565,9 +565,9 @@ class VariationalPeakModel():
         # > loaded['means'], loaded['stds']
         # TODO: save the right types!  (currently all strings!)
         np.savez_compressed(file_prefix, means = means, stds=stds,
-                            names=np.array(['chr','start','end'] + list(self.assaymap)[1:]))
+                            names=np.array(['chr','start','end'] + self.predict_assays))
 
-        print("columns for matrices are chr, start, end, %s" % ", ".join(list(self.assaymap)[1:]))
+        print("columns for matrices are chr, start, end, %s" % ", ".join(self.predict_assays))
 
     def score_matrix(self, accessilibility_peak_matrix, regions, all_data = None):
         """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
@@ -679,8 +679,8 @@ class VariationalPeakModel():
             means = means.numpy()
             stds = stds.numpy()
 
-        means_df =  pd.DataFrame(data=means, columns=list(self.assaymap)[1:])
-        std_cols = list(map(lambda x: x + "_stds",list(self.assaymap)[1:]))
+        means_df =  pd.DataFrame(data=means, columns=self.predict_assays)
+        std_cols = list(map(lambda x: x + "_stds",self.predict_assays))
         stds_df =  pd.DataFrame(data=stds, columns=std_cols)
 
         # read in regions file and filter by indices that were scored
