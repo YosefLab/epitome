@@ -21,16 +21,11 @@ from .metrics import *
 import numpy as np
 
 import tqdm
+import logging
 
 # for saving model
 import pickle
 from operator import itemgetter
-
-# TODO RM!
-# this is required because tensorflow is running in eager mode
-# but keras weights are not, which throws an error
-# should be fixed by not running in eager mode
-tf.config.experimental_run_functions_eagerly(True)
 
 #######################################################################
 #################### Variational Peak Model ###########################
@@ -38,7 +33,7 @@ tf.config.experimental_run_functions_eagerly(True)
 
 class VariationalPeakModel():
     """ Model for learning from ChIP-seq peaks.
-    Modeled from https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py.
+    Modeled from `this Bayesian Neural Network <https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py>`_.
     """
 
     def __init__(self,
@@ -58,7 +53,6 @@ class VariationalPeakModel():
                  similarity_assays = ['DNase'],
                  train_indices = None,
                  data = None,
-                 data_path = None,
                  checkpoint = None,
                  max_valid_records = None):
         """
@@ -80,13 +74,12 @@ class VariationalPeakModel():
             :param radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30])
             :param train_indices: option numpy array of indices to train from data[Dataset.TRAIN]
             :param data: data loaded from datapath. This option is mostly for testing, so users dont have to load in data for
-            :param data_path: path to data. Directory should contain all.pos.bed.gz, feature_name,test.npz,train.npz,valid.npz
             each model.
             :param checkpoint: path to checkpoint data.
             :param max_valid_records: number of points to validate the model on during training for early-stop validation. If set to None, model will not attempt to stop early by validating performance while training.
         """
 
-        tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
+        logging.getLogger("tensorflow").setLevel(logging.INFO)
 
         # user can provide their own assaymap information.
         if assaymap is not None:
@@ -98,9 +91,13 @@ class VariationalPeakModel():
 
         # get cell lines to train on if not specified
         if assaymap is None:
+            # assays should include similarity assays and predicted assays
+            assays = list(set(assays + similarity_assays))
+
             # get list of TFs that have minimum number of cell lines
-            matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = assays)
-            assert len(assays) == len(list(assaymap))-1
+            matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = assays,
+                                                                     similarity_assays = similarity_assays)
+            assert len(assays) == len(list(assaymap))
 
 
         assert (set(test_celltypes) < set(list(cellmap))), \
@@ -111,14 +108,15 @@ class VariationalPeakModel():
         self.test_celltypes = test_celltypes
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
 
+        data_path = GET_DATA_PATH()
+
         # load in data, if the user has not specified it
         if data is not None:
             self.data = data
         else:
-            self.data = load_epitome_data()
+            self.data = load_epitome_data(data_path)
 
-        if not data_path:
-            data_path = GET_DATA_PATH()
+
 
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
         
@@ -196,7 +194,7 @@ class VariationalPeakModel():
         self.cellmap = cellmap
         self.predict_assays = list(self.assaymap)
         [self.predict_assays.remove(i) for i in self.similarity_assays]
-        self.model = self.create_model(generative = len(self.eval_cell_types) == 1)
+        self.model = self.create_model()
 
     def get_weight_parameters(self):
         """
@@ -268,6 +266,19 @@ class VariationalPeakModel():
         return a * tf.math.pow(p, y) + B
 
     def loss_fn(self, y_true, y_pred, weights):
+        """
+        Loss function for Epitome. Calculates the weighted sigmoid cross entropy
+        between logits and true values.
+
+        Args:
+          :param y_true: true binary values
+          :param y_pred: logits
+          :param weights: binary weights whether the true values exist for
+          a given cell type/assay combination
+
+        Returns:
+          Loss summed over all TFs and genomic loci.
+        """
         # weighted sum of cross entropy for non 0 weights
         # Reduction method = Reduction.SUM_BY_NONZERO_WEIGHTS
         loss = tf.compat.v1.losses.sigmoid_cross_entropy(y_true,
@@ -277,14 +288,17 @@ class VariationalPeakModel():
 
         return tf.math.reduce_sum(loss, axis=0)
 
-    def train(self, num_steps, patience=0, min_delta=0):
+    def train(self, num_steps, patience=1, min_delta=0):
         """
-        Trains keras model. If patience and min_delta are not specified, the model will train on num_step points. Else, the model will either train on num_step points or stop training early if the train_valid_loss is converging (based on the patience and/or min_delta hyper-parameters)-- whatever comes first.
-        :param num_steps (int): number of training points
-        :param patience (int): number of iterations (200 steps) with no improvement after which training will be stopped.
-        :param min_delta (float): minimum change in the monitored quantity to qualify as an improvement, i.e. an absolute change of less than min_delta, will count as no improvement.
-
-        :return triple of number of steps trained for the best model, number of steps the model has trained total, the train_validation losses (returns an empty list if self.max_valid_records is None).
+        Trains an Epitome model. If patience and min_delta are not specified, the model will train on num_step points. Else, the model will either train on num_step points or stop training early if the train_valid_loss is converging (based on the patience and/or min_delta hyper-parameters)-- whatever comes first.
+        
+        Args:
+          :param num_steps (int): number of iterations to train for
+          :param patience (int): number of iterations (200 steps) with no improvement after which training will be stopped.
+          :param min_delta (float): minimum change in the monitored quantity to qualify as an improvement, i.e. an absolute change of less than min_delta, will count as no improvement.
+        
+        Returns:
+          :return triple of number of steps trained for the best model, number of steps the model has trained total, the train_validation losses (returns an empty list if self.max_valid_records is None).
         """
         tf.compat.v1.logging.info("Starting Training")
 
@@ -293,7 +307,7 @@ class VariationalPeakModel():
             features = f[:-2]
             labels = f[-2]
             weights = f[-1]
-            
+
             with tf.GradientTape() as tape:
 
                 logits = self.model(features, training=True)
@@ -305,7 +319,7 @@ class VariationalPeakModel():
             self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
             return elbo_loss, neg_log_likelihood, kl_loss
-        
+
         @tf.function
         def valid_step(f):
             features = f[:-2]
@@ -315,48 +329,58 @@ class VariationalPeakModel():
             neg_log_likelihood = self.loss_fn(labels, logits, weights)
             return neg_log_likelihood
         
-        # Initializing variables
-        mean_valid_loss, iterations_decreasing, best_model_steps = sys.maxsize, 0, 0
-        train_valid_losses = []
-        
-        for step, f in enumerate(self.train_iter.take(num_steps)):
-            loss = train_step(f)
-
-            if step % 200 == 0:
-
-                tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) +
-                                          str(tf.reduce_mean(loss[1])) +
-                                          str(tf.reduce_mean(loss[2])))
+        @tf.function
+        def loopiter():
+            # Initializing variables
+            mean_valid_loss, iterations_decreasing, best_model_steps = sys.maxsize, 0, 0
+            train_valid_losses = []
+            
+            for step, f in enumerate(self.train_iter):
+                loss = train_step(f)
                 
-                # Early Stopping Validation
-                if self.max_valid_records is not None:
-                    new_valid_loss = []
-                    
-                    for step_v, f_v in enumerate(self.train_valid_iter.take(self.max_valid_records)):
-                        new_valid_loss.append(valid_step(f_v))
-                                        
-                    new_valid_loss = tf.concat(new_valid_loss, axis=0)
-                    new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
-                    train_valid_losses.append(new_mean_valid_loss)
+                if step % 100 == 0:
+                    tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) +
+                                              str(tf.reduce_mean(loss[1])) +
+                                              str(tf.reduce_mean(loss[2])))
+                    if (self.debug):
+                        tf.compat.v1.logging.info("On validation")
+                        _, _, _, _, _ = self.test(40000, log=False)
+                        tf.compat.v1.logging.info("")
 
-                    tf.compat.v1.logging.info(str(step) + " Train Validation:" + str(new_mean_valid_loss))
-                    
-                    # Check if the improvement in loss is at least min_delta. 
-                    # If the loss has increased more than patience consecutive times, the function stops early.
-                    # Else it continues training.
-                    improvement = mean_valid_loss - new_mean_valid_loss
-                    if improvement < min_delta:
-                        iterations_decreasing += 1
-                        if iterations_decreasing == patience:
-                            return best_model_steps, step, train_valid_losses
-                    else:
-                        # If val_loss increases before patience train_valid_steps, reset iterations_decreasing and mean_valid_loss.
-                        iterations_decreasing = 0
-                        mean_valid_loss = new_mean_valid_loss
-                        best_model_steps = step
-                    
-                tf.compat.v1.logging.info("")
+                if (step % 200 == 0):
+                    # Early Stopping Validation
+                    if self.max_valid_records is not None:
+                        new_valid_loss = []
 
+                        for step_v, f_v in enumerate(self.train_valid_iter.take(self.max_valid_records)):
+                            new_valid_loss.append(valid_step(f_v))
+
+                        new_valid_loss = tf.concat(new_valid_loss, axis=0)
+                        new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
+                        train_valid_losses.append(new_mean_valid_loss)
+
+                        tf.compat.v1.logging.info(str(step) + " Train Validation:" + str(new_mean_valid_loss))
+
+                        # Check if the improvement in loss is at least min_delta. 
+                        # If the loss has increased more than patience consecutive times, the function stops early.
+                        # Else it continues training.
+                        improvement = mean_valid_loss - new_mean_valid_loss
+                        if improvement < min_delta:
+                            iterations_decreasing += 1
+                            if iterations_decreasing == patience:
+                                return best_model_steps, step, train_valid_losses
+                        else:
+                            # If val_loss increases before patience train_valid_steps, reset iterations_decreasing and mean_valid_loss.
+                            iterations_decreasing = 0
+                            mean_valid_loss = new_mean_valid_loss
+                            best_model_steps = step
+
+                        tf.compat.v1.logging.info("")
+                       
+                if step > num_steps:
+                    break
+
+        loopiter()
         return best_model_steps, step + 1, train_valid_losses
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
@@ -386,7 +410,7 @@ class VariationalPeakModel():
         """
         return self.run_predictions(num_samples, ds, calculate_metrics)
 
-    def eval_vector(self, data, matrix, indices):
+    def eval_vector(self, data, matrix, indices, samples = 50):
         """
         Evaluates a new cell type based on its chromatin (DNase or ATAC-seq) vector, as well
         as any other similarity assays (acetylation, methylation, etc.). len(vector) should equal
@@ -415,8 +439,8 @@ class VariationalPeakModel():
         results = self.run_predictions(num_samples, ds, calculate_metrics = False)
 
         return results['preds_mean'], results['preds_std']
-    
-    
+
+
     def _predict(self, numpy_matrix):
         """
         Run predictions on a numpy matrix. Size of numpy_matrix should be # examples by features.
@@ -424,15 +448,21 @@ class VariationalPeakModel():
         This function is mostly used for testing, as it requires the user to pre-generate the
         features using the generator function in generators.py.
         """
-        
+
         inv_assaymap = {v: k for k, v in self.assaymap.items()}
 
         @tf.function
         def predict_step(inputs):
 
-            # sample n times by tiling batch by rows, running
-            # predictions for each row
-            tmp = self.model(inputs.astype(np.float32))
+            # get the shapes for the cell type specific features.
+            # they are not even, because some cells have missing data.
+            cell_lens = [i.shape[-1] for i in self.train_iter.element_spec[:-2]]
+
+            # split matrix inputs into tuple of cell line specific features
+            split_inputs = tf.split(tf.dtypes.cast(inputs, tf.float32), cell_lens, axis=1)
+
+            # predict
+            tmp = self.model(split_inputs)
             y_pred = tf.sigmoid(tmp)
             return y_pred
 
@@ -597,7 +627,7 @@ class VariationalPeakModel():
         # return matrix of region, TF information
         npRegions = np.array(list(map(lambda x: np.array([x.chrom, x.start, x.end]),liRegions)))
         # TODO turn into right types (all strings right now)
-	# predictions[0] is means of size n regions by # ChIP-seq peaks predicted
+        # predictions[0] is means of size n regions by # ChIP-seq peaks predicted
         means = np.concatenate([npRegions, predictions[0]], axis=1)
         stds = np.concatenate([npRegions, predictions[1]], axis=1)
 
@@ -610,9 +640,75 @@ class VariationalPeakModel():
 
         print("columns for matrices are chr, start, end, %s" % ", ".join(list(self.assaymap)[1:]))
 
-    def score_peak_file(self, similarity_peak_files, regions_peak_file, all_data = None):
+    def score_matrix(self, accessilibility_peak_matrix, regions, all_data = None):
+        """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
+        rows are regions from regions_peak_file. rows in accessilibility_peak_matrix should matching
+
+        Args:
+            :param accessilibility_peak_matrix: numpy matrix of (samples by genomic regions)
+            :param regions_peak_file: either narrowpeak or bed file containing regions to score, OR a pyranges object
+                with columns [Chomosome, Start, End, idx]. Index matches each genomic region to a row in 
+                accessilibility_peak_matrix. In both cases, number of regions Should
+                match rows in accessilibility_peak_matrix
+            :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
+
+        Returns:
+            3-dimensional numpy matrix of predictions: sized (samples by regions by ChIP-seq targets)
         """
-        Runs predictions on a set of peaks defined in a bed or narrowPeak file.
+
+        if all_data is None:
+            all_data = concatenate_all_data(self.data, self.regionsFile)
+        
+        if type(regions) == str:
+            regions_bed = bed2Pyranges(regions)
+        else:
+            regions_bed = regions
+
+        all_data_regions = bed2Pyranges(self.regionsFile)
+
+        joined = regions_bed.join(all_data_regions, how='left',suffix='_alldata').df
+
+        idx = joined['idx_alldata']
+
+        results = []
+
+        # TODO 9/10/2020: should do something more efficiently than a for loop
+        for sample_i in tqdm.tqdm(range(accessilibility_peak_matrix.shape[0])):
+            # tuple of means and stds
+            peaks_i = np.zeros((len(all_data_regions)))
+            peaks_i[idx] = accessilibility_peak_matrix[sample_i, joined['idx']]
+
+            means, _ = self.eval_vector(all_data, peaks_i, idx, samples = 1)
+
+            # group means by joined['idx']
+            results.append(means)
+
+        # stack all samples along 0th axis
+        tmp = np.stack(results)
+
+        # get the index break for each region_bed region
+        reduce_indices = joined.drop_duplicates('idx',keep='first').index.values
+
+        # get the number of times there was a scored region for each region_bed region
+        # used to calculate reduced means
+        indices_counts = joined['idx'].value_counts(sort=False).values[:,None]
+
+        # reduce means on middle axis
+        final = np.add.reduceat(tmp, reduce_indices, axis = 1)/indices_counts
+
+        # TODO 9/10/2020: code is currently scoring missing values and setting to nan.
+        # You could be more efficient and remove these so you are not taking
+        # the time to score garbage data.
+
+        # fill missing indices with nans
+        missing_indices = joined[joined['idx_alldata']==-1]['idx'].values
+        final[:,missing_indices, :] = np.NAN
+
+        return final
+
+
+    def score_peak_file(self, similarity_peak_files, regions_peak_file, all_data = None):
+        """ Runs predictions on a set of peaks defined in a bed or narrowPeak file.
 
         Args:
             :param similarity_peak_files: narrowpeak or bed files containing chromatin accessibility to score
@@ -649,9 +745,14 @@ class VariationalPeakModel():
         means, stds = self.eval_vector(all_data, peak_matrix, idx)
         print("finished predictions...", means.shape)
 
-        means_df =  pd.DataFrame(data=means.numpy(), columns=list(self.assaymap)[1:])
+        assert type(means) == type(stds), "Means and STDs variables not of the same type"
+        if not isinstance(means, np.ndarray):
+            means = means.numpy()
+            stds = stds.numpy()
+
+        means_df =  pd.DataFrame(data=means, columns=list(self.assaymap)[1:])
         std_cols = list(map(lambda x: x + "_stds",list(self.assaymap)[1:]))
-        stds_df =  pd.DataFrame(data=stds.numpy(), columns=std_cols)
+        stds_df =  pd.DataFrame(data=stds, columns=std_cols)
 
         # read in regions file and filter by indices that were scored
         p = pd.read_csv(self.regionsFile, sep='\t',header=None)[[0,1,2]]
@@ -689,7 +790,10 @@ class VLP(VariationalPeakModel):
              **kwargs):
         """ Creates a new model with 4 layers with 100 unites each.
             To resume model training on an old model, call:
-            model = VLP(checkpoint=path_to_saved_model)
+
+            .. code-block:: python
+
+                model = VLP(checkpoint=path_to_saved_model)
         """
         self.activation = tf.tanh
         self.layers = 2
@@ -713,10 +817,8 @@ class VLP(VariationalPeakModel):
             VariationalPeakModel.__init__(self, *args, **kwargs)
 
     def create_model(self, **kwargs):
-        # first model that has cell line channels but full connection to TFs
-
-        # inputs for cell type specific channels
-        # inputs will be different length for each cell type
+        """ Creates an Epitome model.
+        """
         cell_inputs = [tf.keras.layers.Input(shape=(self.num_inputs[i],))
                        for i in range(len(self.num_inputs))]
 
@@ -725,17 +827,12 @@ class VLP(VariationalPeakModel):
 
         # TODO resize by max iterations. 5000 is an estimate for data size
         kl_divergence_function = (lambda q, p, _: tfp.distributions.kl_divergence(q, p) /
-                            tf.cast(self.batch_size * 5000, dtype=tf.float32)) 
+                            tf.cast(self.batch_size * 5000, dtype=tf.float32))
         for i in range(len(self.num_inputs)):
             # make input layer for cell
             last = cell_inputs[i]
             for j in range(self.layers):
-                # set number of units in subsequent layers.
-                # we do not decrease input size for generative model case
-                if "generative" in kwargs.keys():
-                    num_units = self.num_inputs[i]
-                else:   
-                    num_units = int(self.num_inputs[i]/(2 * (j+1)))
+                num_units = int(self.num_inputs[i]/(2 * (j+1)))
                 d = tfp.layers.DenseFlipout(num_units,
                                                 kernel_divergence_fn=kl_divergence_function,
                                                 activation = self.activation)(last)
@@ -756,4 +853,3 @@ class VLP(VariationalPeakModel):
 
         model = tf.keras.models.Model(inputs=cell_inputs, outputs=outputs)
         return model
-
