@@ -630,6 +630,33 @@ def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights =
 
 
 ##################### Functions for parsing allpos.bed file ################
+def split_train_validation_data(all_regions_file, chromosome, data):
+    """
+    Traverses through feature_name_file to get contig ranges.
+
+    Args:
+        :param all_regions_file: path to bed file of genomic regions. must be gzipped.
+        :param chromosome: string representation of chromosome in 'chr{int}' format (Ex: 'chr22').
+
+    Returns:
+        list of contigs and their start/end position all_regions_file
+    """
+    assert(len(chromosome.split('chr')) == 2)
+    chr_num = chromosome.split("chr")[1]
+    
+    # Chr 7-9 are reserved for test + validation.
+    assert(chr_num < 7 || chr_num > 9)
+    if chr_num < 7:
+        chr_beg, chr_end = range_for_contigs(self.regionsFile)[chromosome]
+        train_valid_data = data[Dataset.TRAIN][chr_beg, chr_end]
+        train_data = data[Dataset.TRAIN][:, :chr_beg]
+        
+    chr22_beg, chr22_end = range_for_contigs(self.regionsFile)['chr22']
+    chr22_len = chr22_end - chr22_beg
+    self.train_valid_data = self.data[Dataset.TRAIN][:, -chr22_len:]
+    self.train_data = self.data[Dataset.TRAIN][:, :-chr22_len]
+    
+
 def range_for_contigs(all_regions_file):
     """
     Traverses through feature_name_file to get contig ranges.

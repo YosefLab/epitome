@@ -30,7 +30,6 @@ class EpitomeTestCase(unittest.TestCase):
 				eligible_cells = eligible_cells, min_cells_per_assay = 3, min_assays_per_cell = 1)
 
 	def makeSmallModel(self):
-
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_assays = ['DNase','CTCF']
 		matrix, cellmap, assaymap = self.getFeatureData(eligible_assays, eligible_cells)
@@ -40,7 +39,15 @@ class EpitomeTestCase(unittest.TestCase):
 			matrix = matrix,
 			assaymap = assaymap,
 			cellmap = cellmap)
-
+    
+    def makeSmallConvergingModel(self):
+        eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
+		eligible_assays = ['DNase','CTCF']
+		return VLP(list(eligible_assays),
+			test_celltypes = ['K562'],
+			matrix = np.ones((5,2)).astype(int),
+			assaymap = assaymap,
+			cellmap = cellmap)
 
 	def tmpFile(self):
 
