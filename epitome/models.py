@@ -372,11 +372,13 @@ class VariationalPeakModel():
 
     @tf.function
     def predict_step_matrix(self, inputs):
-        """
-        Runs predictions on numpy matrix from _predict
-        :param inputs: numpy matrix of examples x features
+        """Runs predictions on numpy matrix from _predict
 
-        :return mean and standard deviations of predictions
+        Args:
+            inputs (np.ndarray): numpy matrix of examples x features
+
+        Returns:
+            tuple: mean and standard deviations of predictions
         """
 
         # get the shapes for the cell type specific features.
@@ -387,9 +389,7 @@ class VariationalPeakModel():
         split_inputs = tf.split(tf.dtypes.cast(inputs, tf.float32), cell_lens, axis=1)
 
         # predict
-        tmp = self.model(split_inputs)
-        y_pred = tf.sigmoid(tmp)
-        return y_pred
+        return predict_step_generator(split_inputs, samples=1)
 
     def _predict(self, numpy_matrix):
         """
@@ -402,12 +402,14 @@ class VariationalPeakModel():
     
     @tf.function
     def predict_step_generator(self, inputs_b, samples = 50):
-        """
-        Runs predictions on inputs from run_predictions
-        :param inputs_: batch of input data
-        :param samples: number of samples t test. Defaults to 50.
+        """Runs predictions on inputs from run_predictions
 
-        :return mean and standard deviations of predictions
+        Args:
+            inputs_b (tf.Tensor): batch of input data
+            samples (int, optional): Number of samples to test. Defaults to 50.
+
+        Returns:
+            tuple: mean and standard deviations of predictions
         """
 
         # sample n times by tiling batch by rows, running
