@@ -182,7 +182,6 @@ def pyranges2Vector(pr1, pr2):
     prs = [(pr2, pr1, False), (pr1, pr2, True)]
     pool = multiprocessing.Pool(processes=2)
     results = pool.map(pyranges_intersect, prs)
-
     pool.close()
     pool.join()
 
