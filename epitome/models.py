@@ -347,41 +347,45 @@ class VariationalPeakModel():
                         _, _, _, _, _ = self.test(40000, log=False)
                         tf.compat.v1.logging.info("")
 
-                if (step % 200 == 0):
+                if (step % 200 == 0) and (self.max_valid_records is not None):
                     # Early Stopping Validation
-                    if self.max_valid_records is not None:
-                        new_valid_loss = []
+                    new_valid_loss = []
 
-                        for step_v, f_v in enumerate(self.train_valid_iter.take(self.max_valid_records)):
-                            new_valid_loss.append(valid_step(f_v))
+                    for step_v, f_v in enumerate(self.train_valid_iter):
+                        print("step_v: " + str(step_v))
+                        new_valid_loss.append(valid_step(f_v))
+                        
+                        if (step_v == self.max_valid_records):
+                            break
 
-                        new_valid_loss = tf.concat(new_valid_loss, axis=0)
-                        new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
-                        train_valid_losses.append(new_mean_valid_loss)
+                    new_valid_loss = int(tf.concat(new_valid_loss, axis=0))
+                    new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
+                    train_valid_losses.append(new_mean_valid_loss)
 
-                        tf.compat.v1.logging.info(str(step) + " Train Validation:" + str(new_mean_valid_loss))
+                    tf.compat.v1.logging.info(str(step) + " Train Validation:" + str(new_mean_valid_loss))
 
-                        # Check if the improvement in loss is at least min_delta. 
-                        # If the loss has increased more than patience consecutive times, the function stops early.
-                        # Else it continues training.
-                        improvement = mean_valid_loss - new_mean_valid_loss
-                        if improvement < min_delta:
-                            iterations_decreasing += 1
-                            if iterations_decreasing == patience:
-                                return best_model_steps, step, train_valid_losses
-                        else:
-                            # If val_loss increases before patience train_valid_steps, reset iterations_decreasing and mean_valid_loss.
-                            iterations_decreasing = 0
-                            mean_valid_loss = new_mean_valid_loss
-                            best_model_steps = step
+                    # Check if the improvement in loss is at least min_delta. 
+                    # If the loss has increased more than patience consecutive times, the function stops early.
+                    # Else it continues training.
+                    improvement = mean_valid_loss - new_mean_valid_loss
+                    if improvement < min_delta:
+                        iterations_decreasing += 1
+                        if iterations_decreasing == patience:
+                            return best_model_steps, step, train_valid_losses
+                    else:
+                        # If val_loss increases before patience train_valid_steps, reset iterations_decreasing and mean_valid_loss.
+                        iterations_decreasing = 0
+                        mean_valid_loss = new_mean_valid_loss
+                        best_model_steps = step
 
-                        tf.compat.v1.logging.info("")
-                       
-                if step > num_steps:
+                    tf.compat.v1.logging.info("")
+                    
+                if (step == num_steps):
                     break
+               
+            return best_model_steps, num_steps, train_valid_losses
 
-        loopiter()
-        return best_model_steps, step + 1, train_valid_losses
+        return loopiter()
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
         """
