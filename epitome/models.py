@@ -55,7 +55,9 @@ class VariationalPeakModel():
                  similarity_assays = ['DNase'],
                  train_indices = None,
                  data = None,
-                 checkpoint = None):
+                 checkpoint = None,
+                 max_valid_records = None):
+#                  valid_chromosome='chr22'):
         """
         Initializes Peak Model
 
@@ -114,12 +116,29 @@ class VariationalPeakModel():
             self.data = data
         else:
             self.data = load_epitome_data(data_path)
-
-
-
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
-
-        input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.data[Dataset.TRAIN],
+        
+        if max_valid_records is None:
+            self.train_data = self.data[Dataset.TRAIN]
+        else:
+            # Reserving chromosome 22 from the training data to validate model while training
+            chr22_beg, chr22_end = range_for_contigs(self.regionsFile)['chr22']
+            chr22_len = chr22_end - chr22_beg
+            self.train_valid_data = self.data[Dataset.TRAIN][:, -chr22_len:]
+            self.train_data = self.data[Dataset.TRAIN][:, :-chr22_len]
+            
+            # Creating a separate train-validation dataset
+            _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.train_valid_data,
+                                                    self.eval_cell_types,
+                                                    self.eval_cell_types,
+                                                    matrix,
+                                                    assaymap,
+                                                    cellmap,
+                                                    similarity_assays = similarity_assays,
+                                                    radii = radii, mode = Dataset.TRAIN),
+                                                    batch_size, shuffle_size, prefetch_size)
+        
+        input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.train_data, 
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
                                                 matrix,
@@ -138,7 +157,7 @@ class VariationalPeakModel():
                                                 similarity_assays = similarity_assays,
                                                 radii = radii, mode = Dataset.VALID),
                                                 batch_size, 1, prefetch_size)
-
+        
         # can be empty if len(test_celltypes) == 0
         if len(self.test_celltypes) > 0:
             _, _,            self.test_iter = generator_to_tf_dataset(load_data(self.data[Dataset.TEST],
@@ -160,6 +179,7 @@ class VariationalPeakModel():
 
         self.num_outputs = output_shape[0]
         self.num_inputs = input_shapes
+        self.max_valid_records = max_valid_records
 
         # set self
         self.radii = radii
@@ -266,14 +286,18 @@ class VariationalPeakModel():
 
         return tf.math.reduce_sum(loss, axis=0)
 
-    def train(self, num_steps):
-        """ Trains an Epitome model for num_steps iterations.
-
-        Args:
-          :param num_steps: number of iterations to train for
-
+    def train(self, num_steps, patience=1, min_delta=0):
         """
-
+        Trains an Epitome model. If patience and min_delta are not specified, the model will train on num_step points. Else, the model will either train on num_step points or stop training early if the train_valid_loss is converging (based on the patience and/or min_delta hyper-parameters)-- whatever comes first.
+        
+        Args:
+          :param num_steps (int): number of iterations to train for
+          :param patience (int): number of iterations (200 steps) with no improvement after which training will be stopped.
+          :param min_delta (float): minimum change in the monitored quantity to qualify as an improvement, i.e. an absolute change of less than min_delta, will count as no improvement.
+        
+        Returns:
+          :return triple of number of steps trained for the best model, number of steps the model has trained total, the train_validation losses (returns an empty list if self.max_valid_records is None).
+        """
         tf.compat.v1.logging.info("Starting Training")
 
         @tf.function
@@ -293,26 +317,73 @@ class VariationalPeakModel():
             self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
             return elbo_loss, neg_log_likelihood, kl_loss
-
+        
+        @tf.function
+        def valid_step(f):
+            features = f[:-2]
+            labels = f[-2]
+            weights = f[-1]
+            logits = self.model(features, training=False)
+            neg_log_likelihood = self.loss_fn(labels, logits, weights)
+            return neg_log_likelihood
+        
         @tf.function
         def loopiter():
+            # Initializing variables
+            mean_valid_loss, iterations_decreasing, best_model_steps = sys.maxsize, 0, 0
+            train_valid_losses = []
+            
             for step, f in enumerate(self.train_iter):
                 loss = train_step(f)
-
+                
                 if step % 100 == 0:
-                  tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) +
-                                            str(tf.reduce_mean(loss[1])) +
-                                            str(tf.reduce_mean(loss[2])))
+                    tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) +
+                                              str(tf.reduce_mean(loss[1])) +
+                                              str(tf.reduce_mean(loss[2])))
+                    if (self.debug):
+                        tf.compat.v1.logging.info("On validation")
+                        _, _, _, _, _ = self.test(40000, log=False)
+                        tf.compat.v1.logging.info("")
 
-                  if (self.debug):
-                      tf.compat.v1.logging.info("On validation")
-                      _, _, _, _, _ = self.test(40000, log=False)
-                      tf.compat.v1.logging.info("")
+                if (step % 200 == 0) and (self.max_valid_records is not None):
+                    # Early Stopping Validation
+                    new_valid_loss = []
 
-                if step > num_steps:
-                  break
+                    for step_v, f_v in enumerate(self.train_valid_iter):
+                        print("step_v: " + str(step_v))
+                        new_valid_loss.append(valid_step(f_v))
+                        
+                        if (step_v == self.max_valid_records):
+                            break
 
-        loopiter()
+                    new_valid_loss = int(tf.concat(new_valid_loss, axis=0))
+                    new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
+                    train_valid_losses.append(new_mean_valid_loss)
+
+                    tf.compat.v1.logging.info(str(step) + " Train Validation:" + str(new_mean_valid_loss))
+
+                    # Check if the improvement in loss is at least min_delta. 
+                    # If the loss has increased more than patience consecutive times, the function stops early.
+                    # Else it continues training.
+                    improvement = mean_valid_loss - new_mean_valid_loss
+                    if improvement < min_delta:
+                        iterations_decreasing += 1
+                        if iterations_decreasing == patience:
+                            return best_model_steps, step, train_valid_losses
+                    else:
+                        # If val_loss increases before patience train_valid_steps, reset iterations_decreasing and mean_valid_loss.
+                        iterations_decreasing = 0
+                        mean_valid_loss = new_mean_valid_loss
+                        best_model_steps = step
+
+                    tf.compat.v1.logging.info("")
+                    
+                if (step == num_steps):
+                    break
+               
+            return best_model_steps, num_steps, train_valid_losses
+
+        return loopiter()
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
         """
@@ -321,7 +392,8 @@ class VariationalPeakModel():
 
         if (mode == Dataset.VALID):
             handle = self.valid_iter # for standard validation of validation cell types
-
+        elif (mode == Dataset.TRAIN):
+            handle = self.train_valid_iter
         elif (mode == Dataset.TEST and len(self.test_celltypes) > 0):
             handle = self.test_iter # for standard validation of validation cell types
         else:
@@ -781,4 +853,5 @@ class VLP(VariationalPeakModel):
                                         name="output_layer")(last)
 
         model = tf.keras.models.Model(inputs=cell_inputs, outputs=outputs)
+        
         return model
