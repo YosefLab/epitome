@@ -13,7 +13,7 @@ class ModelsTest(EpitomeTestCase):
 		super(ModelsTest, self).__init__(*args, **kwargs)
 		self.model = self.makeSmallModel()
 		self.validation_size = 10
-	
+
 	def test_score_peak_file(self):
 		test_similarity_peak_file = tempfile.NamedTemporaryFile(delete=False)
 		test_regions_peak_file = tempfile.NamedTemporaryFile(delete=False)
@@ -164,7 +164,7 @@ class ModelsTest(EpitomeTestCase):
 
 
 		# Create dummy data
-		similarity_dict =  {'Chromosome': ['chr7', 'chr7', 'chr7'], 'Start': [200, 400, 1100],  'End': [220, 440, 1150]}
+		similarity_dict =  {'Chromosome': ['chr7', 'chr7', 'chr8'], 'Start': [200, 400, 1100],  'End': [220, 440, 1150]}
 		similarity_pr = pr.from_dict(similarity_dict)
 
 		# Write to temp bed file
@@ -173,7 +173,7 @@ class ModelsTest(EpitomeTestCase):
 
 		self.model.score_whole_genome([test_similarity_peak_file.name],
                        file_prefix_name,
-                       chrs=['chr7'])
+                       chrs=['chr7','chr8'])
 
 		test_similarity_peak_file.close()
 
@@ -185,8 +185,10 @@ class ModelsTest(EpitomeTestCase):
 
 		preds = loaded['means']
 		names = loaded['names']
-		assert preds.shape == (100,4)
+		assert preds.shape == (200,4)
 		assert names.shape[0] == 4 # chr, start, end, CTCF
+		assert np.all(preds[:100,0]=='chr7')
+		assert np.all(preds[100:,0]=='chr8')
 
 	def test_correct_weights(self):
 		# make sure that assays with position 0 in matrix were cut off
