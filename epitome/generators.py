@@ -1,5 +1,14 @@
-"""
-Functions for data generators.
+r"""
+========================
+Data Generator Functions
+========================
+.. currentmodule:: epitome.generators
+
+.. autosummary::
+  :toctree: _generate/
+
+  load_data
+  generator_to_tf_dataset
 """
 
 import numpy as np

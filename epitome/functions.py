@@ -8,7 +8,6 @@ Helper functions
   :toctree: _generate/
 
   download_and_unzip
-  load_bed_regions
   bed2Pyranges
   pyranges_intersect
   pyranges2Vector
@@ -95,28 +94,6 @@ def download_and_unzip(url, dst):
             # delete old zip to free space
             os.remove(dst)
 
-################### Parsing Deepsea Files ########################
-
-def load_bed_regions(bedfile):
-    '''
-    Loads bed file (stored as .gz format), removing
-    regions that have no data (the regions between valid/test
-    and chromosomes X/Y).
-
-    :param str bedfile: path to bed file.
-    :return: list of genomic Regions the size of train/valid/test data.
-    :rtype: list
-    '''
-
-    with gzip.open(bedfile, 'r') as f:
-            liPositions = f.readlines()
-
-    def fromString(x):
-        tmp = x.decode("utf-8").split('\t')
-        return Region(tmp[0], int(tmp[1]), int(tmp[2]))
-
-    return list(map(lambda x: fromString(x), liPositions))
-
 ################### Parsing data from bed file ########################
 def bed2Pyranges(bed_file):
     '''
@@ -148,7 +125,6 @@ def bed2Pyranges(bed_file):
     p['idx']=p.index
     p.columns = ['Chromosome', 'Start','End','idx']
     return pr.PyRanges(p, int64=True).sort()
-
 
 
 def pyranges_intersect(triple):

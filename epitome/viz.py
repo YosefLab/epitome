@@ -12,7 +12,6 @@ Vizualization functions
   heatmap_aggreement_from_model_weights
   calibration_plot
   plot_weight_posteriors
-
 """
 
 #####################################################################
@@ -32,6 +31,10 @@ import numpy as np
 from matplotlib.backends import backend_agg
 from matplotlib import figure
 from sklearn.calibration import calibration_curve
+
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+import matplotlib.transforms as mtransforms
 
 def joint_plot(dict_model1,
                dict_model2,
@@ -145,7 +148,7 @@ def number_to_bp(n):
 def heatmap_aggreement_from_model_weights(model):
     '''
     Plots seaborn heatmap for DNase weights of first layer in network.
-    Plots one heatmap for each celltype used in the features for training (about 10-13).
+    Plots one heatmap for each celltype used in the features for training.
 
     :param VLP model: an Epitome model
     '''
@@ -174,11 +177,6 @@ def heatmap_aggreement_from_model_weights(model):
         ax.set_xticklabels(xtick_labels, rotation=-60)
         plt.show()
 
-
-
-import matplotlib.pyplot as plt
-import matplotlib.lines as mlines
-import matplotlib.transforms as mtransforms
 
 def calibration_plot(truth, preds, assay_dict, list_assaymap):
     '''

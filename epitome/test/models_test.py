@@ -51,7 +51,7 @@ class ModelsTest(EpitomeTestCase):
 		# Make sure predictions are not random
 		# after first iterations
 		assert(results1['preds_mean'].shape[0] == self.validation_size)
-		# assert(results2['preds_mean'][0] < results1['preds_mean'].shape[0])
+		assert(results2['preds_mean'][0] < results1['preds_mean'].shape[0])
 
 	def test_test_model(self):
 

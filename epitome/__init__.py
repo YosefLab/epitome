@@ -13,6 +13,7 @@ also includes scripts for processing ENCODE peaks.
 .. automodule:: epitome.viz
 .. automodule:: epitome.constants
 .. automodule:: epitome.dataset
+.. automodule:: epitome.generators
 
 """
 import os

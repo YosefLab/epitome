@@ -373,13 +373,14 @@ class VariationalPeakModel():
 
     @tf.function
     def predict_step_generator(self, inputs_b, samples = 50):
-        """Runs predictions on inputs from run_predictions
+        '''
+        Runs predictions on inputs from run_predictions
 
         :param tf.Tensor inputs_b: batch of input data
         :param int samples: Number of samples to test. Defaults to 50.
         :return: mean and standard deviations of predictions
         :rtype: tuple
-        """
+        '''
 
         # sample n times by tiling batch by rows, running
         # predictions for each row
