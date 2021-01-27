@@ -507,7 +507,7 @@ def bed2Pyranges(bed_file):
 
     p['idx']=p.index
     p.columns = ['Chromosome', 'Start','End','idx']
-    return pr.PyRanges(p).sort()
+    return pr.PyRanges(p, int64=True).sort()
 
 
 

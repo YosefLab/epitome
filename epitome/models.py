@@ -370,6 +370,25 @@ class VariationalPeakModel():
 
         return results['preds_mean'], results['preds_std']
 
+    @tf.function
+    def predict_step_matrix(self, inputs):
+        """
+        Runs predictions on numpy matrix from _predict
+
+        :param np.ndarray inputs: numpy matrix of examples x features
+        :return: mean of predictions
+        :rtype: np.ndarray
+        """
+
+        # get the shapes for the cell type specific features.
+        # they are not even, because some cells have missing data.
+        cell_lens = [i.shape[-1] for i in self.train_iter.element_spec[:-2]]
+
+        # split matrix inputs into tuple of cell line specific features
+        split_inputs = tf.split(tf.dtypes.cast(inputs, tf.float32), cell_lens, axis=1)
+
+        # predict
+        return predict_step_generator(split_inputs, samples=1)[0]
 
     def _predict(self, numpy_matrix):
         """
@@ -378,24 +397,26 @@ class VariationalPeakModel():
         features using the generator function in generators.py.
         """
 
-        inv_assaymap = {v: k for k, v in self.assaymap.items()}
+        return self.predict_step_matrix(numpy_matrix)
+    
+    @tf.function
+    def predict_step_generator(self, inputs_b, samples = 50):
+        """Runs predictions on inputs from run_predictions
 
-        @tf.function
-        def predict_step(inputs):
+        :param tf.Tensor inputs_b: batch of input data
+        :param int samples: Number of samples to test. Defaults to 50.
+        :return: mean and standard deviations of predictions
+        :rtype: tuple
+        """
 
-            # get the shapes for the cell type specific features.
-            # they are not even, because some cells have missing data.
-            cell_lens = [i.shape[-1] for i in self.train_iter.element_spec[:-2]]
-
-            # split matrix inputs into tuple of cell line specific features
-            split_inputs = tf.split(tf.dtypes.cast(inputs, tf.float32), cell_lens, axis=1)
-
-            # predict
-            tmp = self.model(split_inputs)
-            y_pred = tf.sigmoid(tmp)
-            return y_pred
-
-        return predict_step(numpy_matrix)
+        # sample n times by tiling batch by rows, running
+        # predictions for each row
+        inputs_tiled = [tf.tile(i, (samples, 1)) for i in inputs_b]
+        tmp = self.model(inputs_tiled)
+        y_pred = tf.sigmoid(tmp)
+        # split up batches into a third dimension and stack them in third dimension
+        preds = tf.stack(tf.split(y_pred, samples, axis=0), axis=0)
+        return tf.math.reduce_mean(preds, axis=0), tf.math.reduce_std(preds, axis=0)
 
     def run_predictions(self, num_samples, iter_, calculate_metrics = True, samples = 50):
         """
@@ -413,8 +434,6 @@ class VariationalPeakModel():
             auPRC = average area under PRC for all factors with truth values
         """
 
-        inv_assaymap = {v: k for k, v in self.assaymap.items()}
-
         batches = int(num_samples / self.batch_size)+1
 
         # empty arrays for concatenation
@@ -422,18 +441,6 @@ class VariationalPeakModel():
         preds_mean = []
         preds_std = []
         sample_weight = []
-
-        @tf.function
-        def predict_step(inputs_b):
-
-            # sample n times by tiling batch by rows, running
-            # predictions for each row
-            inputs_tiled = [tf.tile(i, (samples, 1)) for i in inputs_b]
-            tmp = self.model(inputs_tiled)
-            y_pred = tf.sigmoid(tmp)
-            # split up batches into a third dimension and stack them in third dimension
-            preds = tf.stack(tf.split(y_pred, samples, axis=0), axis=0)
-            return tf.math.reduce_mean(preds, axis=0), tf.math.reduce_std(preds, axis=0)
 
         for f in tqdm.tqdm(iter_.take(batches)):
             inputs_b = f[:-2]
@@ -443,7 +450,7 @@ class VariationalPeakModel():
             # getting y_preds. You can then calculate the mean and sigma of the predictions,
             # and use this to gather uncertainty: (see http://krasserm.github.io/2019/03/14/bayesian-neural-networks/)
             # inputs, truth, sample_weight
-            preds_mean_b, preds_std_b = predict_step(inputs_b)
+            preds_mean_b, preds_std_b = self.predict_step_generator(inputs_b, samples)
 
             preds_mean.append(preds_mean_b)
             preds_std.append(preds_std_b)
@@ -692,7 +699,7 @@ class VariationalPeakModel():
         prediction_positions = prediction_positions.reset_index()
         prediction_positions['idx'] = prediction_positions.index
         prediction_positions = pd.concat([prediction_positions,means_df,stds_df],axis=1)
-        prediction_positions_pr = pr.PyRanges(prediction_positions).sort()
+        prediction_positions_pr = pr.PyRanges(prediction_positions, int64=True).sort()
 
         original_file = bed2Pyranges(regions_peak_file)
         # left join
