@@ -10,7 +10,7 @@ from epitome.dataset import *
 dir_path = os.path.dirname(os.path.realpath(__file__))
 os.environ["EPITOME_DATA_PATH"] = os.path.abspath(os.path.join(dir_path, "data"))
 
-S3_TEST_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/test/data.zip'
+S3_TEST_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/test.zip'
 
 # set Epitome data path to test data files for testing
 dir_path = os.path.dirname(os.path.realpath(__file__))

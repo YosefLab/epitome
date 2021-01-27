@@ -20,7 +20,7 @@ from os.path import expanduser
 
 __path__ = __import__('pkgutil').extend_path(__path__, __name__)
 
-S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/data.zip'
+S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/hg19.zip'
 
 # os env that should be set by user to explicitly set the data path
 EPITOME_DATA_PATH_ENV="EPITOME_DATA_PATH"
