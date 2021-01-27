@@ -699,7 +699,7 @@ class VariationalPeakModel():
         prediction_positions = prediction_positions.reset_index()
         prediction_positions['idx'] = prediction_positions.index
         prediction_positions = pd.concat([prediction_positions,means_df,stds_df],axis=1)
-        prediction_positions_pr = pr.PyRanges(prediction_positions).sort()
+        prediction_positions_pr = pr.PyRanges(prediction_positions, int64=True).sort()
 
         original_file = bed2Pyranges(regions_peak_file)
         # left join
