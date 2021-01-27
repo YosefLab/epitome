@@ -92,9 +92,10 @@ class VariationalPeakModel():
 
             # Reserve chromosome 22 from the training data to validate model while training
             self.dataset.set_train_validation_indices(valid_chromosome)
+            print(self.dataset.get_data(Dataset.TRAIN_VALID).shape)
 
             # Creating a separate train-validation dataset
-            _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.VALID_TRAIN),
+            _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.TRAIN_VALID),
                                                     self.eval_cell_types,
                                                     self.eval_cell_types,
                                                     dataset.matrix,

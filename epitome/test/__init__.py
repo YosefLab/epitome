@@ -41,18 +41,8 @@ class EpitomeTestCase(unittest.TestCase):
 		dataset = EpitomeDataset(targets = eligible_targets,
 			cells = eligible_cells)
 
-
 		return VLP(dataset,
 			test_celltypes = ['K562'])
-
-	def makeSmallConvergingModel(self):
-		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
-		eligible_assays = ['DNase','CTCF']
-		return VLP(list(eligible_assays),
-			test_celltypes = ['K562'],
-			matrix = np.ones((5,2)).astype(int),
-			assaymap = assaymap,
-			cellmap = cellmap)
 
 
 	def tmpFile(self):
