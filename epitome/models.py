@@ -116,8 +116,6 @@ class VariationalPeakModel():
         else:
             self.data = load_epitome_data(data_path)
 
-
-
         self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
         
         if max_valid_records is None:
@@ -329,7 +327,7 @@ class VariationalPeakModel():
             neg_log_likelihood = self.loss_fn(labels, logits, weights)
             return neg_log_likelihood
         
-        @tf.function
+#         @tf.function
         def loopiter():
             # Initializing variables
             mean_valid_loss, iterations_decreasing, best_model_steps = sys.maxsize, 0, 0
@@ -352,22 +350,25 @@ class VariationalPeakModel():
                     new_valid_loss = []
 
                     for step_v, f_v in enumerate(self.train_valid_iter):
-                        print("step_v: " + str(step_v))
                         new_valid_loss.append(valid_step(f_v))
                         
                         if (step_v == self.max_valid_records):
                             break
 
-                    new_valid_loss = int(tf.concat(new_valid_loss, axis=0))
-                    new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
+                    new_valid_loss = tf.concat(new_valid_loss, axis=0)
+#                     print("new_valid_loss: " + str(new_valid_loss))
+                    new_mean_valid_loss_tf = tf.reduce_mean(new_valid_loss)
+#                     print("new_mean_valid_loss: " + str(new_mean_valid_loss))
+                    new_mean_valid_loss = new_mean_valid_loss_tf.numpy()
                     train_valid_losses.append(new_mean_valid_loss)
 
-                    tf.compat.v1.logging.info(str(step) + " Train Validation:" + str(new_mean_valid_loss))
+                    tf.compat.v1.logging.info(str(step) + " Train Validation:" + str(new_mean_valid_loss) + "  " + str(type(new_mean_valid_loss)))
 
                     # Check if the improvement in loss is at least min_delta. 
                     # If the loss has increased more than patience consecutive times, the function stops early.
                     # Else it continues training.
                     improvement = mean_valid_loss - new_mean_valid_loss
+                    print("improvement: " + str(improvement))
                     if improvement < min_delta:
                         iterations_decreasing += 1
                         if iterations_decreasing == patience:
