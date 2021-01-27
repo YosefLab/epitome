@@ -19,6 +19,7 @@ import tensorflow_probability as tfp
 from .functions import *
 from .constants import *
 from .generators import *
+from .dataset import *
 from .metrics import *
 import numpy as np
 
@@ -34,16 +35,14 @@ from operator import itemgetter
 #######################################################################
 
 class VariationalPeakModel():
-    """ Model for learning from ChIP-seq peaks.
+    """
+    Model for learning from ChIP-seq peaks.
     Modeled from `this Bayesian Neural Network <https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py>`_.
     """
 
     def __init__(self,
-                 assays,
+                 dataset,
                  test_celltypes = [],
-                 matrix = None,
-                 assaymap = None,
-                 cellmap = None,
                  debug = False,
                  batch_size = 64,
                  shuffle_size = 10,
@@ -52,102 +51,66 @@ class VariationalPeakModel():
                  l2=0.,
                  lr=1e-3,
                  radii=[1,3,10,30],
-                 similarity_assays = ['DNase'],
-                 train_indices = None,
-                 data = None,
                  checkpoint = None):
-        """
+        '''
         Initializes Peak Model
 
-        Args:
-            :param assays: list of assays to train model on
-            :param test_celltypes: list of cell types to hold out for test. Should be in cellmap
-            :param matrix: numpy matrix of indices mapping assay and cell to index in data
-            :param assaymap: map of assays mapping assay name to row in matrix
-            :param cellmap: map of cell types mapping cell name to column in matrix
-            :param debug: used to print out intermediate validation values
-            :param batch_size: batch size (default is 64)
-            :param shuffle_size: data shuffle size (default is 10)
-            :param prefetch_size: data prefetch size (default is 10)
-            :param l1: l1 regularization (default is 0)
-            :param l2: l2 regularization (default is 0)
-            :param lr: lr (default is 1e-3)
-            :param radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30])
-            :param train_indices: option numpy array of indices to train from data[Dataset.TRAIN]
-            :param data: data loaded from datapath. This option is mostly for testing, so users dont have to load in data for
-            each model.
-        """
+        :param EpitomeDataset dataset: EpitomeDataset
+        :param list test_celltypes: list of cell types to hold out for test. Should be in cellmap
+        :param bool debug: used to print out intermediate validation values
+        :param int batch_size: batch size (default is 64)
+        :param int shuffle_size: data shuffle size (default is 10)
+        :param int prefetch_size: data prefetch size (default is 10)
+        :param floatl1: l1 regularization (default is 0)
+        :param float l2: l2 regularization (default is 0)
+        :param float lr: lr (default is 1e-3)
+        :param list radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30])
+        each model.
+        :param str checkpoint: path to load model from.
+        '''
 
         logging.getLogger("tensorflow").setLevel(logging.INFO)
 
-        # user can provide their own assaymap information.
-        if assaymap is not None:
-            assert matrix is not None and cellmap is not None, "matrix, cellmap, and assaymap must all be set"
-        if cellmap is not None:
-            assert matrix is not None and assaymap is not None, "matrix, cellmap, and assaymap must all be set"
-        if matrix is not None:
-            assert assaymap is not None and cellmap is not None, "matrix, cellmap, and assaymap must all be set"
+        # set the dataset
+        self.dataset = dataset
 
-        # get cell lines to train on if not specified
-        if assaymap is None:
-            # assays should include similarity assays and predicted assays
-            assays = list(set(assays + similarity_assays))
-
-            # get list of TFs that have minimum number of cell lines
-            matrix, cellmap, assaymap = get_assays_from_feature_file(eligible_assays = assays,
-                                                                     similarity_assays = similarity_assays)
-            assert len(assays) == len(list(assaymap))
-
-
-        assert (set(test_celltypes) < set(list(cellmap))), \
-                "test_celltypes %s must be subsets of available cell types %s" % (str(test_celltypes), str(list(cellmap)))
+        assert (set(test_celltypes) < set(list(self.dataset.cellmap))), \
+                "test_celltypes %s must be subsets of available cell types %s" % (str(test_celltypes), str(list(dataset.cellmap)))
 
         # get evaluation cell types by removing any cell types that would be used in test
-        self.eval_cell_types = list(cellmap).copy()
+        self.eval_cell_types = list(self.dataset.cellmap).copy()
         self.test_celltypes = test_celltypes
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
 
-        data_path = GET_DATA_PATH()
-
-        # load in data, if the user has not specified it
-        if data is not None:
-            self.data = data
-        else:
-            self.data = load_epitome_data(data_path)
-
-
-
-        self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
-
-        input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.data[Dataset.TRAIN],
+        input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.TRAIN),
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
-                                                matrix,
-                                                assaymap,
-                                                cellmap,
-                                                similarity_assays = similarity_assays,
+                                                dataset.matrix,
+                                                dataset.targetmap,
+                                                dataset.cellmap,
+                                                similarity_targets = dataset.similarity_targets,
                                                 radii = radii, mode = Dataset.TRAIN),
                                                 batch_size, shuffle_size, prefetch_size)
 
-        _, _,            self.valid_iter = generator_to_tf_dataset(load_data(self.data[Dataset.VALID],
+        _, _,            self.valid_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.VALID),
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
-                                                matrix,
-                                                assaymap,
-                                                cellmap,
-                                                similarity_assays = similarity_assays,
+                                                dataset.matrix,
+                                                dataset.targetmap,
+                                                dataset.cellmap,
+                                                similarity_targets = dataset.similarity_targets,
                                                 radii = radii, mode = Dataset.VALID),
                                                 batch_size, 1, prefetch_size)
 
         # can be empty if len(test_celltypes) == 0
         if len(self.test_celltypes) > 0:
-            _, _,            self.test_iter = generator_to_tf_dataset(load_data(self.data[Dataset.TEST],
+            _, _,            self.test_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.TEST),
                                                    self.test_celltypes,
                                                    self.eval_cell_types,
-                                                   matrix,
-                                                   assaymap,
-                                                   cellmap,
-                                                   similarity_assays = similarity_assays,
+                                                   dataset.matrix,
+                                                   dataset.targetmap,
+                                                   dataset.cellmap,
+                                                   similarity_targets = dataset.similarity_targets,
                                                    radii = radii, mode = Dataset.TEST),
                                                    batch_size, 1, prefetch_size)
 
@@ -163,24 +126,17 @@ class VariationalPeakModel():
 
         # set self
         self.radii = radii
-        self.similarity_assays = similarity_assays
         self.debug = debug
-        self.assaymap = assaymap
-        self.test_celltypes = test_celltypes
-        self.matrix = matrix
-        self.assaymap= assaymap
-        self.cellmap = cellmap
-        self.predict_assays = list(self.assaymap)
-        [self.predict_assays.remove(i) for i in self.similarity_assays]
         self.model = self.create_model()
 
     def get_weight_parameters(self):
-        """
+        '''
         Extracts weight posterior statistics for layers with weight distributions.
-        :param model: keras model
 
-        :return triple of layer names, weight means for each layer and stddev for each layer.
-        """
+        :param keras model model: keras model
+        :return: triple of layer names, weight means for each layer and stddev for each layer.
+        :rtype: tuple
+        '''
 
         names = []
         qmeans = []
@@ -197,10 +153,12 @@ class VariationalPeakModel():
         return (names, qmeans, qstds)
 
     def save(self, checkpoint_path):
-        """
+        '''
         Saves model.
-        :param checkpoint_path: string file path to save model to.
-        """
+
+        :param str checkpoint_path: string file path to save model to.
+        '''
+
         weights_path = os.path.join(checkpoint_path, "weights.h5")
         meta_path = os.path.join(checkpoint_path, "model_params.pickle")
 
@@ -215,17 +173,13 @@ class VariationalPeakModel():
         file.close()
 
         # save model params to pickle file
-        dict_ = {'assays': list(self.assaymap),
+        dict_ = {'dataset_params': self.dataset.get_parameter_dict(),
                          'test_celltypes':self.test_celltypes,
-                         'matrix':self.matrix,
-                         'assaymap':self.assaymap,
-                         'cellmap':self.cellmap,
                          'debug': self.debug,
                          'batch_size':self.batch_size,
                          'shuffle_size':self.shuffle_size,
                          'prefetch_size':self.prefetch_size,
-                         'radii':self.radii,
-                         'similarity_assays': self.similarity_assays}
+                         'radii':self.radii}
 
         fileObject = open(meta_path,'wb')
         pickle.dump(dict_,fileObject)
@@ -235,28 +189,35 @@ class VariationalPeakModel():
         raise NotImplementedError()
 
     def g(self, p, a=1, B=0, y=1):
-        """ Normalization Function. Normalizes loss w.r.t. label proportion.
+        '''
+        Normalization Function. Normalizes loss w.r.t. label proportion.
 
         Constraints:
          1. g(p) = 1 when p = 1
          2. g(p) = a * p^y + B, where a, y and B are hyperparameters
-        """
+
+         :param int p: base
+         :param int a: constant multiplier
+         :param int B: additive constant
+         :param int y: power
+         :return: normalized loss
+         :rtype: float
+
+        '''
         return a * tf.math.pow(p, y) + B
 
     def loss_fn(self, y_true, y_pred, weights):
-        """
+        '''
         Loss function for Epitome. Calculates the weighted sigmoid cross entropy
         between logits and true values.
 
-        Args:
-          :param y_true: true binary values
-          :param y_pred: logits
-          :param weights: binary weights whether the true values exist for
-          a given cell type/assay combination
-
-        Returns:
-          Loss summed over all TFs and genomic loci.
-        """
+        :param tensor or numpy.array y_true: true binary values
+        :param tensor or numpy.array y_pred: logits
+        :param tensor or numpy.array weights: binary weights whether the true values exist for
+            a given cell type/target combination
+        :return: Loss summed over all TFs and genomic loci.
+        :rtype: tensor
+        '''
         # weighted sum of cross entropy for non 0 weights
         # Reduction method = Reduction.SUM_BY_NONZERO_WEIGHTS
         loss = tf.compat.v1.losses.sigmoid_cross_entropy(y_true,
@@ -267,12 +228,11 @@ class VariationalPeakModel():
         return tf.math.reduce_sum(loss, axis=0)
 
     def train(self, num_steps):
-        """ Trains an Epitome model for num_steps iterations.
+        '''
+        Trains an Epitome model for num_steps iterations.
 
-        Args:
-          :param num_steps: number of iterations to train for
-
-        """
+        :param int num_steps: number of iterations to train for
+        '''
 
         tf.compat.v1.logging.info("Starting Training")
 
@@ -315,9 +275,15 @@ class VariationalPeakModel():
         loopiter()
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
-        """
+        '''
         Tests model on valid and test dataset handlers.
-        """
+
+        :param int num_samples: number of data points to run on
+        :param Dataset Enum mode: what mode to run in DATASET.VALID, TRAIN, or TEST)
+        :param bool calculate_metrics: whether to return auROC/auPR
+        :return: dictionary of results
+        :rtype: dict
+        '''
 
         if (mode == Dataset.VALID):
             handle = self.valid_iter # for standard validation of validation cell types
@@ -330,38 +296,41 @@ class VariationalPeakModel():
         return self.run_predictions(num_samples, handle, calculate_metrics)
 
     def test_from_generator(self, num_samples, ds, calculate_metrics=True):
-        """
-        Runs test given a specified data generator
-        :param num_samples: number of samples to test
-        :param ds: tensorflow dataset, created by dataset_to_tf_dataset
-        :param cell_type: cell type to test on. Used to generate holdout indices.
+        '''
+        Runs test given a specified data generator.
 
-        :return predictions
-        """
+        :param int num_samples: number of samples to test
+        :param tensorflow dataset ds: tensorflow dataset, created by dataset_to_tf_dataset
+        :param bool calculate_metrics: whether to return auROC/auPR
+        :return: predictions
+        :rtype: dict
+        '''
+
         return self.run_predictions(num_samples, ds, calculate_metrics)
 
-    def eval_vector(self, data, matrix, indices, samples = 50):
-        """
+    def eval_vector(self, matrix, indices, samples = 50):
+        '''
         Evaluates a new cell type based on its chromatin (DNase or ATAC-seq) vector, as well
-        as any other similarity assays (acetylation, methylation, etc.). len(vector) should equal
-        the data.shape[1]
-        :param data: data to build features from
-        :param matrix: matrix of 0s/1s, where # rows match # similarity assays in model
-        :param indices: indices of vector to actually score. You need all of the locations for the generator.
+        as any other similarity targets (acetylation, methylation, etc.). len(vector) should equal
+        the self.dataset.get_data(Dataset.ALL).shape[1]
 
-        :return predictions for all factors
-        """
+        :param numpy.matrix matrix: matrix of 0s/1s, where # rows match # similarity targets in model
+        :param numpy.array indices: indices of vector to actually score. You need all of the locations for the generator.
+        :param int samples: number of times to sample from network
+        :return: predictions
+        :rtype: dict
+        '''
 
-        input_shapes, output_shape, ds = generator_to_tf_dataset(load_data(data,
+        input_shapes, output_shape, ds = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.ALL),
                  self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
                  self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
-                 self.matrix,
-                 self.assaymap,
-                 self.cellmap,
+                 self.dataset.matrix,
+                 self.dataset.targetmap,
+                 self.dataset.cellmap,
                  radii = self.radii,
                  mode = Dataset.RUNTIME,
                  similarity_matrix = matrix,
-                 similarity_assays = self.similarity_assays,
+                 similarity_targets = self.dataset.similarity_targets,
                  indices = indices), self.batch_size, 1, self.prefetch_size)
 
         num_samples = len(indices)
@@ -391,23 +360,27 @@ class VariationalPeakModel():
         return predict_step_generator(split_inputs, samples=1)[0]
 
     def _predict(self, numpy_matrix):
-        """
+        '''
         Run predictions on a numpy matrix. Size of numpy_matrix should be # examples by features.
         This function is mostly used for testing, as it requires the user to pre-generate the
         features using the generator function in generators.py.
-        """
 
+        :param numpy.matrix numpy_matrix: matrix of features to predict
+        :return: predictions
+        :rtype: tensor
+        '''
         return self.predict_step_matrix(numpy_matrix)
-    
+
     @tf.function
     def predict_step_generator(self, inputs_b, samples = 50):
-        """Runs predictions on inputs from run_predictions
+        '''
+        Runs predictions on inputs from run_predictions
 
         :param tf.Tensor inputs_b: batch of input data
         :param int samples: Number of samples to test. Defaults to 50.
         :return: mean and standard deviations of predictions
         :rtype: tuple
-        """
+        '''
 
         # sample n times by tiling batch by rows, running
         # predictions for each row
@@ -419,20 +392,23 @@ class VariationalPeakModel():
         return tf.math.reduce_mean(preds, axis=0), tf.math.reduce_std(preds, axis=0)
 
     def run_predictions(self, num_samples, iter_, calculate_metrics = True, samples = 50):
-        """
+        '''
         Runs predictions on num_samples records
-        :param num_samples: number of samples to test
-        :param iter_: output of self.sess.run(generator_to_one_shot_iterator()), handle to one shot iterator of records
-        :param log: if true, logs individual factor accuracies
 
-        :return preds, truth, assay_dict, auROC, auPRC, False
+        :param int num_samples: number of samples to test
+        :param tf.dataset iter_: output of self.sess.run(generator_to_one_shot_iterator()), handle to one shot iterator of records
+        :param bool calculate_metrics: whether to return auROC/auPR
+        :param int samples: number of times to sample from network
+
+        :return: dict of preds, truth, target_dict, auROC, auPRC, False
             preds = predictions,
             truth = actual values,
             sample_weight: 0/1 weights on predictions.
-            assay_dict = if log=True, holds predictions for individual factors
+            target_dict = if log=True, holds predictions for individual factors
             auROC = average macro area under ROC for all factors with truth values
             auPRC = average area under PRC for all factors with truth values
-        """
+        :rtype: dict
+        '''
 
         batches = int(num_samples / self.batch_size)+1
 
@@ -482,7 +458,7 @@ class VariationalPeakModel():
                 'preds_std': preds_std,
                 'truth': truth,
                 'weights': sample_weight,
-                'assay_dict': None,
+                'target_dict': None,
                 'auROC': None,
                 'auPRC': None
             }
@@ -492,16 +468,14 @@ class VariationalPeakModel():
         try:
 
             # try/accept for cases with only one class (throws ValueError)
-            assay_dict = get_performance(self.assaymap, preds_mean, truth_reset, sample_weight, self.predict_assays)
+            target_dict = get_performance(self.dataset.targetmap, preds_mean, truth_reset, sample_weight, self.dataset.predict_targets)
 
             # calculate averages
-            auROC = np.nanmean(list(map(lambda x: x['AUC'],assay_dict.values())))
-            auPRC = np.nanmean(list(map(lambda x: x['auPRC'],assay_dict.values())))
-            avgGINI = np.nanmean(list(map(lambda x: x['GINI'],assay_dict.values())))
+            auROC = np.nanmean(list(map(lambda x: x['AUC'],target_dict.values())))
+            auPRC = np.nanmean(list(map(lambda x: x['auPRC'],target_dict.values())))
 
             tf.compat.v1.logging.info("macro auROC:     " + str(auROC))
             tf.compat.v1.logging.info("auPRC:     " + str(auPRC))
-            tf.compat.v1.logging.info("GINI:     " + str(avgGINI))
         except ValueError as v:
             auROC = None
             auPRC = None
@@ -512,69 +486,61 @@ class VariationalPeakModel():
             'preds_std': preds_std,
             'truth': truth,
             'weights': sample_weight,
-            'assay_dict': assay_dict,
+            'target_dict': target_dict,
             'auROC': auROC,
             'auPRC': auPRC
         }
 
     def score_whole_genome(self, similarity_peak_files,
                        file_prefix,
-                       chrs=None,
-                       all_data = None):
-        """
+                       chrs=None):
+        '''
         Runs a whole genome scan for all available genomic regions in the dataset (about 3.2Million regions)
-        Takes about 1 hour.
+        Takes about 1 hour on entire genome.
 
-        Args:
-            :param similarity_peak_files: list of similarity_peak_files corresponding to similarity_assays
-            :param file_prefix: path to save compressed numpy file to. Adds '.npz' extension.
-            :param chroms: list of chromosome names to score. If none, scores all chromosomes.
-            :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
-
-        """
+        :param list similarity_peak_files: list of similarity_peak_files corresponding to similarity_targets
+        :param str file_prefix: path to save compressed numpy file to. Adds '.npz' extension.
+        :param list chrs: list of chromosome names to score. If none, scores all chromosomes.
+        '''
 
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set,
         # and their indices are stored in missing_idx for future use
-        peak_vectors = [bedFile2Vector(f, self.regionsFile)[0] for f in similarity_peak_files]
+        peak_vectors = [pyranges2Vector(bed2Pyranges(f), self.dataset.regions)[0] for f in similarity_peak_files]
         peak_matrix = np.vstack(peak_vectors)
         del peak_vectors
 
-        liRegions = list(enumerate(load_bed_regions(self.regionsFile)))
+        regions  = self.dataset.regions
 
-        # filter liRegions by chrs
+        # filter regions by chrs
         if chrs is not None:
-            liRegions = [i for i in liRegions if i[1].chrom in chrs]
+            regions = regions[regions.Chromosome.isin(chrs)]
 
-        # get indices to score
-        idx = np.array([i[0] for i in liRegions])
-        liRegions = [i[1] for i in liRegions]
+
+        # get sorted indices to score
+        idx = np.array(sorted(list(regions.idx)))
 
         print("scoring %i regions" % idx.shape[0])
 
-        if all_data is None:
-            all_data = concatenate_all_data(self.data, self.regionsFile)
-
         # tuple of means and stds
-        predictions = self.eval_vector(all_data, peak_matrix, idx)
+        predictions = self.eval_vector(peak_matrix, idx)
         print("finished predictions...", predictions[0].shape)
 
-        # zip together means and stdevs for each position in idx
+        # zip together means for each position in idx
 
-        # return matrix of region, TF information
-        npRegions = np.array(list(map(lambda x: np.array([x.chrom, x.start, x.end]),liRegions)))
+        # return matrix of region, TF information. trim off idx column
+        npRegions = regions.df.sort_values(by='idx').values[:,:-1]
         # TODO turn into right types (all strings right now)
         # predictions[0] is means of size n regions by # ChIP-seq peaks predicted
         means = np.concatenate([npRegions, predictions[0]], axis=1)
-        stds = np.concatenate([npRegions, predictions[1]], axis=1)
 
         # can load back in using:
         # > loaded = np.load('file_prefix.npz')
         # > loaded['means'], loaded['stds']
         # TODO: save the right types!  (currently all strings!)
-        np.savez_compressed(file_prefix, means = means, stds=stds,
-                            names=np.array(['chr','start','end'] + self.predict_assays))
+        np.savez_compressed(file_prefix, means = means,
+                            names=np.array(['chr','start','end'] + self.dataset.predict_targets))
 
-        print("columns for matrices are chr, start, end, %s" % ", ".join(self.predict_assays))
+        print("columns for matrices are chr, start, end, %s" % ", ".join(self.dataset.predict_targets))
 
     def score_matrix(self, accessilibility_peak_matrix, regions, all_data = None):
         """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
@@ -583,7 +549,7 @@ class VariationalPeakModel():
         Args:
             :param accessilibility_peak_matrix: numpy matrix of (samples by genomic regions)
             :param regions_peak_file: either narrowpeak or bed file containing regions to score, OR a pyranges object
-                with columns [Chomosome, Start, End, idx]. Index matches each genomic region to a row in 
+                with columns [Chomosome, Start, End, idx]. Index matches each genomic region to a row in
                 accessilibility_peak_matrix. In both cases, number of regions Should
                 match rows in accessilibility_peak_matrix
             :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
@@ -592,17 +558,14 @@ class VariationalPeakModel():
             3-dimensional numpy matrix of predictions: sized (samples by regions by ChIP-seq targets)
         """
 
-        if all_data is None:
-            all_data = concatenate_all_data(self.data, self.regionsFile)
-        
         if type(regions) == str:
             regions_bed = bed2Pyranges(regions)
-        else:
+        elif type(regions) == pr.PyRanges:
             regions_bed = regions
+        else:
+            raise Exception("regions must be type scring or pr.Pyranges, but got type %s" % type(regions))
 
-        all_data_regions = bed2Pyranges(self.regionsFile)
-
-        joined = regions_bed.join(all_data_regions, how='left',suffix='_alldata').df
+        joined = regions_bed.join(self.dataset.regions, how='left',suffix='_alldata').df
 
         idx = joined['idx_alldata']
 
@@ -611,10 +574,10 @@ class VariationalPeakModel():
         # TODO 9/10/2020: should do something more efficiently than a for loop
         for sample_i in tqdm.tqdm(range(accessilibility_peak_matrix.shape[0])):
             # tuple of means and stds
-            peaks_i = np.zeros((len(all_data_regions)))
+            peaks_i = np.zeros((len(self.dataset.regions)))
             peaks_i[idx] = accessilibility_peak_matrix[sample_i, joined['idx']]
 
-            means, _ = self.eval_vector(all_data, peaks_i, idx, samples = 1)
+            means, _ = self.eval_vector(peaks_i, idx, samples = 1)
 
             # group means by joined['idx']
             results.append(means)
@@ -643,26 +606,24 @@ class VariationalPeakModel():
         return final
 
 
-    def score_peak_file(self, similarity_peak_files, regions_peak_file, all_data = None):
-        """ Runs predictions on a set of peaks defined in a bed or narrowPeak file.
+    def score_peak_file(self, similarity_peak_files, regions_peak_file):
+        '''
+        Runs predictions on a set of peaks defined in a bed or narrowPeak file.
 
-        Args:
-            :param similarity_peak_files: narrowpeak or bed files containing chromatin accessibility to score
-            :param regions_peak_file: narrowpeak or bed file containing regions to score.
-            :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
-
-        Returns:
-            pandas dataframe of genomic regions and predictions
-        """
+        :param list similarity_peak_files: list of narrowpeak or bed files containing peaks for similarity assays.
+          Length(similarity_peak_files) should equal the number of similarity_targets in self.dataset.
+        :param str regions_peak_file: narrowpeak or bed file containing regions to score.
+        :return: pandas dataframe of genomic regions and predictions
+        :rtype: pandas.dataframe
+        '''
 
 
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set,
         # and their indices are stored in missing_idx for future use
-        peak_vectors = [bedFile2Vector(f, self.regionsFile)[0] for f in similarity_peak_files]
-        peak_matrix = np.vstack(peak_vectors)
-        del peak_vectors
+        similarity_peak_prs = [bed2Pyranges(f) for f in similarity_peak_files]
+        peak_matrix = np.vstack([pyranges2Vector(f, self.dataset.regions)[0] for f in similarity_peak_prs])
 
-        peak_vector_regions, all_peaks_regions = bedFile2Vector(regions_peak_file, self.regionsFile)
+        peak_vector_regions, all_peaks_regions = pyranges2Vector(bed2Pyranges(regions_peak_file), self.dataset.regions)
 
         print("finished loading peak file")
 
@@ -674,11 +635,8 @@ class VariationalPeakModel():
         if len(idx) == 0:
             raise ValueError("No positive peaks found in %s" % regions_peak_file)
 
-        if all_data is None:
-            all_data = concatenate_all_data(self.data, self.regionsFile)
-
         # tuple of means and stds
-        means, stds = self.eval_vector(all_data, peak_matrix, idx)
+        means, stds = self.eval_vector(peak_matrix, idx)
         print("finished predictions...", means.shape)
 
         assert type(means) == type(stds), "Means and STDs variables not of the same type"
@@ -686,12 +644,13 @@ class VariationalPeakModel():
             means = means.numpy()
             stds = stds.numpy()
 
-        means_df =  pd.DataFrame(data=means, columns=self.predict_assays)
-        std_cols = list(map(lambda x: x + "_stds",self.predict_assays))
+
+        means_df =  pd.DataFrame(data=means, columns=self.dataset.predict_targets)
+        std_cols = list(map(lambda x: x + "_stds",self.dataset.predict_targets))
         stds_df =  pd.DataFrame(data=stds, columns=std_cols)
 
         # read in regions file and filter by indices that were scored
-        p = pd.read_csv(self.regionsFile, sep='\t',header=None)[[0,1,2]]
+        p = self.dataset.regions.df
         p['idx']=p.index # keep original bed region ordering using idx column
         p.columns = ['Chromosome', 'Start','End','idx']
         prediction_positions = p[p['idx'].isin(idx)] # select regions that were scored
@@ -724,13 +683,14 @@ class VLP(VariationalPeakModel):
     def __init__(self,
              *args,
              **kwargs):
-        """ Creates a new model with 4 layers with 100 unites each.
+        '''
+        Creates a new model with 4 layers with 100 unites each.
             To resume model training on an old model, call:
 
             .. code-block:: python
 
                 model = VLP(checkpoint=path_to_saved_model)
-        """
+        '''
         self.activation = tf.tanh
         self.layers = 2
 
@@ -738,7 +698,12 @@ class VLP(VariationalPeakModel):
             fileObject = open(kwargs["checkpoint"] + "/model_params.pickle" ,'rb')
             metadata = pickle.load(fileObject)
             fileObject.close()
-            # remove checkpoint from kwargs
+
+            # reconstruct dataset and delete unused parameters
+            dataset = EpitomeDataset(**metadata['dataset_params'])
+            metadata['dataset'] = dataset
+            del metadata['dataset_params']
+
             VariationalPeakModel.__init__(self, **metadata, **kwargs)
             file = h5py.File(os.path.join(kwargs["checkpoint"], "weights.h5"), 'r')
 
@@ -753,8 +718,9 @@ class VLP(VariationalPeakModel):
             VariationalPeakModel.__init__(self, *args, **kwargs)
 
     def create_model(self, **kwargs):
-        """ Creates an Epitome model.
-        """
+        '''
+        Creates an Epitome model.
+        '''
         cell_inputs = [tf.keras.layers.Input(shape=(self.num_inputs[i],))
                        for i in range(len(self.num_inputs))]
 
