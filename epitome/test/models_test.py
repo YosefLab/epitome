@@ -55,7 +55,6 @@ class ModelsTest(EpitomeTestCase):
     
     def test_train_early_stop_model(self):
         train_iters = 1000
-        validation_size = 10
         
         # create model and train
         model = self.makeSmallConvergingModel()

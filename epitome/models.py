@@ -356,9 +356,7 @@ class VariationalPeakModel():
                             break
 
                     new_valid_loss = tf.concat(new_valid_loss, axis=0)
-#                     print("new_valid_loss: " + str(new_valid_loss))
                     new_mean_valid_loss_tf = tf.reduce_mean(new_valid_loss)
-#                     print("new_mean_valid_loss: " + str(new_mean_valid_loss))
                     new_mean_valid_loss = new_mean_valid_loss_tf.numpy()
                     train_valid_losses.append(new_mean_valid_loss)
 
@@ -368,7 +366,6 @@ class VariationalPeakModel():
                     # If the loss has increased more than patience consecutive times, the function stops early.
                     # Else it continues training.
                     improvement = mean_valid_loss - new_mean_valid_loss
-                    print("improvement: " + str(improvement))
                     if improvement < min_delta:
                         iterations_decreasing += 1
                         if iterations_decreasing == patience:
@@ -857,4 +854,5 @@ class VLP(VariationalPeakModel):
                                         name="output_layer")(last)
 
         model = tf.keras.models.Model(inputs=cell_inputs, outputs=outputs)
+
         return model
