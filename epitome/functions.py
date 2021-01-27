@@ -146,12 +146,13 @@ def get_missing_indices_for_cell(matrix, cellmap, cell):
 
 ################## LOADING DATA ######################
 
-def download_and_unzip(url, dst):
+def download_and_unzip(url, dst, assembly):
     """ Downloads a url to local destination, unzips it and deletes zip.
 
     Args:
         :param url: url to download.
         :param dst: local absolute path to download data to.
+        :param assembly: genome assembly to download.
     """
     if not os.path.exists(dst):
         os.makedirs(dst)
@@ -159,8 +160,10 @@ def download_and_unzip(url, dst):
     dst = os.path.join(dst, os.path.basename(url))
 
     final_dst = dst.split('.zip')[0]
+    
+    # TODO(jahnavis): Fix statements
+    assert(assembly in EPITOME_GENOME_ASSEMBLIES, "assembly not in S3 cluster. Must be...")
 
-    # download data if it does not exist
     if not os.path.exists(final_dst):
 
         file_size = int(urllib.request.urlopen(url).info().get('Content-Length', -1))
@@ -192,7 +195,7 @@ def download_and_unzip(url, dst):
             # delete old zip to free space
             os.remove(dst)
 
-def load_epitome_data(data_dir=None):
+def load_epitome_data():
     """
     Loads data processed using data/download_encode.py. This will load three sparse matrix files
     (.npz). One for train, valid (chr7) and test (chr 8 and 9). If data is not available,
@@ -207,19 +210,27 @@ def load_epitome_data(data_dir=None):
     :returns: train_data, valid_data, and test_data
         3 numpy ndarrays for train, valid and test
     """
-
-    if not data_dir:
-        data_dir = GET_DATA_PATH()
-        download_and_unzip(S3_DATA_PATH, GET_EPITOME_USER_PATH())
-
-    # make sure all required files exist
+    # Grab data directory and download it from S3 if it is empty
+    data_dir = GET_DATA_PATH()
+    if not contains_required_files(data_dir):
+        assembly = os.path.basename(data_dir)
+        url_path = os.path.join(os.path.join(S3_DATA_PATH, assembly), 'data.zip')
+        download_and_unzip(url_path, data_dir, assembly)
+        # make sure all required files exist
+        assert(contains_required_files(data_dir))
+        
     required_paths = [os.path.join(data_dir, x) for x in REQUIRED_FILES]
-    assert(np.all([os.path.exists(x) for x in required_paths]))
     npz_files = list(filter(lambda x: x.endswith(".npz"), required_paths))
 
     sparse_matrices = [scipy.sparse.load_npz(x).toarray() for x in npz_files]
     return {Dataset.TRAIN: sparse_matrices[0], Dataset.VALID: sparse_matrices[1], Dataset.TEST: sparse_matrices[2]}
 
+def contains_required_files(data_dir):
+    if os.path.exists(final_dst):
+        required_paths = [os.path.join(data_dir, x) for x in REQUIRED_FILES]
+        return np.all([os.path.exists(x) for x in required_paths])
+    return False
+    
 ################### Parsing Deepsea Files ########################
 
 def load_bed_regions(bedfile):
