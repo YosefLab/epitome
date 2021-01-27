@@ -252,21 +252,20 @@ class VariationalPeakModel():
         return tf.math.reduce_sum(loss, axis=0)
 
     def train(self, num_steps, patience=1, min_delta=0):
-        """
+        '''
         Trains an Epitome model. If patience and min_delta are not specified, the model will train on num_step points.
         Else, the model will either train on num_step points or stop training early if the train_valid_loss is converging
         (based on the patience and/or min_delta hyper-parameters), whatever comes first.
 
-        Args:
-          :param int num_steps (int): number of iterations to train for
-          :param patience (int): number of iterations (200 steps) with no improvement after which training will be stopped.
-          :param min_delta (float): minimum change in the monitored quantity to qualify as an improvement,
-            i.e. an absolute change of less than min_delta, will count as no improvement.
+        :param int num_steps: number of iterations to train for
+        :param int patience: number of iterations (200 steps) with no improvement after which training will be stopped.
+        :param float min_delta: minimum change in the monitored quantity to qualify as an improvement,
+          i.e. an absolute change of less than min_delta, will count as no improvement.
 
-        Returns:
-          :return triple of number of steps trained for the best model, number of steps the model has trained total,
-            the train_validation losses (returns an empty list if self.max_valid_batches is None).
-        """
+        :return triple of number of steps trained for the best model, number of steps the model has trained total,
+          the train_validation losses (returns an empty list if self.max_valid_batches is None).
+        :rtype: tuple
+        '''
         tf.compat.v1.logging.info("Starting Training")
 
         @tf.function

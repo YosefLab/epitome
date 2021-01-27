@@ -35,11 +35,13 @@ class EpitomeTestCase(unittest.TestCase):
 				min_targets_per_cell = min_targets_per_cell)
 
 	def makeSmallModel(self):
+
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_targets = ['DNase','CTCF']
 
 		dataset = EpitomeDataset(targets = eligible_targets,
 			cells = eligible_cells)
+
 
 		return VLP(dataset,
 			test_celltypes = ['K562'])
