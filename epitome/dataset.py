@@ -111,7 +111,7 @@ class EpitomeDataset:
             'End':dataset['columns']['start'][:] + dataset['columns']['binSize']})
 
         self.regions['idx']=self.regions.index
-        self.regions = pr.PyRanges(self.regions)
+        self.regions = pr.PyRanges(self.regions, int64=True)
 
         # save indices for later use
         self.indices = {}
@@ -173,7 +173,7 @@ class EpitomeDataset:
         '''
         Gets indices for a cell.
         TODO: this function is called in genertors.py.
-        Once generators.py is rebased to use dataset, 
+        Once generators.py is rebased to use dataset,
         this function should NOT be static.
 
         :param str cell: celltype name
@@ -189,7 +189,7 @@ class EpitomeDataset:
         '''
         Gets indices for a assay.
         TODO: this function is called in genertors.py.
-        Once generators.py is rebased to use dataset, 
+        Once generators.py is rebased to use dataset,
         this function should NOT be static.
 
         :param str target: str target

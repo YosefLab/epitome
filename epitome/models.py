@@ -536,7 +536,7 @@ class VariationalPeakModel():
         # > loaded = np.load('file_prefix.npz')
         # > loaded['means'], loaded['stds']
         # TODO: save the right types!  (currently all strings!)
-        np.savez_compressed(file_prefix, means = means, stds=stds,
+        np.savez_compressed(file_prefix, means = means,
                             names=np.array(['chr','start','end'] + self.dataset.predict_targets))
 
         print("columns for matrices are chr, start, end, %s" % ", ".join(self.dataset.predict_targets))
