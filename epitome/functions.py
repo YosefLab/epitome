@@ -16,12 +16,15 @@ Helper functions
   range_for_contigs
   calculate_epitome_regions
   concatenate_all_data
+  saveToyData
 """
 
 # imports
 from epitome import *
 import h5py
 from scipy.io import savemat
+import csv
+import mimetypes
 
 import pandas as pd
 import collections
@@ -33,7 +36,9 @@ from scipy.io import loadmat
 from .constants import *
 import scipy.sparse
 import pyranges as pr
+from sklearn.metrics import jaccard_score
 
+import warnings
 from operator import itemgetter
 import urllib
 import sys
@@ -42,6 +47,7 @@ import urllib
 import tqdm
 from zipfile import ZipFile
 import gzip
+import shutil
 
 # to load in positions file
 import multiprocessing
@@ -112,7 +118,7 @@ def get_y_indices_for_cell(matrix, cellmap, cell):
     :return locations of indices for the cell name specified
     """
 
-    return np.copy(matrix[cellmap[cell]])
+    return np.copy(matrix[cellmap[cell],:])
 
 
 def get_y_indices_for_assay(matrix, assaymap, assay):
@@ -155,7 +161,7 @@ def download_and_unzip(url, dst):
     """
     if not os.path.exists(dst):
         os.makedirs(dst)
-    
+
     dst = os.path.join(dst, os.path.basename(url))
 
     final_dst = dst.split('.zip')[0]
@@ -223,7 +229,7 @@ def load_epitome_data(data_dir=None):
 ################### Parsing Deepsea Files ########################
 
 def load_bed_regions(bedfile):
-    ''' Loads Deepsea bed file (stored as .gz format), removing
+    ''' Loads bed file (stored as .gz format), removing
     regions that have no data (the regions between valid/test
     and chromosomes X/Y).
 
@@ -274,26 +280,27 @@ def list_assays(feature_name_file = None):
 
 
 
+
 def get_assays_from_feature_file(feature_name_file = None,
                                  eligible_assays = None,
                                  eligible_cells = None,
                                  min_cells_per_assay= 3,
+                                 similarity_assays = ['DNase'],
                                  min_assays_per_cell = 2):
     ''' Parses a feature name file. File can be found in repo at ../data/feature_name.
     Returns at matrix of cell type/assays which exist for a subset of cell types.
 
     Args:
-        :param: feature_name_file. Path to file containing cell, ChIP metadata. Defaults to module data feature file.
+        :param: feature_name_file: Path to file containing cell, ChIP metadata. Defaults to module data feature file.
         :param eligible_assays: list of assays to filter by (ie ["CTCF", "EZH2", ..]). If None, then returns all assays.
-        Note that DNase will always be included in the factors, as it is required by Epitome.
         :param eligible_cells: list of cells to filter by (ie ["HepG2", "GM12878", ..]). If None, then returns all cell types.
         :param min_cells_per_assay: number of cell types an assay must have to be considered
         :param min_assays_per_cell: number of assays a cell type must have to be considered. Includes DNase.
 
     Returns:
-        matrix: cell type by assay matrix
-        cellmap: index of cells
-        assaymap: index of assays
+        matrix: cell type by assay matrix, contains indices at which there is epitome data for cell type `i` and transcription factor `j` \n
+        cellmap: dictionary containing indices of cells (rows of the returned matrix) \n
+        assaymap: dictionary containing indices of assays (columns of the returned matrix)
     '''
 
     if not feature_name_file:
@@ -301,13 +308,23 @@ def get_assays_from_feature_file(feature_name_file = None,
 
     # check argument validity
     if (min_assays_per_cell < 2):
-         print("Warning: min_assays_per_cell should not be < 2 (this means it only has DNase) but was set to %i" % min_assays_per_cell)
+         warnings.warn("min_assays_per_cell should not be < 2 (this means it only has a similarity assay) but was set to %i" % min_assays_per_cell)
 
 
     if (min_cells_per_assay < 2):
-         print("Warning: min_cells_per_assay should not be < 2 (this means you may only see it in test) but was set to %i" % min_cells_per_assay)
+         warnings.warn("min_cells_per_assay should not be < 2 (this means you may only see it in test) but was set to %i" % min_cells_per_assay)
 
     if (eligible_assays != None):
+
+        # make sure eligible assays is a list, and not a single assay
+        if type(eligible_assays) == str:
+            eligible_assays = [eligible_assays]
+
+        # similarity assays must be in the list
+        for a in similarity_assays:
+          if a not in eligible_assays:
+            eligible_assays = [a] + eligible_assays
+
         if (len(eligible_assays) + 1 < min_assays_per_cell):
             raise Exception("""%s is less than the minimum assays required (%i).
             Lower min_assays_per_cell to (%i) if you plan to use only %i eligible assays""" \
@@ -335,7 +352,7 @@ def get_assays_from_feature_file(feature_name_file = None,
 
             # check if cell and assay is valid
             valid_cell = (eligible_cells == None) or (cell in eligible_cells)
-            valid_assay = (eligible_assays == None) or (assay in eligible_assays) or (assay == "DNase")
+            valid_assay = (eligible_assays == None) or (assay in eligible_assays)
 
             # if cell and assay is valid, add it in
             if valid_cell and valid_assay:
@@ -346,8 +363,8 @@ def get_assays_from_feature_file(feature_name_file = None,
 
 
 
-    # finally filter out cell types with < min_assays_per_cell and have DNase
-    indexed_assays = {k: v for k, v in indexed_assays.items() if 'DNase' in v.keys() and len(v) >= min_assays_per_cell}
+    # finally filter out cell types with < min_assays_per_cell and have data for similarity_assays
+    indexed_assays = {k: v for k, v in indexed_assays.items() if np.all([s in v.keys() for s in similarity_assays]) and len(v) >= min_assays_per_cell}
 
     # make flatten list of assays from cells
     tmp = [list(v) for k, v in indexed_assays.items()]
@@ -372,11 +389,6 @@ def get_assays_from_feature_file(feature_name_file = None,
     # sort assays alphabetically
     potential_assays = sorted(potential_assays, reverse=True)
 
-    # make sure DNase is first assay. This is because the model
-    # assumes the first column specifies DNase
-    potential_assays.remove("DNase")
-    potential_assays.insert(0,"DNase")
-
     cellmap = {cell: i for i, cell in enumerate(cells)}
     assaymap = {assay: i for i, assay in enumerate(potential_assays)}
 
@@ -385,8 +397,81 @@ def get_assays_from_feature_file(feature_name_file = None,
         for assay, _ in indexed_assays[cell].items():
             matrix[cellmap[cell], assaymap[assay]] = indexed_assays[cell][assay]
 
+    # finally, make sure that all assays that were specified are in assaymap
+    # if not, throw an error and print the reason.
+    if eligible_assays is not None:
+
+        missing = [i for i in eligible_assays if i not in list(assaymap)]
+        for a in missing:
+            warnings.warn('%s does not have enough data for cutoffs of min_cells_per_assay=%i and min_assays_per_cell=%i' %
+                          (a, min_cells_per_assay, min_assays_per_cell))
+
     matrix = matrix.astype(int)
     return matrix, cellmap, assaymap
+
+
+def saveToyData(toy_path):
+        '''
+        Creates a toy dataset for test from original dataset.
+
+        Copies over feature_name, then generates synthetic bed file and numpy matrices
+        for 22 chrs
+
+        Args:
+            :param toy_path: path to save toy dataset to.
+        '''
+
+        if not os.path.exists(toy_path):
+            os.makedirs(toy_path)
+
+        # 1. copy feature_name file
+        new_feature_path = os.path.join(toy_path, FEATURE_NAME_FILE)
+        shutil.copyfile(os.path.join(data_dir, FEATURE_NAME_FILE), new_feature_path)
+
+        # 2. generate 100 records for each chromosome and save to gzip compressed bed file
+        regions = []
+
+        PER_CHR_RECORDS=100
+        chrs = range(1,22)
+
+        for i in chrs:
+            chrom = 'chr' + str(i)
+            for j in range(1,PER_CHR_RECORDS+1):
+                regions.append(Region(chrom, j * 200, j * 200 + 200))
+
+        # convert region to byte string
+        bytes_str = '\n'.join(list(map(lambda i: '%s\t%i\t%i' % (i.chrom, i.start, i.end), regions))).encode('utf-8')
+
+        # save regions as gzip bed file
+        with gzip.open(os.path.join(toy_path,  POSITIONS_FILE), 'wb') as f:
+            f.write(bytes_str)
+
+
+        # 3. generate random small toy matrices and save
+        valid_shape = PER_CHR_RECORDS
+        test_shape = PER_CHR_RECORDS * 2
+        train_shape = PER_CHR_RECORDS * len(chrs) - valid_shape - test_shape
+
+        np.random.seed(1)
+
+        fcount = len(open(new_feature_path).readlines())
+
+        train_data = np.random.randint(2, size=(fcount, train_shape))
+        valid_data = np.random.randint(2, size=(fcount, valid_shape))
+        test_data = np.random.randint(2, size=(fcount, test_shape))
+
+        # save npz files
+        train_output_np = os.path.join(toy_path, "train.npz")
+        valid_output_np = os.path.join(toy_path, "valid.npz")
+        test_output_np = os.path.join(toy_path, "test.npz")
+
+        scipy.sparse.save_npz(train_output_np, scipy.sparse.csc_matrix(train_data,dtype=np.int8))
+        scipy.sparse.save_npz(valid_output_np, scipy.sparse.csc_matrix(valid_data, dtype=np.int8))
+        scipy.sparse.save_npz(test_output_np, scipy.sparse.csc_matrix(test_data, dtype=np.int8))
+
+
+        # 4. make sure all required files exist
+        assert np.all([os.path.exists(os.path.join(toy_path,i)) for i in REQUIRED_FILES])
 
 
 ################### Parsing data from bed file ########################
@@ -402,12 +487,28 @@ def bed2Pyranges(bed_file):
     Returns:
         indexed pyranges object
     """
-    # just get chromosome location (first three columns)
-    p = pd.read_csv(bed_file, sep='\t',header=None)[[0,1,2]]
+
+    # check to see whether there is a header
+    # usually something of the form "chr start end"
+    if mimetypes.guess_type(bed_file)[1] == 'gzip':
+
+        with gzip.open(bed_file) as f:
+            header = csv.Sniffer().has_header(f.read(1024).decode())
+
+    else:
+        with open(bed_file) as f:
+            header = csv.Sniffer().has_header(f.read(1024))
+
+    if not header:
+        p = pd.read_csv(bed_file, sep='\t',header=None)[[0,1,2]]
+    else:
+        # skip header row
+        p = pd.read_csv(bed_file, sep='\t',skiprows=1,header=None)[[0,1,2]]
 
     p['idx']=p.index
     p.columns = ['Chromosome', 'Start','End','idx']
     return pr.PyRanges(p).sort()
+
 
 
 def bedtools_intersect(file_triple):
@@ -450,7 +551,7 @@ def bedtools_intersect(file_triple):
 def bedFile2Vector(bed_file, allpos_bed_file):
     """
     This function takes in a bed file of peaks and converts it to a vector or 0/1s that can be
-    uses as input into an Epitome model. Each 0/1 represents a region in the train/test/validation set from DeepSEA.
+    used as input into an Epitome model. Each 0/1 represents a region in the train/test/validation set from DeepSEA.
 
     Most likely, the bed file will be the output of the IDR function, which detects peaks based on the
     reproducibility of multiple samples.
@@ -489,6 +590,7 @@ def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights =
     The greater the weight, the more the positives for this factor matters.
     """
 
+    raise Exception("This function has not been modified to not use DNase")
     # only take rows that will be used in set
     # drop DNase from indices in assaymap first
     selected_assays = list(assaymap.values())[1:]
@@ -533,7 +635,7 @@ def range_for_contigs(all_regions_file):
     Traverses through feature_name_file to get contig ranges.
 
     Args:
-        :param all_regions_file: path to bed file of genomic regions
+        :param all_regions_file: path to bed file of genomic regions. must be gzipped.
 
     Returns:
         list of contigs and their start/end position all_regions_file
@@ -603,7 +705,7 @@ def concatenate_all_data(data, region_file):
         :param regions_file: bed file containg regions of train, valid and test.
 
     Returns:
-        np matrix of concatenated data
+        numpy matrix of concatenated data
     """
 
     # Get chr6 cutoff. takes about 3s.
@@ -612,3 +714,64 @@ def concatenate_all_data(data, region_file):
                            data[Dataset.VALID], # chr7
                            data[Dataset.TEST], # chr 8 and 9
                            data[Dataset.TRAIN][:,chr6_end:]],axis=1) # all the rest of the chromosomes
+
+
+def get_radius_indices(radii, r, i, max_index):
+    '''
+    Gets indices for a given radius r in both directions from index i.
+    Used in generator code to get indices in data for a given radius from
+    genomic loci i.
+
+    Args:
+        :param radii: increasing list of integers indiciating radii
+        :param r: Index of which radii
+        :param i: center index to access data
+        :param max_index: max index which can be accessed
+
+    Returns:
+        exclusive indices for this radius
+
+    '''
+    radius = radii[r]
+
+    min_radius = max(0, i - radius)
+    max_radius = min(i+radius+1, max_index)
+
+    # do not featurize chromatin regions
+    # that were considered in smaller radii
+    if (r != 0):
+
+        radius_range_1 = np.arange(min_radius, max(0, i - radii[r-1]+1))
+        radius_range_2 = np.arange(i+radii[r-1], max_radius)
+
+        radius_range = np.concatenate([radius_range_1, radius_range_2])
+    else:
+
+        radius_range = np.arange(min_radius, max_radius)
+
+    return radius_range
+
+def order_by_similarity(matrix, cellmap, assaymap, cell, data, compare_assay = 'DNase'):
+    """
+    Orders list of cellmap names by similarity to comparison cell.
+
+    Args:
+        :param numpy matrix specifying location of each assay/cellmap in data
+        :param cellmap: map of cell: index in matrix
+        :param assaymap: map of assay: index in matrix
+        :param cell: name of cell type, should be in cellmap
+        :param data: numpy matrix of data to run comparison. rows index into assay/cell
+        :compare_assay: assay to use to compare cell types. Default = DNase
+
+    Returns:
+        list of cellline names ordered by DNase similarity to cell (most similar is first)
+    """
+
+    # data for cell line to compare all other cell lines to
+    compare_arr = data[matrix[cellmap[cell], assaymap[compare_assay]],:]
+
+    # calculate jaccard score
+    corrs = np.array([jaccard_score(data[matrix[cellmap[c], assaymap[compare_assay]],:], compare_arr) for c in list(cellmap)])
+
+    tmp = sorted(zip(corrs, list(cellmap)), key = lambda x: x[0], reverse=True)
+    return list(map(lambda x: x[1],tmp))
