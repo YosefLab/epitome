@@ -118,6 +118,7 @@ class EpitomeDataset:
         self.indices[Dataset.TRAIN] = dataset['columns']['index'][Dataset.TRAIN.name][:]
         self.indices[Dataset.VALID] = dataset['columns']['index'][Dataset.VALID.name][:]
         self.indices[Dataset.TEST] = dataset['columns']['index'][Dataset.TEST.name][:]
+        self.indices[Dataset.TRAIN_VALID] = [] # placeholder for if early stop is used
         self.valid_chrs = [i.decode() for i in dataset['columns']['index']['valid_chrs'][:]]
         self.test_chrs = [i.decode() for i in dataset['columns']['index']['test_chrs'][:]]
 
@@ -126,6 +127,31 @@ class EpitomeDataset:
 
 
         dataset.close()
+
+    def set_train_validation_indices(self, chr):
+        """
+        Removes and reserves a given chromosome from the TRAIN dataset into
+        its own TRAIN_VALID dataset.
+
+        :param str chr: string representation of chromosome in 'chr{int}' format (Ex: 'chr22').
+        """
+        assert chr in self.regions.chromosomes, "%s must be part of the genome assembly. Not found in regions."
+        assert chr not in self.valid_chrs and chr not in self.test_chrs, "%s cannot be a valid or test chromosome."
+
+        # load in original training indices
+        dataset = h5py.File(self.h5_path, 'r')
+        train_indices = dataset['columns']['index'][Dataset.TRAIN.name][:]
+        dataset.close()
+
+        chr_indices = self.regions[self.regions.Chromosome == chr].idx
+
+        # make sure this chromosome is in train set
+        assert len(np.setdiff1d(chr_indices, train_indices)) == 0, "chr_indices must be a subset of train_indices"
+
+        # remove valid indices
+        self.indices[Dataset.TRAIN] = np.setdiff1d(train_indices, chr_indices)
+        self.indices[Dataset.TRAIN_VALID] = chr_indices
+
 
     def get_parameter_dict(self):
         ''' Returns dict of all parameters required to reconstruct this dataset

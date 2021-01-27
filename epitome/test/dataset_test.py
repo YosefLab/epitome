@@ -178,3 +178,28 @@ class DatasetTest(EpitomeTestCase):
 
         data.close()
         assert np.all([i in REQUIRED_KEYS for i in keys])
+
+
+
+    def test_reserve_validation_indices(self):
+        # new dataset because we are modifying it
+        dataset = EpitomeDataset()
+        assert dataset.get_data(Dataset.TRAIN).shape == (746, 1800)
+        assert dataset.get_data(Dataset.TRAIN_VALID).shape == (746,0)
+
+        old_indices = dataset.indices[Dataset.TRAIN]
+        assert dataset.indices[Dataset.TRAIN].shape[0] == 1800
+
+        dataset.set_train_validation_indices("chr1")
+        assert dataset.get_data(Dataset.TRAIN).shape == (746, 1700)
+        assert dataset.get_data(Dataset.TRAIN_VALID).shape == (746, 100)
+
+        # check indices
+        assert dataset.indices[Dataset.TRAIN].shape[0] == 1700
+        assert dataset.indices[Dataset.TRAIN_VALID].shape[0] == 100
+        assert dataset.indices[Dataset.TRAIN_VALID][0] == 0 # first chr
+        assert dataset.indices[Dataset.TRAIN][0] == 100 # start of chr2
+
+        joined_indices = np.concatenate([dataset.indices[Dataset.TRAIN_VALID], dataset.indices[Dataset.TRAIN]])
+        joined_indices.sort()
+        assert len(np.setdiff1d(joined_indices, old_indices)) == 0 and len(np.setdiff1d(old_indices, joined_indices)) == 0

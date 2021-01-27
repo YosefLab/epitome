@@ -53,8 +53,7 @@ class VariationalPeakModel():
                  radii=[1,3,10,30],
                  checkpoint = None,
                  max_valid_records = None):
-#                  valid_chromosome='chr22'):
-        """
+        '''
         Initializes Peak Model
 
         :param EpitomeDataset dataset: EpitomeDataset
@@ -84,40 +83,28 @@ class VariationalPeakModel():
         self.test_celltypes = test_celltypes
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
 
-<<<<<<< HEAD
-        input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.TRAIN),
-=======
-        data_path = GET_DATA_PATH()
+        if max_valid_records is not None:
+            # get the last training chromosome if valid_chromosome is not specified
+            tmp_chrs = self.dataset.regions.chromosomes
+            [tmp_chrs.remove(i) for i in self.dataset.test_chrs]
+            [tmp_chrs.remove(i) for i in self.dataset.valid_chrs]
+            valid_chromosome = tmp_chrs[-1]
 
-        # load in data, if the user has not specified it
-        if data is not None:
-            self.data = data
-        else:
-            self.data = load_epitome_data(data_path)
-        self.regionsFile = os.path.join(data_path, POSITIONS_FILE)
-
-        if max_valid_records is None:
-            self.train_data = self.data[Dataset.TRAIN]
-        else:
-            # Reserving chromosome 22 from the training data to validate model while training
-            chr22_beg, chr22_end = range_for_contigs(self.regionsFile)['chr22']
-            chr22_len = chr22_end - chr22_beg
-            self.train_valid_data = self.data[Dataset.TRAIN][:, -chr22_len:]
-            self.train_data = self.data[Dataset.TRAIN][:, :-chr22_len]
+            # Reserve chromosome 22 from the training data to validate model while training
+            self.dataset.set_train_validation_indices(valid_chromosome)
 
             # Creating a separate train-validation dataset
-            _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.train_valid_data,
+            _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.VALID_TRAIN),
                                                     self.eval_cell_types,
                                                     self.eval_cell_types,
-                                                    matrix,
-                                                    assaymap,
-                                                    cellmap,
-                                                    similarity_assays = similarity_assays,
+                                                    dataset.matrix,
+                                                    dataset.targetmap,
+                                                    dataset.cellmap,
+                                                    similarity_targets= dataset.similarity_targets,
                                                     radii = radii, mode = Dataset.TRAIN),
                                                     batch_size, shuffle_size, prefetch_size)
 
-        input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.train_data,
->>>>>>> 742d01a... early stopping clean up
+        input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.TRAIN),
                                                 self.eval_cell_types,
                                                 self.eval_cell_types,
                                                 dataset.matrix,
@@ -265,15 +252,19 @@ class VariationalPeakModel():
 
     def train(self, num_steps, patience=1, min_delta=0):
         """
-        Trains an Epitome model. If patience and min_delta are not specified, the model will train on num_step points. Else, the model will either train on num_step points or stop training early if the train_valid_loss is converging (based on the patience and/or min_delta hyper-parameters)-- whatever comes first.
+        Trains an Epitome model. If patience and min_delta are not specified, the model will train on num_step points.
+        Else, the model will either train on num_step points or stop training early if the train_valid_loss is converging
+        (based on the patience and/or min_delta hyper-parameters), whatever comes first.
 
         Args:
           :param int num_steps (int): number of iterations to train for
           :param patience (int): number of iterations (200 steps) with no improvement after which training will be stopped.
-          :param min_delta (float): minimum change in the monitored quantity to qualify as an improvement, i.e. an absolute change of less than min_delta, will count as no improvement.
+          :param min_delta (float): minimum change in the monitored quantity to qualify as an improvement,
+            i.e. an absolute change of less than min_delta, will count as no improvement.
 
         Returns:
-          :return triple of number of steps trained for the best model, number of steps the model has trained total, the train_validation losses (returns an empty list if self.max_valid_records is None).
+          :return triple of number of steps trained for the best model, number of steps the model has trained total,
+            the train_validation losses (returns an empty list if self.max_valid_records is None).
         """
         tf.compat.v1.logging.info("Starting Training")
 
@@ -304,7 +295,6 @@ class VariationalPeakModel():
             neg_log_likelihood = self.loss_fn(labels, logits, weights)
             return neg_log_likelihood
 
-        @tf.function
         def loopiter():
             # Initializing variables
             mean_valid_loss, iterations_decreasing, best_model_steps = sys.maxsize, 0, 0
@@ -327,7 +317,7 @@ class VariationalPeakModel():
                     new_valid_loss = []
 
                     for step_v, f_v in enumerate(self.train_valid_iter):
-                        print("step_v: " + str(step_v))
+                        tf.print("step_v: ", step_v)
                         new_valid_loss.append(valid_step(f_v))
 
                         if (step_v == self.max_valid_records):
