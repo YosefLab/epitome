@@ -242,6 +242,7 @@ def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights =
     surrounding = np.unique(list(map(func_, choice)))
     return surrounding[(surrounding > 0) & (surrounding < data_count)].astype(int)
 
+
 def get_radius_indices(radii, r, i, max_index):
     '''
     Gets indices for a given radius r in both directions from index i.

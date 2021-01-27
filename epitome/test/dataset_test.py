@@ -179,8 +179,6 @@ class DatasetTest(EpitomeTestCase):
         data.close()
         assert np.all([i in REQUIRED_KEYS for i in keys])
 
-
-
     def test_reserve_validation_indices(self):
         # new dataset because we are modifying it
         dataset = EpitomeDataset()

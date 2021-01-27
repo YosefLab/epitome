@@ -36,7 +36,6 @@ def load_data(data,
                  similarity_matrix = None,
                  indices = None,
                  return_feature_names = False,
-                 max_records = None,
                  **kwargs):
     """
     Takes Deepsea data and calculates distance metrics from cell types whose locations
@@ -123,25 +122,25 @@ def load_data(data,
 
                 # sites where TF is bound in at least 2 cell line
                 positive_indices = np.where(np.sum(data[TF_indices,:], axis=0) > 1)[0]
-
                 indices_probs = np.ones([data.shape[1]])
                 indices_probs[positive_indices] = 0
                 indices_probs = indices_probs/np.sum(indices_probs, keepdims=1)
+
+                # If there are nans, it means there were no 0 cases.
+                # We use this for testing so models converge quickly
+                # with all ones.
+                if np.any(np.isnan(indices_probs)):
+                  print("Warning: no negative examples in dataset!!!")
+                  indices_probs[:] = 1/indices_probs.shape[0]
 
                 # randomly select 10 fold sites where TF is not in any cell line
                 negative_indices = np.random.choice(np.arange(0,data.shape[1]),
                                                     positive_indices.shape[0] * 10,
                                                     p=indices_probs)
                 indices = np.sort(np.concatenate([negative_indices, positive_indices]))
-        
+
         else:
             indices = range(0, data.shape[-1]) # not training mode, set to all points
-            
-        # Ensuring shape for dataset
-        if (max_records is not None) and (max_records < indices.shape[0]):
-            # Not sure if correct shape
-            indices = indices[:max_records]
-
 
     if (mode == Dataset.RUNTIME):
         label_cell_types = ["PLACEHOLDER_CELL"]

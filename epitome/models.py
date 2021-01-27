@@ -52,7 +52,7 @@ class VariationalPeakModel():
                  lr=1e-3,
                  radii=[1,3,10,30],
                  checkpoint = None,
-                 max_valid_records = None):
+                 max_valid_batches = None):
         '''
         Initializes Peak Model
 
@@ -83,7 +83,7 @@ class VariationalPeakModel():
         self.test_celltypes = test_celltypes
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
 
-        if max_valid_records is not None:
+        if max_valid_batches is not None:
             # get the last training chromosome if valid_chromosome is not specified
             tmp_chrs = self.dataset.regions.chromosomes
             [tmp_chrs.remove(i) for i in self.dataset.test_chrs]
@@ -146,7 +146,7 @@ class VariationalPeakModel():
 
         self.num_outputs = output_shape[0]
         self.num_inputs = input_shapes
-        self.max_valid_records = max_valid_records
+        self.max_valid_batches = max_valid_batches
 
         # set self
         self.radii = radii
@@ -265,7 +265,7 @@ class VariationalPeakModel():
 
         Returns:
           :return triple of number of steps trained for the best model, number of steps the model has trained total,
-            the train_validation losses (returns an empty list if self.max_valid_records is None).
+            the train_validation losses (returns an empty list if self.max_valid_batches is None).
         """
         tf.compat.v1.logging.info("Starting Training")
 
@@ -304,7 +304,7 @@ class VariationalPeakModel():
             for step, f in enumerate(self.train_iter):
                 loss = train_step(f)
 
-                if step % 100 == 0:
+                if step % 1000 == 0:
                     tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) +
                                               str(tf.reduce_mean(loss[1])) +
                                               str(tf.reduce_mean(loss[2])))
@@ -313,22 +313,19 @@ class VariationalPeakModel():
                         _, _, _, _, _ = self.test(40000, log=False)
                         tf.compat.v1.logging.info("")
 
-                if (step % 200 == 0) and (self.max_valid_records is not None):
+                if (step % 200 == 0) and (self.max_valid_batches is not None):
                     # Early Stopping Validation
                     new_valid_loss = []
 
                     for step_v, f_v in enumerate(self.train_valid_iter):
-                        tf.print("step_v: ", step_v)
                         new_valid_loss.append(valid_step(f_v))
 
-                        if (step_v == self.max_valid_records):
+                        if (step_v == self.max_valid_batches):
                             break
 
-                    new_valid_loss = int(tf.concat(new_valid_loss, axis=0))
                     new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
                     train_valid_losses.append(new_mean_valid_loss)
 
-                    tf.compat.v1.logging.info(str(step) + " Train Validation:" + str(new_mean_valid_loss))
 
                     # Check if the improvement in loss is at least min_delta.
                     # If the loss has increased more than patience consecutive times, the function stops early.
@@ -344,9 +341,7 @@ class VariationalPeakModel():
                         mean_valid_loss = new_mean_valid_loss
                         best_model_steps = step
 
-                    tf.compat.v1.logging.info("")
-
-                if (step == num_steps):
+                if (step >= num_steps):
                     break
 
             return best_model_steps, num_steps, train_valid_losses
