@@ -211,7 +211,7 @@ class EpitomeDataset:
 
         if not data_dir:
             data_dir = GET_DATA_PATH()
-            download_and_unzip(S3_DATA_PATH, GET_EPITOME_USER_PATH())
+            download_and_unzip(S3_DATA_PATH, os.path.dirname(data_dir))
 
         # make sure all required files exist
         required_paths = [os.path.join(data_dir, x) for x in  REQUIRED_FILES]
