@@ -211,6 +211,7 @@ class VariationalPeakModel():
 
         tf.compat.v1.logging.info("Starting Training")
 
+        @tf.function
         def train_step(f):
             features = f[:-2]
             labels = f[-2]
@@ -226,7 +227,6 @@ class VariationalPeakModel():
 
             return loss
 
-        @tf.function
         def loopiter():
             for step, f in enumerate(self.train_iter):
                 loss = train_step(f)
