@@ -127,6 +127,13 @@ def load_data(data,
                 indices_probs[positive_indices] = 0
                 indices_probs = indices_probs/np.sum(indices_probs, keepdims=1)
 
+                # If there are nans, it means there were no 0 cases.
+                # We use this for testing so models converge quickly
+                # with all ones.
+                if np.any(np.isnan(indices_probs)):
+                  print("Warning: no negative examples in dataset!!!")
+                  indices_probs[:] = 1/indices_probs.shape[0]
+
                 # randomly select 10 fold sites where TF is not in any cell line
                 negative_indices = np.random.choice(np.arange(0,data.shape[1]),
                                                     positive_indices.shape[0] * 10,
