@@ -292,6 +292,12 @@ class VariationalPeakModel():
         :rtype: dict
         '''
 
+        # verify matrix has correct number of genomic positions
+        assert matrix.shape[-1] == len(self.dataset.regions), \
+          """Error: number of columns in matrix must match genomic regions in dataset.regions.
+          But got matrix.shape[-1]=%i and len(self.dataset.regions)=%i
+          """  % (matrix.shape[-1], len(self.dataset.regions))
+
         input_shapes, output_shape, ds = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.ALL),
                  self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
                  self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
@@ -490,20 +496,51 @@ class VariationalPeakModel():
 
         print("columns for matrices are chr, start, end, %s" % ", ".join(self.dataset.predict_targets))
 
-    def score_matrix(self, accessilibility_peak_matrix, regions, all_data = None):
+    def _group_preds_by_region(self, preds, joined):
+        '''
+        Groups predictions by original regions and calculates new predictions by
+        taking the mean. This is for the case when you are predicting in regions
+        that may overlap multiple regions in an EpitomeDataset.
+
+        :param np.matrix preds: matrix of shape (num_samples by EpitomeDataset regions by CHIP-seq targets)
+        :param pr.pyranges joined: pyranges. joined pandas dataframe matching original genomic regions
+          to regions in self.dataset. 2nd dimension of preds should equal number of records in joined dataframe.
+
+        :return: np.matrix of predictions, where 1st axis shape == len(original_dataframe)
+        :rtype: np.matrix
+        '''
+
+        assert pd.Index(joined['idx']).is_monotonic, "joined dataframe must first be sorted by idx column."
+
+        # get the index break for each region_bed region
+        reduce_indices = joined.drop_duplicates('idx',keep='first').index.values
+
+        # get the number of times there was a scored region for each region_bed region
+        # used to calculate reduced means
+        indices_counts = joined['idx'].value_counts(sort=False).sort_index().values[:,None]
+
+        # reduce means on middle axis
+        # TODO: there is some issue with this line.
+        final = np.add.reduceat(preds, reduce_indices, axis = 1)/indices_counts
+
+        # fill missing indices with nans
+        missing_indices = joined[joined['idx_alldata']==-1]['idx'].values
+        final[:,missing_indices, :] = np.NAN
+
+        return final
+
+    def score_matrix(self, accessilibility_peak_matrix, regions):
         """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
         rows are regions from regions_peak_file. rows in accessilibility_peak_matrix should matching
 
-        Args:
-            :param accessilibility_peak_matrix: numpy matrix of (samples by genomic regions)
-            :param regions_peak_file: either narrowpeak or bed file containing regions to score, OR a pyranges object
-                with columns [Chomosome, Start, End, idx]. Index matches each genomic region to a row in
-                accessilibility_peak_matrix. In both cases, number of regions Should
-                match rows in accessilibility_peak_matrix
-            :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
+        :param numpy.matrix accessilibility_peak_matrix:  of (samples by genomic regions)
+        :param str regions: either narrowpeak or bed file containing regions to score, OR a pyranges object
+            with columns [Chomosome, Start, End, idx]. Index matches each genomic region to a row in
+            accessilibility_peak_matrix. In both cases, number of regions Should
+            match rows in accessilibility_peak_matrix
 
-        Returns:
-            3-dimensional numpy matrix of predictions: sized (samples by regions by ChIP-seq targets)
+        :return: 3-dimensional numpy matrix of predictions: sized (samples by regions by ChIP-seq targets)
+        :rtype: numpy matrix
         """
 
         if type(regions) == str:
@@ -513,7 +550,11 @@ class VariationalPeakModel():
         else:
             raise Exception("regions must be type scring or pr.Pyranges, but got type %s" % type(regions))
 
-        joined = regions_bed.join(self.dataset.regions, how='left',suffix='_alldata').df
+        # Need to sort by idx first because you use this ordering to
+        # index reduced indices
+        joined = regions_bed.join(self.dataset.regions, how='left',suffix='_alldata').df \
+            .sort_values(by='idx') \
+            .reset_index(drop=True)
 
         idx = joined['idx_alldata']
 
@@ -525,6 +566,9 @@ class VariationalPeakModel():
             peaks_i = np.zeros((len(self.dataset.regions)))
             peaks_i[idx] = accessilibility_peak_matrix[sample_i, joined['idx']]
 
+            # TODO 9/10/2020: code is currently scoring missing values and setting to nan.
+            # You could be more efficient and remove these so you are not taking
+            # the time to score garbage data.
             preds = self.eval_vector(peaks_i, idx)
 
             # group preds by joined['idx']
@@ -533,25 +577,9 @@ class VariationalPeakModel():
         # stack all samples along 0th axis
         tmp = np.stack(results)
 
-        # get the index break for each region_bed region
-        reduce_indices = joined.drop_duplicates('idx',keep='first').index.values
 
-        # get the number of times there was a scored region for each region_bed region
-        # used to calculate reduced means
-        indices_counts = joined['idx'].value_counts(sort=False).values[:,None]
 
-        # reduce means on middle axis
-        final = np.add.reduceat(tmp, reduce_indices, axis = 1)/indices_counts
-
-        # TODO 9/10/2020: code is currently scoring missing values and setting to nan.
-        # You could be more efficient and remove these so you are not taking
-        # the time to score garbage data.
-
-        # fill missing indices with nans
-        missing_indices = joined[joined['idx_alldata']==-1]['idx'].values
-        final[:,missing_indices, :] = np.NAN
-
-        return final
+        return self._group_preds_by_region(tmp, joined)
 
 
     def score_peak_file(self, similarity_peak_files, regions_peak_file):
@@ -596,8 +624,9 @@ class VariationalPeakModel():
         p['idx']=p.index # keep original bed region ordering using idx column
         p.columns = ['Chromosome', 'Start','End','idx']
         prediction_positions = p[p['idx'].isin(idx)] # select regions that were scored
-        
+
         # reset index to match predictions shape
+        # TODO AM 1/29/2021 use _group_preds_by_region here instead of custom code!
         prediction_positions = prediction_positions.reset_index()
         prediction_positions['idx'] = prediction_positions.index
         prediction_positions = pd.concat([prediction_positions, preds_df],axis=1)
