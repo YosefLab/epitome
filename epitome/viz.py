@@ -7,22 +7,34 @@ Vizualization functions
 .. autosummary::
   :toctree: _generate/
 
-  plot_assay_heatmap
   joint_plot
+  plot_assay_heatmap
+  heatmap_aggreement_from_model_weights
+  calibration_plot
+  plot_weight_posteriors
 """
 
 #####################################################################
 ################### Visualization functions #########################
 #####################################################################
 
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+   import matplotlib
+   matplotlib.use('PS')
+   import matplotlib.pyplot as plt
+
 import seaborn as sns; sns.set()
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from matplotlib.backends import backend_agg
 from matplotlib import figure
-import tensorflow as tf
 from sklearn.calibration import calibration_curve
+
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+import matplotlib.transforms as mtransforms
 
 def joint_plot(dict_model1,
                dict_model2,
@@ -31,20 +43,18 @@ def joint_plot(dict_model1,
                model2_name = "model2",
                outlier_filter = None
               ):
-    """
+    '''
     Returns seaborn joint plot of two models.
 
-    Args:
-        :param dict_model1: dictionary of TF: metrics for first model. Output from run_predictions().
-        :param dict_model2: dictionary of TF: metrics for second model. Output from run_predictions().
-        :param metric: metric in dicts. Should be auPRC, AUC, or GINI.
-        :param model1_name: string for model 1 name, shown on x axis.
-        :param model2_name: string for model 2 name, shown on y axis.
-        :param outlier_filter: string filter to label. Defaults to no labels.
-
-    Returns:
-        matplotlib axis
-    """
+    :param dict dict_model1: dictionary of TF: metrics for first model. Output from run_predictions().
+    :param doct dict_model2: dictionary of TF: metrics for second model. Output from run_predictions().
+    :param dict metric: metric in dicts. Should be auPRC, AUC, or GINI.
+    :param str model1_name: string for model 1 name, shown on x axis.
+    :param str model2_name: string for model 2 name, shown on y axis.
+    :param str outlier_filter: string filter to label. Defaults to no labels.
+    :return: matplotlib axis
+    :rtype: matplotlib axis
+    '''
     sns.set(style="whitegrid", color_codes=True)
 
     df1 = pd.DataFrame.from_dict(dict_model1).T
@@ -85,13 +95,13 @@ def joint_plot(dict_model1,
 
 
 def plot_assay_heatmap(matrix, cellmap, assaymap):
-    """ Plots a matrix of available assays from available cells.
+    '''
+    Plots a matrix of available assays from available cells. This function takes in the numpy matrix and two dictionaries returned by :code:`get_assays_from_feature_file`.
 
-    Args:
-        :param matrix: numpy matrix of indices that index into Epitome data
-        :param cellmap: map of cells indexing into rows of matrix
-        :param assaymap: map of assays indexing into columns of matrix
-    """
+    :param numpy.matrix matrix: numpy matrix of indices that index into Epitome data
+    :param dict cellmap: map of cells indexing into rows of matrix
+    :param dict assaymap: map of assays indexing into columns of matrix
+    '''
 
     nv_assaymap = {v: k for k, v in assaymap.items()}
 
@@ -106,43 +116,18 @@ def plot_assay_heatmap(matrix, cellmap, assaymap):
     plt.imshow(matrix!=-1)
 
 
-
-
 #####################################################################
 ############## Network visualization helper functions ###############
 #####################################################################
 
-def plot_uncertainty(preds_mean, preds_std, truth, title):
-    """
-    Plot means vs stds for regions
-
-    Args:
-    :param preds_mean: prediction means
-    :param preds_std: prediction standard devations
-    :param truth: 0/1 real values
-    :param title: plot title
-
-    """
-    xdata = np.arange(0, preds_mean.shape[0])
-    # Visualize the result
-    plt.plot(xdata, truth, 'ro')
-    plt.plot(xdata, preds_mean, '-', color='gray')
-
-    plt.xlabel("genomic region")
-    plt.ylabel("predictions (dark grey), stdev (light grey)")
-
-    plt.fill_between(xdata, preds_mean - preds_std, preds_mean + preds_std,
-                     color='gray', alpha=0.2)
-
-    plt.title(title)
-    plt.show()
-
-
 def number_to_bp(n):
-    """ converts bp number to short string
-    :param n: number in base pairs
-    :return string of number with kbp or Mbp suffix
-    """
+    '''
+    Converts bp number to short string.
+
+    :param int n: number in base pairs
+    :return: string of number with kbp or Mbp suffix
+    :rtype: str
+    '''
     n = str(n)
 
     if len(n) < 4:
@@ -161,12 +146,12 @@ def number_to_bp(n):
 
 
 def heatmap_aggreement_from_model_weights(model):
-    """
+    '''
     Plots seaborn heatmap for DNase weights of first layer in network.
-    Plots one heatmap for each celltype used in the features for training (about 10-13).
+    Plots one heatmap for each celltype used in the features for training.
 
-    :param model: an Epitome model
-    """
+    :param VLP model: an Epitome model
+    '''
 
     # get weights
     with model.graph.as_default():
@@ -193,22 +178,16 @@ def heatmap_aggreement_from_model_weights(model):
         plt.show()
 
 
-
-import matplotlib.pyplot as plt
-import matplotlib.lines as mlines
-import matplotlib.transforms as mtransforms
-
 def calibration_plot(truth, preds, assay_dict, list_assaymap):
-    """
+    '''
     Creates an xy scatter plot for predicted probability vs true probability.
     Adds a separate set of points for each transcription factor.
 
-    Args:
-        :param truth: matrix of n samples by t TFs
-        :param preds: matrix same size as truth
-        :param assay_dict: dictionary of TFs and scores
-        :param: list_assaymap: list of assay names for data matrix
-    """
+    :param numpy.matrix truth: matrix of n samples by t TFs
+    :param numpy.matrix preds: matrix same size as truth
+    :param dict assay_dict: dictionary of TFs and scores
+    :param list list_assaymap: list of assay names for data matrix
+    '''
 
     fig, ax = plt.subplots()
     # only these two lines are calibration curves
@@ -235,34 +214,36 @@ def calibration_plot(truth, preds, assay_dict, list_assaymap):
 
 
 
-
 ############################################################################
 ###################### Visualizing model internals #########################
 ############################################################################
 
 def plot_weight_posteriors(names, qm_vals, qs_vals, fname=None):
-    """Save a PNG plot with histograms of weight means and stddevs.
+    '''
+    Save a PNG plot with histograms of weight means and stddevs.
     From https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py.
     Requires that model has been trained for at least 1 iteration to correctly instantiate kernel posterior.
     To collect parameters, run:
-    
+
     ```python
-    
+
     model = VLP(...)
     names, means, stds = model.get_weight_parameters()
-    
+
     ```
-    
-    Args:
-    names: A Python `iterable` of `str` variable names.
-    qm_vals: A Python `iterable`, the same length as `names`,
+
+
+    :param iterable names: A Python `iterable` of `str` variable names.
+    :param iterable qm_vals: A Python `iterable`, the same length as `names`,
       whose elements are Numpy `array`s, of any shape, containing
       posterior means of weight varibles.
-    qs_vals: A Python `iterable`, the same length as `names`,
+    :param iterable qs_vals: A Python `iterable`, the same length as `names`,
       whose elements are Numpy `array`s, of any shape, containing
       posterior standard deviations of weight varibles.
-    fname: Python `str` filename to save the plot to.
-    """
+    :param str fname: Python `str` filename to save the plot to.
+    :return: figure
+    :rtype: matplotlib axis
+    '''
     fig = plt.figure(figsize=(6, 3))
 
     ax = fig.add_subplot(1, 2, 1)

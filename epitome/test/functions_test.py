@@ -1,17 +1,30 @@
+from epitome.test import EpitomeTestCase
 from epitome.test import *
 from epitome.functions import *
+from epitome.dataset import *
 import pytest
+import warnings
 
-@pytest.fixture
-def tmp_dir(tmpdir_factory):
-    return tmpdir_factory.mktemp("data")
 
-def test_download_and_unzip(tmp_dir):
+class FunctionsTest(EpitomeTestCase):
 
-    dirname = os.path.join(tmp_dir.dirname, "sub_dir")
-    assert(not os.path.exists(dirname))
+    def __init__(self, *args, **kwargs):
+        super(FunctionsTest, self).__init__(*args, **kwargs)
 
-    download_and_unzip(S3_TEST_PATH, dirname)
+    def test_user_data_path(self):
+        # user data path should be able to be explicitly set
+        datapath = GET_DATA_PATH()
+        assert(datapath == os.environ["EPITOME_DATA_PATH"])
 
-    files = os.listdir(os.path.join(dirname,"data"))
-    assert(len(files) == 3)
+    def test_pyranges_intersect(self):
+
+        dataset = EpitomeDataset()
+
+        pr1 = dataset.regions.head(10)
+        pr2 = dataset.regions
+        res = pyranges2Vector(pr1, pr2)
+
+        assert np.all(res[0][:10] == True)
+        assert np.all(res[0][10:] == False)
+        assert res[1][1].shape[0] == len(pr1)
+        assert len(res[1][0]) == len(pr1)

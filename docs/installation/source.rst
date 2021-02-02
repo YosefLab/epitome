@@ -9,10 +9,20 @@ Requirements
 
 * `conda <https://docs.conda.io/en/latest/miniconda.html>`__
 * python 3.7
+* `tensorflow 2.3.0 <https://www.tensorflow.org/install/source>`__
 
 
-Installation
-------------
+Installing Tensorflow
+---------------------
+
+In order to run Epitome as efficiently as possible, you should install
+`tensorflow from source <https://www.tensorflow.org/install/source>`__.
+If you have not installed tensorflow prior to installing Epitome, Epitome will
+install tensorflow from pip, which will not be optimized for your hardware.
+
+
+Installation from Pip
+---------------------
 
 1. Create and activate a pytion 3.7 conda venv:
 
@@ -27,8 +37,8 @@ Installation
 
 	pip install epitome
 
-From Source
------------
+Installation from Source
+------------------------
 
 1. Create and activate a pytion 3.7 conda venv:
 

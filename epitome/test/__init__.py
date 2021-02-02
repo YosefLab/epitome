@@ -3,42 +3,48 @@ import sys
 import tempfile
 import unittest
 from epitome.models import *
+from epitome.dataset import *
 
-S3_TEST_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/test/data.zip'
+# set Epitome data path to test data files for testing
+# this data was saved using functions.saveToyData(<epitome_repo_path>/epitome/test/daata)
+dir_path = os.path.dirname(os.path.realpath(__file__))
+os.environ["EPITOME_DATA_PATH"] = os.path.abspath(os.path.join(dir_path, "data","test"))
+
+S3_TEST_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/test.zip'
 
 class EpitomeTestCase(unittest.TestCase):
 
-	def getValidDataShape(self):
-		# number of rows in feature_name file by n random genome regions
-		return (749, 50000)
+	def __init__(self, *args, **kwargs):
+		# download test data to parent dir of EPITOME_DATA_PATH  if it was not yet downloaded
+		download_and_unzip(S3_TEST_PATH, os.path.dirname(os.environ["EPITOME_DATA_PATH"]))
+		super(EpitomeTestCase, self).__init__(*args, **kwargs)
 
-	def getValidData(self):
-		np.random.seed(1)
-		# generate striped array
-		return np.random.randint(2, size=self.getValidDataShape())
+	def getFeatureData(self,
+					targets,
+					cells,
+					similarity_targets = ['DNase'],
+					min_cells_per_target = 3,
+					min_targets_per_cell = 1):
 
-	def getFeatureData(self, eligible_assays, eligible_cells):
 		# returns matrix, cellmap, assaymap
-		return get_assays_from_feature_file(feature_name_file = 'epitome/test/data/feature_name',
-				eligible_assays = eligible_assays,
-				eligible_cells = eligible_cells, min_cells_per_assay = 3, min_assays_per_cell = 1)
+		return EpitomeDataset.get_assays(
+				targets = targets,
+				cells = cells,
+				similarity_targets = similarity_targets,
+				min_cells_per_target = min_cells_per_target,
+				min_targets_per_cell = min_targets_per_cell)
 
 	def makeSmallModel(self):
 
-		sparse_matrix = self.getValidData()
-		data = {Dataset.TRAIN: sparse_matrix, Dataset.VALID: sparse_matrix, Dataset.TEST: sparse_matrix}
-
-
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
-		eligible_assays = ['DNase','CTCF']
-		matrix, cellmap, assaymap = self.getFeatureData(eligible_assays, eligible_cells)
+		eligible_targets = ['DNase','CTCF']
 
-		return VLP(list(eligible_assays),
-			test_celltypes = ['K562'],
-			matrix = matrix,
-			assaymap = assaymap,
-			cellmap = cellmap,
-			data = data)
+		dataset = EpitomeDataset(targets = eligible_targets,
+			cells = eligible_cells)
+
+
+		return VLP(dataset,
+			test_celltypes = ['K562'])
 
 
 	def tmpFile(self):

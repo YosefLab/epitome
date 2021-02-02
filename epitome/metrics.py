@@ -6,7 +6,7 @@ import sklearn.metrics
 import numpy as np
 import tensorflow as tf
 
-def gini(actual, pred, sample_weight):                                                 
+def gini(actual, pred, sample_weight):
     # sort by preds
     df = tf.stack([actual,pred], axis = 0)
     df = tf.gather(df, tf.argsort(pred, direction='DESCENDING'), axis=1)
@@ -24,17 +24,17 @@ def gini_normalized(actual, pred, sample_weight = None):
     return normalized_gini
 
 
-def get_performance(assaymap, preds, truth, sample_weight, predicted_assays):
+def get_performance(targetmap, preds, truth, sample_weight, predicted_targets):
 
 
     assert(preds.shape == truth.shape)
     assert(preds.shape == sample_weight.shape)
 
-    evaluated_assays = {}
+    evaluated_targets = {}
 
-    for j in range(preds.shape[1]): # for all assays
+    for j in range(preds.shape[1]): # for all targets
         # sample_weight mask can only work on 1 row at a time.
-        # If a given assay is not available for evaluation, sample_weights will all be 0
+        # If a given target is not available for evaluation, sample_weights will all be 0
         # and the resulting roc_auc_score will be NaN.
 
         try:
@@ -63,6 +63,6 @@ def get_performance(assaymap, preds, truth, sample_weight, predicted_assays):
 
         except ValueError:
             gini_score = np.NaN
-        evaluated_assays[predicted_assays[j]] = {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
+        evaluated_targets[predicted_targets[j]] = {"AUC": roc_score, "auPRC": pr_score, "GINI": gini_score }
 
-    return evaluated_assays
+    return evaluated_targets
