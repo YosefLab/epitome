@@ -69,11 +69,11 @@ class EpitomeDataset:
 
         # load in specs for data
         self.full_matrix, self.cellmap, self.targetmap = EpitomeDataset.get_assays(targets = targets,
-                                 cells = cells,
-                                 data_dir = self.data_dir,
-                                 min_cells_per_target = self.min_cells_per_target,
-                                 min_targets_per_cell = self.min_targets_per_cell,
-                                 similarity_targets = similarity_targets)
+                                     cells = cells,
+                                     data_dir = self.data_dir,
+                                     min_cells_per_target = self.min_cells_per_target,
+                                     min_targets_per_cell = self.min_targets_per_cell,
+                                     similarity_targets = similarity_targets)
 
 
         # make a truncated matrix that includes updated indices for rows containing data from cellmap, targetmap
@@ -159,7 +159,16 @@ class EpitomeDataset:
             i = np.empty_like(order)
             i[order] = np.arange(order.size)
 
-            self._data = dataset['data'][self.row_indices[order],:][i,:]
+            # Indexing load time is about 1s per row.
+            # Because it takes about 1min to load all of the data into memory,
+            # it is just quicker to load all data into memory when you are accessing
+            # more than 100 rows.
+            if order.shape[0] > 60:
+                # faster to just load the whole thing into memory then subselect
+                self._data = dataset['data'][:,:][self.row_indices[order],:][i,:]
+            else:
+                self._data = dataset['data'][self.row_indices[order],:][i,:]
+
             dataset.close()
 
         if mode == Dataset.ALL:
