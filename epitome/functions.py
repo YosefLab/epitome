@@ -65,9 +65,6 @@ def download_and_unzip(url, dst, assembly):
 
     final_dst = dst.split('.zip')[0]
 
-    # TODO(jahnavis): Fix statements
-    assert(assembly in EPITOME_GENOME_ASSEMBLIES, "assembly not in S3 cluster. Must be...")
-
     if not os.path.exists(final_dst):
 
         file_size = int(urllib.request.urlopen(url).info().get('Content-Length', -1))

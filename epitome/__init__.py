@@ -26,7 +26,7 @@ S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com'
 # os env that should be set by user to explicitly set the data path
 EPITOME_DATA_PATH_ENV= "EPITOME_DATA_PATH" # Must be an absolute path.
 EPITOME_GENOME_ASSEMBLY_ENV = "EPITOME_GENOME_ASSEMBLY"
-EPITOME_GENOME_ASSEMBLIES = ['hg19']
+EPITOME_GENOME_ASSEMBLIES = ['hg19', 'test']
 
 # data files required by epitome
 # data.h5 contains data, row information (celltypes and targets) and
@@ -69,14 +69,14 @@ def GET_DATA_PATH():
     """
     epitome_data_path  = os.environ.get(EPITOME_DATA_PATH_ENV)
     epitome_assembly = os.environ.get(EPITOME_GENOME_ASSEMBLY_ENV)
-    # print("HELLO !!!")
 
     # Throw error if both ENV variables are set
-    assert((epitome_data_path is not None) and (epitome_assembly is not None)), "Only specify either the %s env variable or %s env variable. Cannot define both." % (EPITOME_DATA_PATH_ENV, EPITOME_GENOME_ASSEMBLY_ENV)
+    both_set = (epitome_data_path is not None) and (epitome_assembly is not None)
+    assert not both_set, "Only specify either the %s env variable or %s env variable. Cannot define both." % (EPITOME_DATA_PATH_ENV, EPITOME_GENOME_ASSEMBLY_ENV)
 
     # Return specified data path if env variable is set
-    if (epitome_data_path_env is not None):
-        return epitome_data_path_env
+    if (epitome_data_path is not None):
+        return epitome_data_path
     else:
         # Default to the hg19 assembly if assembly and data path is not specified
         if (epitome_assembly is None):

@@ -18,7 +18,6 @@ class DatasetTest(EpitomeTestCase):
         assert(datapath == os.environ["EPITOME_DATA_PATH"])
 
     def test_save(self):
-
         out_path = self.tmpFile()
         print(out_path)
 
@@ -138,7 +137,6 @@ class DatasetTest(EpitomeTestCase):
 
 
     def test_get_data(self):
-
         train_data = self.dataset.get_data(Dataset.TRAIN)
         assert train_data.shape[0] == np.where(self.dataset.matrix!= -1)[0].shape[0]
         assert train_data.shape[1] == 1800
@@ -180,23 +178,21 @@ class DatasetTest(EpitomeTestCase):
         assert np.all([i in REQUIRED_KEYS for i in keys])
 
     def test_LIST_GENOMES(self):
-        assert(LIST_GENOMES() == 'hg19')
-
-#     def test_GET_EPITOME_USER_PATH(self):
-#         tmp_dir()
-#         assert()
+        assert LIST_GENOMES() == "hg19, test"
 
     def test_GET_DATA_PATH(self):
-#         tmp_data_dir = "epitome/data/test"
-
         # Returns env data_path variable when only env data_path var is set
-#         os.environ[EPITOME_DATA_PATH_ENV] = tmp_data_dir
-        assert(GET_DATA_PATH() == os.environ["EPITOME_DATA_PATH"])
+        EpitomeTestCase.setEpitomeDataPath()
+        assert GET_DATA_PATH() == os.environ["EPITOME_DATA_PATH"]
 
         # Fails if both env variables are set
         os.environ[EPITOME_GENOME_ASSEMBLY_ENV] = "test"
-        self.assertRaises(AssertionError, GET_DATA_PATH())
+        self.assertRaises(AssertionError, GET_DATA_PATH)
 
         # Returns default data path and genome assembly if only 1 env var is set
         del os.environ[EPITOME_DATA_PATH_ENV]
-        assert(GET_DATA_PATH() == os.path.join(os.path.join(GET_USER_PATH(), "data"), "test"))
+        assert GET_DATA_PATH() == os.path.join(os.path.join(GET_EPITOME_USER_PATH(), "data"), "test")
+
+        # Clean up test
+        del os.environ[EPITOME_GENOME_ASSEMBLY_ENV]
+        EpitomeTestCase.setEpitomeDataPath()

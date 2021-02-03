@@ -169,7 +169,7 @@ class EpitomeDataset:
 
 
     @staticmethod
-    def get_y_indices_for_cell(matrix, cellmap,  cell):
+    def get_y_indices_for_cell(matrix, cellmap, cell):
         '''
         Gets indices for a cell.
         TODO: this function is called in genertors.py.
@@ -198,6 +198,12 @@ class EpitomeDataset:
         '''
         return np.copy(matrix[:,targetmap[target]])
 
+    @staticmethod
+    def contains_required_files(data_dir):
+        # make sure all required files exist
+        required_paths = [os.path.join(data_dir, x) for x in REQUIRED_FILES]
+        return np.all([os.path.exists(x) for x in required_paths])
+
     #TODO(jahnavis): Add data_dir stuff here
     @staticmethod
     def get_data_dir(data_dir=None):
@@ -212,18 +218,15 @@ class EpitomeDataset:
 
         if not data_dir:
             data_dir = GET_DATA_PATH()
-            download_and_unzip(S3_DATA_PATH, GET_EPITOME_USER_PATH())
-
-        # # Grab data directory and download it from S3 if it is empty
-        # data_dir = GET_DATA_PATH()
-        # if not contains_required_files(data_dir):
-        #     assembly = os.path.basename(data_dir)
-        #     url_path = os.path.join(os.path.join(S3_DATA_PATH, assembly), 'data.zip')
-        #     download_and_unzip(url_path, data_dir, assembly)
+            if not EpitomeDataset.contains_required_files(data_dir):
+                # Grab data directory and download it from S3 if it is empty
+                assembly = os.path.basename(data_dir)
+                assert(assembly in EPITOME_GENOME_ASSEMBLIES, "assembly %s not in S3 cluster. Must be either in %s" % (assembly, LIST_GENOMES()))
+                url_path = os.path.join(os.path.join(S3_DATA_PATH, assembly), 'data.zip')
+                download_and_unzip(url_path, data_dir, assembly)
 
         # make sure all required files exist
-        required_paths = [os.path.join(data_dir, x) for x in  REQUIRED_FILES]
-        assert(np.all([os.path.exists(x) for x in required_paths]))
+        assert(EpitomeDataset.contains_required_files(data_dir))
 
         return data_dir
 
