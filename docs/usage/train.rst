@@ -23,7 +23,7 @@ on creating an Epitome dataset, see `Configuring data <./dataset.html>`__.
  	targets = ['CTCF','RAD21','SMC3']
 	celltypes = ['K562', 'A549', 'GM12878']
 
-	dataset = EpitomeDataset(targets, celltypes)
+	dataset = EpitomeDataset(targets=targets, cells=celltypes)
 
 Train a Model
 ----------------

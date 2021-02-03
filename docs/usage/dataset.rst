@@ -23,7 +23,7 @@ and the assays you want to use to compute cell type similarity.
  	targets = ['CTCF','RAD21','SMC3']
 	celltypes = ['K562', 'A549', 'GM12878']
 
-	dataset = EpitomeDataset(targets, celltypes)
+	dataset = EpitomeDataset(targets=targets, cells=celltypes)
 
 Note that you do not have to define ``celltypes``. If you leave ``celltypes``
 blank, the Epitome dataset will choose cell types that have coverage  for the
@@ -37,7 +37,7 @@ number of ChIP-seq targets required to include a celltype. By default,
 
  	targets = ['CTCF','RAD21','SMC3']
 
-	dataset = EpitomeDataset(targets,
+	dataset = EpitomeDataset(targets=targets,
 		min_cells_per_target = 4, # requires that each ChIP-seq target has data from at least 4 cell types
 		min_targets_per_cell = 3) # requires that each cell type has data for all three ChIP-seq targets
 
@@ -48,7 +48,7 @@ cell type similarity, you can specify in the Epitome dataset:
 
 .. code:: python
 
-	dataset = EpitomeDataset(targets, celltypes, similarity_targets = ['DNase', 'H3K27ac'])
+	dataset = EpitomeDataset(targets=targets, cells=celltypes, similarity_targets = ['DNase', 'H3K27ac'])
 
 You can then visualize the ChIP-seq targets and cell types in your dataset by
 using the ``view()`` function:

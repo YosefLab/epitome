@@ -65,4 +65,4 @@ def GET_DATA_PATH():
 	if os.environ.get("EPITOME_DATA_PATH") is not None:
 		return os.environ["EPITOME_DATA_PATH"]
 	else:
-		return os.path.join(GET_EPITOME_USER_PATH(),'data')
+		return os.path.join(GET_EPITOME_USER_PATH(),'data','hg19')

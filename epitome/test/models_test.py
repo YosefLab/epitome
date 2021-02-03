@@ -51,8 +51,8 @@ class ModelsTest(EpitomeTestCase):
 
 		# Make sure predictions are not random
 		# after first iterations
-		assert(results1['preds_mean'].shape[0] == self.validation_size)
-		assert(results2['preds_mean'][0] < results1['preds_mean'].shape[0])
+		assert(results1['preds'].shape[0] == self.validation_size)
+		assert(results2['preds'][0] < results1['preds'].shape[0])
 
 	def test_train_early_stop_model(self):
 
@@ -89,7 +89,7 @@ class ModelsTest(EpitomeTestCase):
 
 		# make sure can run in test mode
 		results = self.model.test(self.validation_size, mode=Dataset.TEST)
-		assert(results['preds_mean'].shape[0] == self.validation_size)
+		assert(results['preds'].shape[0] == self.validation_size)
 
 	def test_specify_assays(self):
 		# test for https://github.com/YosefLab/epitome/issues/23
@@ -131,9 +131,9 @@ class ModelsTest(EpitomeTestCase):
 	def test_eval_vector(self):
 
 		# should be able to evaluate on a dnase vector
-		similarity_matrix = np.ones(self.model.dataset.get_data(Dataset.TRAIN).shape[1])[None,:]
+		similarity_matrix = np.ones(self.model.dataset.get_data(Dataset.ALL).shape[1])[None,:]
 		results = self.model.eval_vector(similarity_matrix, np.arange(0,20))
-		assert(results[0].shape[0] == 20)
+		assert(results.shape[0] == 20)
 
 	def test_save_model(self):
 		# should save and re-load model
@@ -141,7 +141,7 @@ class ModelsTest(EpitomeTestCase):
 		self.model.save(tmp_path)
 		loaded_model = VLP(checkpoint=tmp_path)
 		results = loaded_model.test(self.validation_size)
-		assert(results['preds_mean'].shape[0] == self.validation_size)
+		assert(results['preds'].shape[0] == self.validation_size)
 
 	def test_score_matrix(self):
 
@@ -163,6 +163,8 @@ class ModelsTest(EpitomeTestCase):
 								regions_peak_file.name)
 
 		assert(results.shape == (4, 2, 1))
+		masked = np.ma.array(results, mask=np.isnan(results))
+		assert(np.all(masked <= 1))
 
 	def test_score_matrix_missing_data(self):
 		# if there is a region in the regions file that does not overlap anything
@@ -213,9 +215,9 @@ class ModelsTest(EpitomeTestCase):
 		loaded = np.load(file_prefix_name + ".npz", allow_pickle=True)
 
 		file_prefix.close()
-		assert 'means' in loaded.keys() and 'names' in loaded.keys()
+		assert 'preds' in loaded.keys() and 'names' in loaded.keys()
 
-		preds = loaded['means']
+		preds = loaded['preds']
 		names = loaded['names']
 		assert preds.shape == (200,4)
 		assert names.shape[0] == 4 # chr, start, end, CTCF
@@ -237,3 +239,62 @@ class ModelsTest(EpitomeTestCase):
 		model.train(1)
 		results = model.test(1000, calculate_metrics = True)
 		assert np.where(results['weights']==0)[0].shape[0] == 0
+
+	def test_score_matrix_combines_indices(self):
+		# issue where value_counts() was not sorting on the index,
+		# causing predictions to be combined incorrectly and returning preds > 1
+
+		# Create dummy data
+		start = [200,1100,1700]
+		end = [900,1500,2100]
+		regions_dict = {'Chromosome': ['chr1'] * len(start),
+		                'Start': start,
+		                'End': end, 'idx': [510,511,512]} # indices that caused problems
+														  # when calling .value_counts()
+		regions_pr = pr.from_dict(regions_dict)
+		# have to cast to int64
+		regions = pr.PyRanges(regions_pr.df, int64=True)
+
+		targets = [ 'CTCF']
+		ds = EpitomeDataset(targets = targets,
+				cells=['PC-9','Panc1','IMR-90','H1'],
+                    min_cells_per_target =2)
+		t = ds.get_data(Dataset.ALL)
+		ds._data = np.ones(t.shape)
+		model = VLP(ds)
+
+		# set predictions to 1s so means could be greater than 1 if done wrong
+		preds = np.ones((1, 10, 1))
+
+		joined = regions.join(model.dataset.regions, how='left',suffix='_alldata').df \
+			.sort_values(by='idx') \
+			.reset_index(drop=True)
+		results = model._group_preds_by_region(preds, joined)
+
+		masked = np.ma.array(results, mask=np.isnan(results))
+		assert(np.all(masked <= 1))
+
+
+		# Error case where there are nans before true values
+		# 1st region on chr 1has no overlap with dataset, while second region
+		# on chr2 has multiple overlaps
+		start = [30000,200]
+		end = [30100,900]
+		regions_dict = {'Chromosome': ['chr1','chr2'],
+		                'Start': start,
+		                'End': end, 'idx': [0,1]}
+
+		regions_pr = pr.from_dict(regions_dict)
+		# have to cast to int64
+		regions = pr.PyRanges(regions_pr.df, int64=True)
+
+		# have to sort on index in order for _group_preds_by_region to work
+		joined = regions.join(model.dataset.regions, how='left',suffix='_alldata').df \
+			.sort_values(by='idx') \
+			.reset_index(drop=True)
+
+		preds = np.ones((1, len(joined), 1))
+		results = model._group_preds_by_region(preds, joined)
+		print(results)
+		masked = np.ma.array(results, mask=np.isnan(results))
+		assert(np.all(masked <= 1))
