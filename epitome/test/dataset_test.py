@@ -177,10 +177,10 @@ class DatasetTest(EpitomeTestCase):
         data.close()
         assert np.all([i in REQUIRED_KEYS for i in keys])
 
-    def test_LIST_GENOMES(self):
-        assert LIST_GENOMES() == "hg19, test"
+    def test_list_genome_assemblies(self):
+        assert LIST_GENOME_ASSEMBLIES() == "hg19, test"
 
-    def test_GET_DATA_PATH(self):
+    def test_get_data_path(self):
         # Returns env data_path variable when only env data_path var is set
         EpitomeTestCase.setEpitomeDataPath()
         assert GET_DATA_PATH() == os.environ["EPITOME_DATA_PATH"]

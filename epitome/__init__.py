@@ -56,7 +56,7 @@ REQUIRED_KEYS = ['/',
 def GET_EPITOME_USER_PATH():
     return os.path.join(os.path.expanduser('~'), '.epitome')
 
-def LIST_GENOMES():
+def LIST_GENOME_ASSEMBLIES():
     return ", ".join(EPITOME_GENOME_ASSEMBLIES)
 
 def GET_DATA_PATH():
