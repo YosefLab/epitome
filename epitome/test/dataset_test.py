@@ -193,6 +193,9 @@ class DatasetTest(EpitomeTestCase):
         del os.environ[EPITOME_DATA_PATH_ENV]
         assert GET_DATA_PATH() == os.path.join(os.path.join(GET_EPITOME_USER_PATH(), "data"), "test")
 
-        # Clean up test
+        # Return default data path and default genome assembly if neither env vars are set
         del os.environ[EPITOME_GENOME_ASSEMBLY_ENV]
+        assert GET_DATA_PATH() == os.path.join(os.path.join(GET_EPITOME_USER_PATH(), "data"), "hg19")
+
+        # Clean up test
         EpitomeTestCase.setEpitomeDataPath()
