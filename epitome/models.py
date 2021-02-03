@@ -68,6 +68,7 @@ class VariationalPeakModel():
         :param list radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30])
         each model.
         :param str checkpoint: path to load model from.
+        :param int max_valid_batches: the size of train-validation dataset (default is None, meaning that it doesn't create a train-validation dataset or stop early while training)
         '''
 
         logging.getLogger("tensorflow").setLevel(logging.INFO)
@@ -253,11 +254,11 @@ class VariationalPeakModel():
 
     def train(self, num_steps, patience=1, min_delta=0):
         '''
-        Trains an Epitome model. If patience and min_delta are not specified, the model will train on num_step points.
+        Trains an Epitome model. If the patience and min_delta are not specified, the model will train on num_step points.
         Else, the model will either train on num_step points or stop training early if the train_valid_loss is converging
         (based on the patience and/or min_delta hyper-parameters), whatever comes first.
 
-        :param int num_steps: number of iterations to train for
+        :param int num_steps: number of steps to train for
         :param int patience: number of iterations (200 steps) with no improvement after which training will be stopped.
         :param float min_delta: minimum change in the monitored quantity to qualify as an improvement,
           i.e. an absolute change of less than min_delta, will count as no improvement.
@@ -326,8 +327,8 @@ class VariationalPeakModel():
                     train_valid_losses.append(new_mean_valid_loss)
 
 
-                    # Check if the improvement in loss is at least min_delta.
-                    # If the loss has increased more than patience consecutive times, the function stops early.
+                    # Check if the improvement in train-validation loss is at least min_delta.
+                    # If the train-validation loss has increased more than patience consecutive iterations, the function stops early.
                     # Else it continues training.
                     improvement = mean_valid_loss - new_mean_valid_loss
                     if improvement < min_delta:
@@ -335,7 +336,7 @@ class VariationalPeakModel():
                         if iterations_decreasing == patience:
                             return best_model_steps, step, train_valid_losses
                     else:
-                        # If val_loss increases before patience train_valid_steps, reset iterations_decreasing and mean_valid_loss.
+                        # If the validation loss decreases (the model is converging), reset iterations_decreasing and mean_valid_loss.
                         iterations_decreasing = 0
                         mean_valid_loss = new_mean_valid_loss
                         best_model_steps = step
