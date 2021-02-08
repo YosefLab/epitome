@@ -6,6 +6,10 @@ Pipeline for predicting ChIP-seq peaks in novel cell types using chromatin acces
 
 Epitome leverages chromatin accessibility (either DNase-seq or ATAC-seq) to predict epigenetic events in a novel cell type of interest. Such epigenetic events include transcription factor binding sites and histone modifications. Epitome computes chromatin accessibility similarity between ENCODE cell types and the novel cell type, and uses this information to transfer known epigentic signal to the novel cell type of interest.
 
+# Documentation
+
+Epitome documentation is hosted at [readthedocs](https://epitome.readthedocs.io/en/latest/). Documentation for Epitome includes tutorials for creating Epitome datasets, training, testing, and evaluated models.
+
 
 ## Requirements
 * [conda](https://docs.conda.io/en/latest/miniconda.html)
@@ -24,8 +28,6 @@ pip install epitome
 
 
 ## Training a Model
-
-TODO: link to documentation
 
 First, create an Epitome dataset that defines the cell types and ChIP-seq
 targets you want to train on,
