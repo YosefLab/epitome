@@ -149,7 +149,7 @@ def heatmap_aggreement_from_model_weights(model):
     Plots seaborn heatmap for DNase weights of first layer in network.
     Plots one heatmap for each celltype used in the features for training.
 
-    :param VLP model: an Epitome model
+    :param EpitomeModel model: an Epitome model
     '''
 
     # get weights

@@ -33,6 +33,8 @@ targets you want to train on,
 
 ```python
 
+    from epitome.dataset import *
+
     targets = ['CTCF','RAD21','SMC3']
     celltypes = ['K562', 'A549', 'GM12878']
 
@@ -44,7 +46,9 @@ Now, you can create and train your model:
 
 ```python
 
-    model = VLP(dataset, test_celltypes = ["K562"])
+    from epitome.models import *
+
+    model = EpitomeModel(dataset, test_celltypes = ["K562"])
     model.train(5000) # train for 5000 batches
 ```
 

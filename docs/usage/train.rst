@@ -32,7 +32,7 @@ Now, you can create a model:
 
 .. code:: python
 
-	model = VLP(dataset, test_celltypes = ["K562"]) # cell line reserved for testing
+	model = EpitomeModel(dataset, test_celltypes = ["K562"]) # cell line reserved for testing
 
 Next, train the model. Here, we train the model for 5000 iterations:
 
