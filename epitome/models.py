@@ -63,8 +63,7 @@ class VariationalPeakModel():
         :param floatl1: l1 regularization (default is 0)
         :param float l2: l2 regularization (default is 0)
         :param float lr: lr (default is 1e-3)
-        :param list radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30])
-        each model.
+        :param list radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30]) each model.
         :param str checkpoint: path to load model from.
         '''
 

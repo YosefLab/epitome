@@ -1,3 +1,15 @@
+r"""
+==========
+Conversion
+==========
+.. currentmodule:: epitome.conversion
+
+.. autosummary::
+  :toctree: _generate/
+
+  RegionConversion
+"""
+
 from .functions import bed2Pyranges
 import pyranges as pr
 import numpy as np
@@ -15,7 +27,7 @@ class RegionConversion:
 
     def __init__(self, base_bed, compare_bed):
         '''
-        __init__ function for RegionConversion class.
+        Initialization function for RegionConversion class.
 
         :param str|pyranges base_bed: either path to bed file or indexed pyranges base object
         :param str|pyranges compare_bed: either path to bed file or indexed pyranges comparison object

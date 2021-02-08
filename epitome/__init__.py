@@ -14,6 +14,7 @@ also includes scripts for processing ENCODE peaks.
 .. automodule:: epitome.constants
 .. automodule:: epitome.dataset
 .. automodule:: epitome.generators
+.. automodule:: epitome.conversion
 
 """
 import os

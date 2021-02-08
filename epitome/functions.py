@@ -9,7 +9,6 @@ Helper functions
 
   download_and_unzip
   bed2Pyranges
-  pyranges2Vector
   indices_for_weighted_resample
   get_radius_indices
 """
