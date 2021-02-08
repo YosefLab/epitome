@@ -37,10 +37,3 @@ jobs:
     - name: Test with pytest
       run: |
         make test
-    - name: After success
-      env:
-        CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
-      run: |
-        codecov
-        pip list
-        bash <(curl -Ls https://coverage.codacy.com/get.sh) report -l Python -r coverage.xml
