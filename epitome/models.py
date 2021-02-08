@@ -20,6 +20,7 @@ from .constants import *
 from .generators import *
 from .dataset import *
 from .metrics import *
+from .conversion import *
 import numpy as np
 
 import tqdm
@@ -62,8 +63,7 @@ class VariationalPeakModel():
         :param floatl1: l1 regularization (default is 0)
         :param float l2: l2 regularization (default is 0)
         :param float lr: lr (default is 1e-3)
-        :param list radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30])
-        each model.
+        :param list radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30]) each model.
         :param str checkpoint: path to load model from.
         '''
 
@@ -460,20 +460,20 @@ class VariationalPeakModel():
         :param list chrs: list of chromosome names to score. If none, scores all chromosomes.
         '''
 
-        # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set,
-        # and their indices are stored in missing_idx for future use
-        peak_vectors = [pyranges2Vector(bed2Pyranges(f), self.dataset.regions)[0] for f in similarity_peak_files]
-        peak_matrix = np.vstack(peak_vectors)
-        del peak_vectors
+        restructured_similarity = []
+        for f in similarity_peak_files:
+            tmpConversion = RegionConversion(self.dataset.regions, f)
+            restructured_similarity.append(tmpConversion.get_binary_vector()[0])
 
+        peak_matrix = np.vstack(restructured_similarity)
+
+        # get sorted indices to score
         regions  = self.dataset.regions
 
         # filter regions by chrs
         if chrs is not None:
             regions = regions[regions.Chromosome.isin(chrs)]
 
-
-        # get sorted indices to score
         idx = np.array(sorted(list(regions.idx)))
 
         print("scoring %i regions" % idx.shape[0])
@@ -482,7 +482,8 @@ class VariationalPeakModel():
         print("finished predictions...", predictions.shape)
 
         # return matrix of region, TF information. trim off idx column
-        npRegions = regions.df.sort_values(by='idx').values[:,:-1]
+        npRegions =  regions.df.sort_values(by='idx').drop(labels='idx', axis=1).values
+
         # TODO turn into right types (all strings right now)
         # predictions[0] is means of size n regions by # ChIP-seq peaks predicted
         preds = np.concatenate([npRegions, predictions], axis=1)
@@ -495,39 +496,6 @@ class VariationalPeakModel():
                             names=np.array(['chr','start','end'] + self.dataset.predict_targets))
 
         print("columns for matrices are chr, start, end, %s" % ", ".join(self.dataset.predict_targets))
-
-    def _group_preds_by_region(self, preds, joined):
-        '''
-        Groups predictions by original regions and calculates new predictions by
-        taking the mean. This is for the case when you are predicting in regions
-        that may overlap multiple regions in an EpitomeDataset.
-
-        :param np.matrix preds: matrix of shape (num_samples by EpitomeDataset regions by CHIP-seq targets)
-        :param pr.pyranges joined: pyranges. joined pandas dataframe matching original genomic regions
-          to regions in self.dataset. 2nd dimension of preds should equal number of records in joined dataframe.
-
-        :return: np.matrix of predictions, where 1st axis shape == len(original_dataframe)
-        :rtype: np.matrix
-        '''
-
-        assert pd.Index(joined['idx']).is_monotonic, "joined dataframe must first be sorted by idx column."
-
-        # get the index break for each region_bed region
-        reduce_indices = joined.drop_duplicates('idx',keep='first').index.values
-
-        # get the number of times there was a scored region for each region_bed region
-        # used to calculate reduced means
-        indices_counts = joined['idx'].value_counts(sort=False).sort_index().values[:,None]
-
-        # reduce means on middle axis
-        # TODO: there is some issue with this line.
-        final = np.add.reduceat(preds, reduce_indices, axis = 1)/indices_counts
-
-        # fill missing indices with nans
-        missing_indices = joined[joined['idx_alldata']==-1]['idx'].values
-        final[:,missing_indices, :] = np.NAN
-
-        return final
 
     def score_matrix(self, accessilibility_peak_matrix, regions):
         """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
@@ -543,43 +511,26 @@ class VariationalPeakModel():
         :rtype: numpy matrix
         """
 
-        if type(regions) == str:
-            regions_bed = bed2Pyranges(regions)
-        elif type(regions) == pr.PyRanges:
-            regions_bed = regions
-        else:
-            raise Exception("regions must be type scring or pr.Pyranges, but got type %s" % type(regions))
-
-        # Need to sort by idx first because you use this ordering to
-        # index reduced indices
-        joined = regions_bed.join(self.dataset.regions, how='left',suffix='_alldata').df \
-            .sort_values(by='idx') \
-            .reset_index(drop=True)
-
-        idx = joined['idx_alldata']
+        conversionObject = RegionConversion(self.dataset.regions, regions)
 
         results = []
 
         # TODO 9/10/2020: should do something more efficiently than a for loop
         for sample_i in tqdm.tqdm(range(accessilibility_peak_matrix.shape[0])):
 
-            peaks_i = np.zeros((len(self.dataset.regions)))
-            peaks_i[idx] = accessilibility_peak_matrix[sample_i, joined['idx']]
+            peaks_i, idx = conversionObject.get_binary_vector(vector = accessilibility_peak_matrix[sample_i,:])
 
-            # TODO 9/10/2020: code is currently scoring missing values and setting to nan.
-            # You could be more efficient and remove these so you are not taking
-            # the time to score garbage data.
             preds = self.eval_vector(peaks_i, idx)
 
             # group preds by joined['idx']
             results.append(preds)
 
         # stack all samples along 0th axis
+        # shape: samples x regions x TFs
         tmp = np.stack(results)
 
-
-
-        return self._group_preds_by_region(tmp, joined)
+        # mean and merge along 1st axis
+        return conversionObject.merge(tmp, axis = 1)
 
 
     def score_peak_file(self, similarity_peak_files, regions_peak_file):
@@ -593,18 +544,18 @@ class VariationalPeakModel():
         :rtype: pandas.dataframe
         '''
 
-
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set,
         # and their indices are stored in missing_idx for future use
-        similarity_peak_prs = [bed2Pyranges(f) for f in similarity_peak_files]
-        peak_matrix = np.vstack([pyranges2Vector(f, self.dataset.regions)[0] for f in similarity_peak_prs])
-
-        peak_vector_regions, all_peaks_regions = pyranges2Vector(bed2Pyranges(regions_peak_file), self.dataset.regions)
-
-        print("finished loading peak file")
+        restructured_similarity = []
+        for f in similarity_peak_files:
+          tmpConversion = RegionConversion(self.dataset.regions, f)
+          restructured_similarity.append(tmpConversion.get_binary_vector()[0])
+        peak_matrix = np.vstack(restructured_similarity)
 
         # only select peaks to score
-        idx = np.where(peak_vector_regions == True)[0]
+        compareObject = RegionConversion(self.dataset.regions, regions_peak_file)
+        # get indices in self.dataset.regions that we will be scoring
+        idx = compareObject.get_base_overlap_index()
 
         print("scoring %i regions" % idx.shape[0])
 
@@ -617,39 +568,11 @@ class VariationalPeakModel():
         if not isinstance(preds, np.ndarray):
             preds = preds.numpy()
 
-        preds_df =  pd.DataFrame(data=preds, columns=self.dataset.predict_targets)
+        merged_preds = compareObject.merge(preds, axis = 0) # TODO is this the correct axis?
 
-        # read in regions file and filter by indices that were scored
-        p = self.dataset.regions.df
-        p['idx']=p.index # keep original bed region ordering using idx column
-        p.columns = ['Chromosome', 'Start','End','idx']
-        prediction_positions = p[p['idx'].isin(idx)] # select regions that were scored
+        preds_df = pd.DataFrame(data=merged_preds, columns=self.dataset.predict_targets)
+        return pd.concat([compareObject.compare_df(), preds_df], axis=1)
 
-        # reset index to match predictions shape
-        # TODO AM 1/29/2021 use _group_preds_by_region here instead of custom code!
-        prediction_positions = prediction_positions.reset_index()
-        prediction_positions['idx'] = prediction_positions.index
-        prediction_positions = pd.concat([prediction_positions, preds_df],axis=1)
-        prediction_positions_pr = pr.PyRanges(prediction_positions, int64=True).sort()
-
-        original_file = bed2Pyranges(regions_peak_file)
-        # left join
-        joined = original_file.join(prediction_positions_pr, how='left')
-        # turn into dataframe
-        joined_df = joined.df
-        joined_df = joined_df.drop(['index','Start_b','End_b','idx_b'],axis=1)
-        # set missing values to 0
-        num = joined_df._get_numeric_data()
-        num[num < 0] = 0
-        mean_results = joined_df.groupby('idx').mean()
-
-        tmp = original_file.df
-        tmp = tmp.set_index(tmp['idx']) # correctly set index to original ordering
-
-        assert np.all(tmp.sort_index()['Start'].values == mean_results['Start'].values), "Error: genomic position start sites in mean results and original bed file do not match!"
-        assert np.all(tmp.sort_index()['End'].values == mean_results['End'].values), "Error: genomic position end sites in mean results and original bed file do not match!"
-
-        return pd.concat([tmp[['Chromosome']],mean_results], axis=1)
 
 class VLP(VariationalPeakModel):
     def __init__(self,
