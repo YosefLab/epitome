@@ -120,6 +120,5 @@ save_epitome_dataset(download_path,
 
 # rm tmp unfiltered bed files
 os.remove(all_regions_file_unfiltered)
-os.remove(all_regions_file_unfiltered + ".tmp")
 # remove h5 file with all zeros
 os.remove(matrix_path_all) # remove h5 file with all zeros

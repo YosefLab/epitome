@@ -67,7 +67,8 @@ def lojs_overlap(feature_files, compare_pr):
 
     Args:
             :param feature_files: list of paths to file to run intersection with all_regions_file
-            :param compare_pr: pyranges object containing all regions of interest
+            :param compare_pr: pyranges object containing all regions of interest. Should have column
+                'idx'. Added in function epitome.functions.bed2Pyranges.
 
     :return arr: array same size as the number of genomic regions in all_regions_file
     """
@@ -85,17 +86,18 @@ def lojs_overlap(feature_files, compare_pr):
         n = int(len(feature_files)/4) # in 25% of files
 
     # Very slow: concatenate all bed files and only take regions with n overlap
-    group_pr = pr.concat([pr.read_bed(i).merge(slack=20) for i in feature_files])
-    group_pr = group_pr.merge(slack=20, count=True).df
+    group_pr = pr.concat([pr.read_bed(i).merge() for i in feature_files])
+    group_pr = group_pr.merge(count=True).df
     group_pr = group_pr[group_pr['Count']>=n]
 
     # Remove count column and save to bed file
     group_pr.drop('Count', inplace=True, axis=1)
 
-    pr1 = pr.PyRanges(group_pr)
-
+    type_ = ( compare_pr.Start.dtype  == 'int64')
+    pr1 = pr.PyRanges(group_pr, int64=type_)
+    
     intersected = compare_pr.count_overlaps(pr1)
-    arr = intersected.df['NumberOverlaps'].values
+    arr = intersected.df.sort_values(by='idx')['NumberOverlaps'].values
     arr[arr>0] = 1
     return arr
 

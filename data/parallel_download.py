@@ -9,6 +9,7 @@ import os
 import pandas as pd
 import numpy as np
 import pyranges as pr
+from epitome.functions import bed2Pyranges
 
 logger = set_logger()
 
@@ -62,7 +63,7 @@ replicate_groups = get_metadata_groups(metadata_path,
 matrix_path_all = os.path.join(download_path, 'train_total.h5') # all sites
 
 # collect all regions and merge by chromsome, count number of 200bp bins
-pyDF = pr.read_bed(all_regions_file_unfiltered)
+pyDF = bed2Pyranges(all_regions_file_unfiltered)
 
 # get number of genomic regions in all.pos.bed file
 nregions = len(pyDF)
