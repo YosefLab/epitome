@@ -43,7 +43,7 @@ class EpitomeTestCase(unittest.TestCase):
 			cells = eligible_cells)
 
 
-		return VLP(dataset,
+		return EpitomeModel(dataset,
 			test_celltypes = ['K562'])
 
 

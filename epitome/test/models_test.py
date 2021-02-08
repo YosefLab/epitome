@@ -1,7 +1,7 @@
 from epitome.test import EpitomeTestCase
 from epitome.constants import Dataset
 import numpy as np
-from epitome.models import VLP
+from epitome.models import EpitomeModel
 import pytest
 import tempfile
 import pyranges as pr
@@ -66,7 +66,7 @@ class ModelsTest(EpitomeTestCase):
 		eligible_targets = ['CTCF', 'RAD21', 'CEBPB']
 		dataset = EpitomeDataset(targets = eligible_targets)
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
 
 	def test_model_similarity_assays(self):
@@ -75,7 +75,7 @@ class ModelsTest(EpitomeTestCase):
 
 		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['H3K27ac'])
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
 
 	def test_model_two_similarity_assays(self):
@@ -84,7 +84,7 @@ class ModelsTest(EpitomeTestCase):
 
 		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['DNase', 'H3K27ac'])
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 5)
 
 	def test_model_similarity_assays(self):
@@ -93,7 +93,7 @@ class ModelsTest(EpitomeTestCase):
 
 		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['H3K27ac'])
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
 
 	def test_eval_vector(self):
@@ -107,7 +107,7 @@ class ModelsTest(EpitomeTestCase):
 		# should save and re-load model
 		tmp_path = self.tmpFile()
 		self.model.save(tmp_path)
-		loaded_model = VLP(checkpoint=tmp_path)
+		loaded_model = EpitomeModel(checkpoint=tmp_path)
 		results = loaded_model.test(self.validation_size)
 		assert(results['preds'].shape[0] == self.validation_size)
 
@@ -203,7 +203,7 @@ class ModelsTest(EpitomeTestCase):
 		# this is where the bug was
 		assert np.where(ds.matrix == -1)[0].shape[0] == 0
 
-		model = VLP(ds)
+		model = EpitomeModel(ds)
 		model.train(1)
 		results = model.test(1000, calculate_metrics = True)
 		assert np.where(results['weights']==0)[0].shape[0] == 0

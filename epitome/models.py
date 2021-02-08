@@ -7,8 +7,8 @@ Models
 .. autosummary::
   :toctree: _generate/
 
-  VariationalPeakModel
-  VLP
+  PeakModel
+  EpitomeModel
 """
 
 
@@ -34,7 +34,7 @@ from operator import itemgetter
 #################### Variational Peak Model ###########################
 #######################################################################
 
-class VariationalPeakModel():
+class PeakModel():
     """
     Model for learning from ChIP-seq peaks.
     """
@@ -574,7 +574,7 @@ class VariationalPeakModel():
         return pd.concat([compareObject.compare_df(), preds_df], axis=1)
 
 
-class VLP(VariationalPeakModel):
+class EpitomeModel(PeakModel):
     def __init__(self,
              *args,
              **kwargs):
@@ -584,7 +584,7 @@ class VLP(VariationalPeakModel):
 
             .. code-block:: python
 
-                model = VLP(checkpoint=path_to_saved_model)
+                model = EpitomeModel(checkpoint=path_to_saved_model)
         '''
         self.activation = tf.tanh
         self.layers = 2
@@ -599,7 +599,7 @@ class VLP(VariationalPeakModel):
             metadata['dataset'] = dataset
             del metadata['dataset_params']
 
-            VariationalPeakModel.__init__(self, **metadata, **kwargs)
+            PeakModel.__init__(self, **metadata, **kwargs)
             file = h5py.File(os.path.join(kwargs["checkpoint"], "weights.h5"), 'r')
 
             # load model weights back in
@@ -610,7 +610,7 @@ class VLP(VariationalPeakModel):
             file.close()
 
         else:
-            VariationalPeakModel.__init__(self, *args, **kwargs)
+            PeakModel.__init__(self, *args, **kwargs)
 
     def create_model(self, **kwargs):
         '''
