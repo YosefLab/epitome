@@ -227,18 +227,18 @@ class VariationalPeakModel():
 
         return tf.math.reduce_sum(loss, axis=0)
 
-    def train(self, num_steps, patience=1, min_delta=0):
+    def train(self, max_train_batches, patience=1, min_delta=0):
         '''
-        Trains an Epitome model. If the patience and min_delta are not specified, the model will train on num_step points.
-        Else, the model will either train on num_step points or stop training early if the train_valid_loss is converging
+        Trains an Epitome model. If the patience and min_delta are not specified, the model will train on max_train_batches.
+        Else, the model will either train on max_train_batches or stop training early if the train_valid_loss is converging
         (based on the patience and/or min_delta hyper-parameters), whatever comes first.
 
-        :param int num_steps: number of steps to train for
-        :param int patience: number of iterations (200 steps) with no improvement after which training will be stopped.
+        :param int max_train_batches: max number of batches to train for
+        :param int patience: number of train-valid iterations (200 batches) with no improvement after which training will be stopped.
         :param float min_delta: minimum change in the monitored quantity to qualify as an improvement,
           i.e. an absolute change of less than min_delta, will count as no improvement.
 
-        :return triple of number of steps trained for the best model, number of steps the model has trained total,
+        :return triple of number of batches trained for the best model, number of batches the model has trained total,
           the train_validation losses (returns an empty list if self.max_valid_batches is None).
         :rtype: tuple
         '''
@@ -271,24 +271,24 @@ class VariationalPeakModel():
 
         def loopiter():
             # Initializing variables
-            mean_valid_loss, iterations_decreasing, best_model_steps = sys.maxsize, 0, 0
+            mean_valid_loss, iterations_decreasing, best_model_batches = sys.maxsize, 0, 0
             train_valid_losses = []
 
-            for step, f in enumerate(self.train_iter):
+            for current_batch, f in enumerate(self.train_iter):
                 loss = train_step(f)
 
-                if step % 1000 == 0:
-                  tf.print("Step: ", step)
+                if current_batch % 1000 == 0:
+                  tf.print("Step: ", current_batch)
                   tf.print("\tLoss: ", tf.reduce_mean(loss))
 
-                if (step % 200 == 0) and (self.max_valid_batches is not None):
+                if (current_batch % 200 == 0) and (self.max_valid_batches is not None):
                     # Early Stopping Validation
                     new_valid_loss = []
 
-                    for step_v, f_v in enumerate(self.train_valid_iter):
+                    for current_valid_batch, f_v in enumerate(self.train_valid_iter):
                         new_valid_loss.append(valid_step(f_v))
 
-                        if (step_v == self.max_valid_batches):
+                        if (current_valid_batch == self.max_valid_batches):
                             break
 
                     new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
@@ -302,17 +302,17 @@ class VariationalPeakModel():
                     if improvement < min_delta:
                         iterations_decreasing += 1
                         if iterations_decreasing == patience:
-                            return best_model_steps, step, train_valid_losses
+                            return best_model_batches, current_batch, train_valid_losses
                     else:
                         # If the validation loss decreases (the model is converging), reset iterations_decreasing and mean_valid_loss.
                         iterations_decreasing = 0
                         mean_valid_loss = new_mean_valid_loss
-                        best_model_steps = step
+                        best_model_batches = current_batch
 
-                if (step >= num_steps):
+                if (current_batch >= max_train_batches):
                     break
 
-            return best_model_steps, num_steps, train_valid_losses
+            return best_model_batches, max_train_batches, train_valid_losses
 
         return loopiter()
 
