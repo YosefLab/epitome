@@ -5,6 +5,7 @@ from epitome.models import VLP
 import pytest
 import tempfile
 import pyranges as pr
+import tensorflow as tf
 from epitome.dataset import *
 import sys
 
@@ -55,7 +56,7 @@ class ModelsTest(EpitomeTestCase):
 		assert(results2['preds'][0] < results1['preds'].shape[0])
 
 	def test_train_early_stop_model(self):
-
+		tf.random.set_seed(5)
 		eligible_cells = ['K562','HepG2','H1']
 		eligible_targets = ['DNase','CTCF']
 
@@ -74,6 +75,9 @@ class ModelsTest(EpitomeTestCase):
 
 		# results should be about random
 		m = np.mean(results1['preds'])
+		# TODO(jahnavis): Take out
+		print("m: " + str(m))
+		assert 0 == 1
 		assert m > 0.4 and m < 0.6
 
 		n_steps = 300
