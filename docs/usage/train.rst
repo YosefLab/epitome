@@ -33,7 +33,7 @@ Now, you can create a model:
 
 	model = VLP(dataset, test_celltypes = ["K562"]) # cell line reserved for testing
 
-Next, train the model. Here, we train the model for 5000 iterations:
+Next, train the model. Here, we train the model for 5000 batches:
 
 .. code:: python
 
@@ -41,7 +41,7 @@ Next, train the model. Here, we train the model for 5000 iterations:
 
 Train a Model that Stops Early
 -------------------------------
-If you are not sure how many iterations your model should train for or are concerned
+If you are not sure how many batches your model should train for or are concerned
 about your model overfitting, you can specify the max_valid_batches parameter when
 initializing the model, which will create a train_validation dataset the size of
 max_valid_batches. This forces the model to validate on the train-validation dataset
@@ -50,7 +50,7 @@ stop training early (before max_train_batches) if the model's train-validation
 losses stop improving during training. Else, the model will continue to train
 until max_train_batches.
 
-First, we have created a model with 1000 reserved as the train-validation set size:
+First, we have created a model that has a train-validation set size of 1000:
 
 .. code:: python
 
@@ -58,18 +58,12 @@ First, we have created a model with 1000 reserved as the train-validation set si
 		test_celltypes = ["K562"], # cell line reserved for testing
 		max_valid_batches = 1000) # train_validation set size reserved while training
 
-Next, we train the model for a maximum of 5000 iterations. If the train-validation
+Next, we train the model for a maximum of 5000 batches. If the train-validation
 loss stops improving, the model will stop training early:
 
 .. code:: python
 
 	best_model_batches, total_trained_batches, train_valid_losses = model.train(5000)
-
-If you are concerned about the model above stopping training too early (sometimes
-the train-validation loss might worsen slightly before reaching it's highest accuracy),
-you can specify the patience. In the model below, specifying a patience of 3 allows
-the model to train for up to 3 train-validation iterations (200 batches each) with
-no improvement, after which training will be stopped.
 
 If you are concerned about the model above overtraining because the model continues
 to improve by miniscule amounts, you can specify the min-delta which is minimum
@@ -77,10 +71,16 @@ change in the train-validation loss required to qualify as an improvement. In th
 model below, a minimum improvement of at least 0.1 is required for the model to
 qualify as improving.
 
+If you are concerned about the model above under-fitting (stopping training too
+early because the train-validation loss might worsen slightly before reaching it's
+highest accuracy), you can specify the patience. In the model below, specifying
+a patience of 3 allows the model to train for up to 3 train-validation iterations
+(200 batches each) with no improvement, before stopping training.
+
 You can read the in-depth explanation of these hyper-parameters in
 `this section <https://www.overleaf.com/project/5cd315cb8028bd409596bdff>`__ of the
-paper. Detailed documentation of the function can be found in the
-`Github repo <https://github.com/YosefLab/epitome>`__.
+paper. Detailed documentation of the train() function can also
+be found in the `Github repo <https://github.com/YosefLab/epitome>`__.
 
 .. code:: python
 

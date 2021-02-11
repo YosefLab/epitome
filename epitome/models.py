@@ -271,14 +271,14 @@ class VariationalPeakModel():
 
         def loopiter():
             # Initializing variables
-            mean_valid_loss, iterations_decreasing, best_model_batches = sys.maxsize, 0, 0
+            mean_valid_loss, decreasing_train_valid_iters, best_model_batches = sys.maxsize, 0, 0
             train_valid_losses = []
 
             for current_batch, f in enumerate(self.train_iter):
                 loss = train_step(f)
 
                 if current_batch % 1000 == 0:
-                  tf.print("Step: ", current_batch)
+                  tf.print("Batch: ", current_batch)
                   tf.print("\tLoss: ", tf.reduce_mean(loss))
 
                 if (current_batch % 200 == 0) and (self.max_valid_batches is not None):
@@ -296,16 +296,16 @@ class VariationalPeakModel():
 
 
                     # Check if the improvement in train-validation loss is at least min_delta.
-                    # If the train-validation loss has increased more than patience consecutive iterations, the function stops early.
+                    # If the train-validation loss has increased more than patience consecutive train-validation iterations, the function stops early.
                     # Else it continues training.
                     improvement = mean_valid_loss - new_mean_valid_loss
                     if improvement < min_delta:
-                        iterations_decreasing += 1
-                        if iterations_decreasing == patience:
+                        decreasing_train_valid_iters += 1
+                        if decreasing_train_valid_iters == patience:
                             return best_model_batches, current_batch, train_valid_losses
                     else:
-                        # If the validation loss decreases (the model is converging), reset iterations_decreasing and mean_valid_loss.
-                        iterations_decreasing = 0
+                        # If the train-validation loss decreases (the model is improving and converging), reset decreasing_train_valid_iters and mean_valid_loss.
+                        decreasing_train_valid_iters = 0
                         mean_valid_loss = new_mean_valid_loss
                         best_model_batches = current_batch
 
