@@ -5,9 +5,7 @@ seaborn==0.10.0.rc0
 matplotlib>=3.3
 sklearn
 pytabix==0.1
-sphinx==2.1.1 # documentation
-sphinx_rtd_theme==0.4.3
-tensorflow-probability==0.11.0
+gast==0.3.3
 tqdm
 pyranges>=0.0.84
 h5sparse==0.0.5
