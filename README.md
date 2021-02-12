@@ -1,3 +1,7 @@
+[![pypi](https://img.shields.io/pypi/v/epitome.svg)](https://pypi.org/project/epitome/)[![docs](https://readthedocs.org/projects/epitome/badge/?version=latest)](https://epitome.readthedocs.io/en/latest/)[![Build status](https://github.com/YosefLab/epitome/workflows/epitome/badge.svg)]
+
+
+
 # Epitome
 
 Pipeline for predicting ChIP-seq peaks in novel cell types using chromatin accessibility.
