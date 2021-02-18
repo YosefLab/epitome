@@ -68,16 +68,12 @@ class ModelsTest(EpitomeTestCase):
 		dataset._data = np.ones(dataset_shape)
 
 		# create model and train
-		model = VLP(dataset,
+		model = EpitomeModel(dataset,
 			radii=[],
 			max_valid_batches=10)
 		results1 = model.test(10)
 
 		# results should be about random
-		m = np.mean(results1['preds'])
-		# TODO(jahnavis): Take out
-		print("m: " + str(m))
-		assert 0 == 1
 		assert m > 0.4 and m < 0.6
 
 		n_steps = 300
