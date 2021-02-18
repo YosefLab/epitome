@@ -36,7 +36,7 @@ similarity, and then predicts using the ``score_whole_genome`` function:
   dataset = EpitomeDataset(targets, similarity_targets=['DNase', 'H3K27ac'])
 
   # create and train model
-  model = VLP(dataset)
+  model = EpitomeModel(dataset)
   model.train(5000)
 
   # list of paths to bed files for similarity assays for a cell type of interest

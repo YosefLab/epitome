@@ -11,7 +11,6 @@ Vizualization functions
   plot_assay_heatmap
   heatmap_aggreement_from_model_weights
   calibration_plot
-  plot_weight_posteriors
 """
 
 #####################################################################
@@ -150,7 +149,7 @@ def heatmap_aggreement_from_model_weights(model):
     Plots seaborn heatmap for DNase weights of first layer in network.
     Plots one heatmap for each celltype used in the features for training.
 
-    :param VLP model: an Epitome model
+    :param EpitomeModel model: an Epitome model
     '''
 
     # get weights
@@ -211,57 +210,3 @@ def calibration_plot(truth, preds, assay_dict, list_assaymap):
               ncol=2, fancybox=True, shadow=True)
 
     plt.show()
-
-
-
-############################################################################
-###################### Visualizing model internals #########################
-############################################################################
-
-def plot_weight_posteriors(names, qm_vals, qs_vals, fname=None):
-    '''
-    Save a PNG plot with histograms of weight means and stddevs.
-    From https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py.
-    Requires that model has been trained for at least 1 iteration to correctly instantiate kernel posterior.
-    To collect parameters, run:
-
-    ```python
-
-    model = VLP(...)
-    names, means, stds = model.get_weight_parameters()
-
-    ```
-
-
-    :param iterable names: A Python `iterable` of `str` variable names.
-    :param iterable qm_vals: A Python `iterable`, the same length as `names`,
-      whose elements are Numpy `array`s, of any shape, containing
-      posterior means of weight varibles.
-    :param iterable qs_vals: A Python `iterable`, the same length as `names`,
-      whose elements are Numpy `array`s, of any shape, containing
-      posterior standard deviations of weight varibles.
-    :param str fname: Python `str` filename to save the plot to.
-    :return: figure
-    :rtype: matplotlib axis
-    '''
-    fig = plt.figure(figsize=(6, 3))
-
-    ax = fig.add_subplot(1, 2, 1)
-    for n, qm in zip(names, qm_vals):
-        sns.distplot(tf.reshape(qm, [-1]), ax=ax, label=n)
-    ax.set_title("weight means")
-    ax.set_xlim([-1.5, 1.5])
-    ax.legend()
-
-    ax = fig.add_subplot(1, 2, 2)
-    for n, qs in zip(names, qs_vals):
-        sns.distplot(tf.reshape(qs, [-1]), ax=ax)
-    ax.set_title("weight stddevs")
-    ax.set_xlim([0, 0.2])
-
-    fig.tight_layout()
-    if fname != None:
-        fig.savefig(fname)
-        print("saved {}".format(fname))
-
-    return fig

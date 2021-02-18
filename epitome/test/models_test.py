@@ -1,7 +1,7 @@
 from epitome.test import EpitomeTestCase
 from epitome.constants import Dataset
 import numpy as np
-from epitome.models import VLP
+from epitome.models import EpitomeModel
 import pytest
 import tempfile
 import pyranges as pr
@@ -102,7 +102,7 @@ class ModelsTest(EpitomeTestCase):
 		eligible_targets = ['CTCF', 'RAD21', 'CEBPB']
 		dataset = EpitomeDataset(targets = eligible_targets)
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
 
 	def test_model_similarity_assays(self):
@@ -111,7 +111,7 @@ class ModelsTest(EpitomeTestCase):
 
 		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['H3K27ac'])
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
 
 	def test_model_two_similarity_assays(self):
@@ -120,7 +120,7 @@ class ModelsTest(EpitomeTestCase):
 
 		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['DNase', 'H3K27ac'])
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 5)
 
 	def test_model_similarity_assays(self):
@@ -129,7 +129,7 @@ class ModelsTest(EpitomeTestCase):
 
 		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['H3K27ac'])
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
 
 	def test_eval_vector(self):
@@ -143,7 +143,7 @@ class ModelsTest(EpitomeTestCase):
 		# should save and re-load model
 		tmp_path = self.tmpFile()
 		self.model.save(tmp_path)
-		loaded_model = VLP(checkpoint=tmp_path)
+		loaded_model = EpitomeModel(checkpoint=tmp_path)
 		results = loaded_model.test(self.validation_size)
 		assert(results['preds'].shape[0] == self.validation_size)
 
@@ -239,66 +239,7 @@ class ModelsTest(EpitomeTestCase):
 		# this is where the bug was
 		assert np.where(ds.matrix == -1)[0].shape[0] == 0
 
-		model = VLP(ds)
+		model = EpitomeModel(ds)
 		model.train(1)
 		results = model.test(1000, calculate_metrics = True)
 		assert np.where(results['weights']==0)[0].shape[0] == 0
-
-	def test_score_matrix_combines_indices(self):
-		# issue where value_counts() was not sorting on the index,
-		# causing predictions to be combined incorrectly and returning preds > 1
-
-		# Create dummy data
-		start = [200,1100,1700]
-		end = [900,1500,2100]
-		regions_dict = {'Chromosome': ['chr1'] * len(start),
-		                'Start': start,
-		                'End': end, 'idx': [510,511,512]} # indices that caused problems
-														  # when calling .value_counts()
-		regions_pr = pr.from_dict(regions_dict)
-		# have to cast to int64
-		regions = pr.PyRanges(regions_pr.df, int64=True)
-
-		targets = [ 'CTCF']
-		ds = EpitomeDataset(targets = targets,
-				cells=['PC-9','Panc1','IMR-90','H1'],
-                    min_cells_per_target =2)
-		t = ds.get_data(Dataset.ALL)
-		ds._data = np.ones(t.shape)
-		model = VLP(ds)
-
-		# set predictions to 1s so means could be greater than 1 if done wrong
-		preds = np.ones((1, 10, 1))
-
-		joined = regions.join(model.dataset.regions, how='left',suffix='_alldata').df \
-			.sort_values(by='idx') \
-			.reset_index(drop=True)
-		results = model._group_preds_by_region(preds, joined)
-
-		masked = np.ma.array(results, mask=np.isnan(results))
-		assert(np.all(masked <= 1))
-
-
-		# Error case where there are nans before true values
-		# 1st region on chr 1has no overlap with dataset, while second region
-		# on chr2 has multiple overlaps
-		start = [30000,200]
-		end = [30100,900]
-		regions_dict = {'Chromosome': ['chr1','chr2'],
-		                'Start': start,
-		                'End': end, 'idx': [0,1]}
-
-		regions_pr = pr.from_dict(regions_dict)
-		# have to cast to int64
-		regions = pr.PyRanges(regions_pr.df, int64=True)
-
-		# have to sort on index in order for _group_preds_by_region to work
-		joined = regions.join(model.dataset.regions, how='left',suffix='_alldata').df \
-			.sort_values(by='idx') \
-			.reset_index(drop=True)
-
-		preds = np.ones((1, len(joined), 1))
-		results = model._group_preds_by_region(preds, joined)
-		print(results)
-		masked = np.ma.array(results, mask=np.isnan(results))
-		assert(np.all(masked <= 1))

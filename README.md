@@ -1,18 +1,26 @@
+[![pypi](https://img.shields.io/pypi/v/epitome.svg)](https://pypi.org/project/epitome/)[![docs](https://readthedocs.org/projects/epitome/badge/?version=latest)](https://epitome.readthedocs.io/en/latest/)![Build status](https://github.com/YosefLab/epitome/workflows/epitome/badge.svg)
+
+
+
 # Epitome
 
 Pipeline for predicting ChIP-seq peaks in novel cell types using chromatin accessibility.
 
 ![Epitome Diagram](docs/figures/epitome_diagram_celllines.png)
 
-Epitome leverages chromatin accessibility data to predict transcription factor binding sites on a novel cell type of interest. Epitome computes the chromatin similarity between 11 cell types in ENCODE and the novel cell types, and uses chromatin similarity to transfer binding information in known cell types to a novel cell type of interest.
+Epitome leverages chromatin accessibility (either DNase-seq or ATAC-seq) to predict epigenetic events in a novel cell type of interest. Such epigenetic events include transcription factor binding sites and histone modifications. Epitome computes chromatin accessibility similarity between ENCODE cell types and the novel cell type, and uses this information to transfer known epigentic signal to the novel cell type of interest.
+
+# Documentation
+
+Epitome documentation is hosted at [readthedocs](https://epitome.readthedocs.io/en/latest/). Documentation for Epitome includes tutorials for creating Epitome datasets, training, testing, and evaluated models.
 
 
-## Requirements:
+## Requirements
 * [conda](https://docs.conda.io/en/latest/miniconda.html)
-* python > 3.6
+* python >= 3.6
 
-## Setup and Installation:
-1. Create and activate a conda venv:
+## Setup and Installation
+1. Create and activate a conda environment:
 ```
 conda create --name EpitomeEnv python=3.6 pip
 source activate EpitomeEnv
@@ -22,42 +30,46 @@ source activate EpitomeEnv
 pip install epitome
 ```
 
-# Install Epitome for development:
-```
-make develop
-```
-
-Note: Epitome is configured for tensorflow 2.1.0/Cuda 9. If you have a different
-version of cuda, update tensorflow-gpu version accordingly.
-
-To check your Cuda version:
-```
-nvcc --version
-```
 
 ## Training a Model
 
+First, create an Epitome dataset that defines the cell types and ChIP-seq
+targets you want to train on,
+
+
 ```python
 
-    print(list_assays()) # list of available ChIP-seq targets epitome can predict on
+    from epitome.dataset import *
+
+    targets = ['CTCF','RAD21','SMC3']
+    celltypes = ['K562', 'A549', 'GM12878']
+
+    dataset = EpitomeDataset(targets=targets, cells=celltypes)
+
+```
+
+Now, you can create and train your model:
+
+```python
 
     from epitome.models import *
-    model = VLP(['CTCF', 'SMC3', 'RAD21'])
-    model.train(5000) # train for 5000 iterations
+
+    model = EpitomeModel(dataset, test_celltypes = ["K562"])
+    model.train(5000) # train for 5000 batches
 ```
 
 ## Evaluate a Model:
 
 ```python
 
-   model.test(1000) # evaluate how well the model performs on a validation set
+   model.test(1000) # evaluate how well the model performs on a validation chromosome
 
 ```
 
-## Predict using a Model:
+## Using Epitome on your own dataset:
 
 Epitome can perform genome wide predictions or region specific predictions on
-a new DNase-seq or ATAC-seq sample.
+a sample that has either DNase-seq or ATAC-seq.
 
 To score specific regions:
 
@@ -65,15 +77,31 @@ To score specific regions:
 
    chromatin_peak_file = ... # path to peak called ATAC-seq or DNase-seq in bed format
    regions_file = ...        # path to bed file of regions to score
-   results = model.score_peak_file(chromatin_peak_file, regions_file)
+   results = model.score_peak_file([chromatin_peak_file], regions_file)
 
 ```
 
 To score on the whole genome:
+
 ```python
 
    chromatin_peak_file = ... # path to peak called ATAC-seq or DNase-seq in bed format
    file_prefix = ...        # file to save compressed numpy predictions to.
-   model.score_peak_file(chromatin_peak_file, file_prefix)
+   model.score_whole_genome([chromatin_peak_file], file_prefix)
 
+```
+
+
+# Install Epitome for development
+
+To build Epitome for development, run:
+
+```
+make develop
+```
+
+## Running unit tests
+
+```
+make test
 ```
