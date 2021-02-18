@@ -219,7 +219,7 @@ class EpitomeDataset:
         if not data_dir:
             data_dir = GET_DATA_PATH()
             if not EpitomeDataset.contains_required_files(data_dir):
-                # Grab data directory and download it from S3 if it is empty
+                # Grab data directory and download it from S3 if it doesn't have the required files
                 assembly = os.path.basename(data_dir)
                 assert assembly in EPITOME_GENOME_ASSEMBLIES, "assembly %s not in S3 cluster. Must be either in %s" % (assembly, LIST_GENOME_ASSEMBLIES())
                 url_path = os.path.join(os.path.join(S3_DATA_PATH, assembly), 'data.zip')
