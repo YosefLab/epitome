@@ -31,7 +31,7 @@ Now, you can create a model:
 
 .. code:: python
 
-	model = VLP(dataset, test_celltypes = ["K562"]) # cell line reserved for testing
+	model = EpitomeModel(dataset, test_celltypes = ["K562"]) # cell line reserved for testing
 
 Next, train the model. Here, we train the model for 5000 batches:
 
@@ -54,7 +54,7 @@ First, we have created a model that has a train-validation set size of 1000:
 
 .. code:: python
 
-	model = VLP(dataset,
+	model = EpitomeModel(dataset,
 		test_celltypes = ["K562"], # cell line reserved for testing
 		max_valid_batches = 1000) # train_validation set size reserved while training
 
