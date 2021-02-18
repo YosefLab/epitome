@@ -60,3 +60,8 @@ class Dataset(Enum):
     r"""
     All mode: Specifies that data should not be divided by train, valid, and test.
     """
+
+    TRAIN_VALID = 6 # For early stopping criteria. pulls train/valid chromsome.
+    r"""
+    TRAIN_VALID mode: Specifies that only a validation chr from train should be used.
+    """

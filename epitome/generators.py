@@ -122,7 +122,6 @@ def load_data(data,
 
                 # sites where TF is bound in at least 2 cell line
                 positive_indices = np.where(np.sum(data[TF_indices,:], axis=0) > 1)[0]
-
                 indices_probs = np.ones([data.shape[1]])
                 indices_probs[positive_indices] = 0
                 indices_probs = indices_probs/np.sum(indices_probs, keepdims=1)
@@ -142,7 +141,6 @@ def load_data(data,
 
         else:
             indices = range(0, data.shape[-1]) # not training mode, set to all points
-
 
     if (mode == Dataset.RUNTIME):
         label_cell_types = ["PLACEHOLDER_CELL"]

@@ -35,7 +35,6 @@ class EpitomeTestCase(unittest.TestCase):
 				min_targets_per_cell = min_targets_per_cell)
 
 	def makeSmallModel(self):
-
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_targets = ['DNase','CTCF']
 
@@ -48,7 +47,6 @@ class EpitomeTestCase(unittest.TestCase):
 
 
 	def tmpFile(self):
-
 		tempFile = tempfile.NamedTemporaryFile(delete=True)
 		tempFile.close()
 		return tempFile.name

@@ -16,8 +16,8 @@ from epitome import *
 import tensorflow as tf
 
 from .functions import *
-from .constants import *
-from .generators import *
+from .constants import Dataset
+from .generators import generator_to_tf_dataset,load_data
 from .dataset import *
 from .metrics import *
 from .conversion import *
@@ -25,6 +25,7 @@ import numpy as np
 
 import tqdm
 import logging
+import sys
 
 # for saving model
 import pickle
@@ -50,7 +51,8 @@ class PeakModel():
                  l2=0.,
                  lr=1e-3,
                  radii=[1,3,10,30],
-                 checkpoint = None):
+                 checkpoint = None,
+                 max_valid_batches = None):
         '''
         Initializes Peak Model
 
@@ -65,6 +67,7 @@ class PeakModel():
         :param float lr: lr (default is 1e-3)
         :param list radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30]) each model.
         :param str checkpoint: path to load model from.
+        :param int max_valid_batches: the size of train-validation dataset (default is None, meaning that it doesn't create a train-validation dataset or stop early while training)
         '''
 
         logging.getLogger("tensorflow").setLevel(logging.INFO)
@@ -79,6 +82,31 @@ class PeakModel():
         self.eval_cell_types = list(self.dataset.cellmap).copy()
         self.test_celltypes = test_celltypes
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
+
+        if max_valid_batches is not None:
+            # get the last training chromosome if valid_chromosome is not specified
+            tmp_chrs = self.dataset.regions.chromosomes
+            for i in self.dataset.test_chrs:
+                tmp_chrs.remove(i)
+            for i in self.dataset.valid_chrs:
+                tmp_chrs.remove(i)
+
+            valid_chromosome = tmp_chrs[-1]
+
+            # Reserve chromosome 22 from the training data to validate model while training
+            self.dataset.set_train_validation_indices(valid_chromosome)
+            print(self.dataset.get_data(Dataset.TRAIN_VALID).shape)
+
+            # Creating a separate train-validation dataset
+            _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.TRAIN_VALID),
+                                                    self.eval_cell_types,
+                                                    self.eval_cell_types,
+                                                    dataset.matrix,
+                                                    dataset.targetmap,
+                                                    dataset.cellmap,
+                                                    similarity_targets= dataset.similarity_targets,
+                                                    radii = radii, mode = Dataset.TRAIN),
+                                                    batch_size, shuffle_size, prefetch_size)
 
         input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.TRAIN),
                                                 self.eval_cell_types,
@@ -121,6 +149,7 @@ class PeakModel():
 
         self.num_outputs = output_shape[0]
         self.num_inputs = input_shapes
+        self.max_valid_batches = max_valid_batches
 
         # set self
         self.radii = radii
@@ -202,13 +231,21 @@ class PeakModel():
 
         return tf.math.reduce_sum(loss, axis=0)
 
-    def train(self, num_steps):
+    def train(self, max_train_batches, patience=1, min_delta=0):
         '''
-        Trains an Epitome model for num_steps iterations.
+        Trains an Epitome model. If the patience and min_delta are not specified, the model will train on max_train_batches.
+        Else, the model will either train on max_train_batches or stop training early if the train_valid_loss is converging
+        (based on the patience and/or min_delta hyper-parameters), whatever comes first.
 
-        :param int num_steps: number of iterations to train for
+        :param int max_train_batches: max number of batches to train for
+        :param int patience: number of train-valid iterations (200 batches) with no improvement after which training will be stopped.
+        :param float min_delta: minimum change in the monitored quantity to qualify as an improvement,
+          i.e. an absolute change of less than min_delta, will count as no improvement.
+
+        :return triple of number of batches trained for the best model, number of batches the model has trained total,
+          the train_validation losses (returns an empty list if self.max_valid_batches is None).
+        :rtype: tuple
         '''
-
         tf.compat.v1.logging.info("Starting Training")
 
         @tf.function
@@ -227,23 +264,61 @@ class PeakModel():
 
             return loss
 
+        @tf.function
+        def valid_step(f):
+            features = f[:-2]
+            labels = f[-2]
+            weights = f[-1]
+            logits = self.model(features, training=False)
+            neg_log_likelihood = self.loss_fn(labels, logits, weights)
+            return neg_log_likelihood
+
         def loopiter():
-            for step, f in enumerate(self.train_iter):
+            # Initializing variables
+            mean_valid_loss, decreasing_train_valid_iters, best_model_batches = sys.maxsize, 0, 0
+            train_valid_losses = []
+
+            for current_batch, f in enumerate(self.train_iter):
                 loss = train_step(f)
 
-                if step % 1000 == 0:
-                  tf.print("Step: ", step)
+                if current_batch % 1000 == 0:
+                  tf.print("Batch: ", current_batch)
                   tf.print("\tLoss: ", tf.reduce_mean(loss))
 
-                  if (self.debug):
-                      tf.compat.v1.logging.info("On validation")
-                      _, _, _, _, _ = self.test(40000, log=False)
-                      tf.compat.v1.logging.info("")
+                if (current_batch % 200 == 0) and (self.max_valid_batches is not None):
+                    # Early Stopping Validation
+                    new_valid_loss = []
 
-                if step > num_steps:
-                  break
+                    for current_valid_batch, f_v in enumerate(self.train_valid_iter):
+                        new_valid_loss.append(valid_step(f_v))
 
-        loopiter()
+                        if (current_valid_batch == self.max_valid_batches):
+                            break
+
+                    new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
+                    train_valid_losses.append(new_mean_valid_loss)
+
+
+                    # Check if the improvement in train-validation loss is at least min_delta.
+                    # If the train-validation loss has increased more than patience consecutive train-validation iterations, the function stops early.
+                    # Else it continues training.
+                    improvement = mean_valid_loss - new_mean_valid_loss
+                    if improvement < min_delta:
+                        decreasing_train_valid_iters += 1
+                        if decreasing_train_valid_iters == patience:
+                            return best_model_batches, current_batch, train_valid_losses
+                    else:
+                        # If the train-validation loss decreases (the model is improving and converging), reset decreasing_train_valid_iters and mean_valid_loss.
+                        decreasing_train_valid_iters = 0
+                        mean_valid_loss = new_mean_valid_loss
+                        best_model_batches = current_batch
+
+                if (current_batch >= max_train_batches):
+                    break
+
+            return best_model_batches, max_train_batches, train_valid_losses
+
+        return loopiter()
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
         '''
@@ -258,7 +333,8 @@ class PeakModel():
 
         if (mode == Dataset.VALID):
             handle = self.valid_iter # for standard validation of validation cell types
-
+        elif (mode == Dataset.TRAIN):
+            handle = self.train_valid_iter
         elif (mode == Dataset.TEST and len(self.test_celltypes) > 0):
             handle = self.test_iter # for standard validation of validation cell types
         else:
@@ -644,4 +720,5 @@ class EpitomeModel(PeakModel):
                                         name="output_layer")(last)
 
         model = tf.keras.models.Model(inputs=cell_inputs, outputs=outputs)
+
         return model
