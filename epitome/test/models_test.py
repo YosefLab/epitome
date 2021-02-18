@@ -2,6 +2,7 @@ from epitome.test import EpitomeTestCase
 from epitome.constants import Dataset
 import numpy as np
 from epitome.models import EpitomeModel
+from epitome.dataset import EpitomeDataset
 import pytest
 import tempfile
 import pyranges as pr
@@ -78,7 +79,7 @@ class ModelsTest(EpitomeTestCase):
 		assert m > 0.4 and m < 0.6
 
 		n_steps = 300
-		best_model_steps, num_steps, train_valid_losses = model.train(n_steps,min_delta=sys.maxsize)
+		_, num_steps, train_valid_losses = model.train(n_steps,min_delta=sys.maxsize)
 		assert num_steps < n_steps
 
 		results2 = model.test(self.validation_size)

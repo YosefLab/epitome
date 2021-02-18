@@ -22,7 +22,7 @@ from sklearn.metrics import jaccard_score
 
 # local imports
 from epitome import *
-from .constants import *
+from .constants import Dataset
 from .functions import download_and_unzip
 from .viz import plot_assay_heatmap
 
@@ -128,22 +128,22 @@ class EpitomeDataset:
 
         dataset.close()
 
-    def set_train_validation_indices(self, chr):
-        """
+    def set_train_validation_indices(self, chrom):
+        '''
         Removes and reserves a given chromosome from the TRAIN dataset into
         its own TRAIN_VALID dataset.
 
-        :param str chr: string representation of chromosome in 'chr{int}' format (Ex: 'chr22').
-        """
-        assert chr in self.regions.chromosomes, "%s must be part of the genome assembly. Not found in regions."
-        assert chr not in self.valid_chrs and chr not in self.test_chrs, "%s cannot be a valid or test chromosome."
+        :param str chrom: string representation of chromosome in 'chr{int}' format (Ex: 'chr22').
+        '''
+        assert chrom in self.regions.chromosomes, "%s must be part of the genome assembly. Not found in regions."
+        assert chrom  not in self.valid_chrs and chrom not in self.test_chrs, "%s cannot be a valid or test chromosome."
 
         # load in original training indices
         dataset = h5py.File(self.h5_path, 'r')
         train_indices = dataset['columns']['index'][Dataset.TRAIN.name][:]
         dataset.close()
 
-        chr_indices = self.regions[self.regions.Chromosome == chr].idx
+        chr_indices = self.regions[self.regions.Chromosome == chrom].idx
 
         # make sure this chromosome is in train set
         assert len(np.setdiff1d(chr_indices, train_indices)) == 0, "chr_indices must be a subset of train_indices"
@@ -154,7 +154,8 @@ class EpitomeDataset:
 
 
     def get_parameter_dict(self):
-        ''' Returns dict of all parameters required to reconstruct this dataset
+        '''
+        Returns dict of all parameters required to reconstruct this dataset
 
         :return: dict containing all parameters to reconstruct dataset.
         :rtype: dict

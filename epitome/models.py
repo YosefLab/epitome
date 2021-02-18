@@ -16,8 +16,8 @@ from epitome import *
 import tensorflow as tf
 
 from .functions import *
-from .constants import *
-from .generators import *
+from .constants import Dataset
+from .generators import generator_to_tf_dataset,load_data
 from .dataset import *
 from .metrics import *
 from .conversion import *
@@ -25,6 +25,7 @@ import numpy as np
 
 import tqdm
 import logging
+import sys
 
 # for saving model
 import pickle
@@ -85,8 +86,11 @@ class PeakModel():
         if max_valid_batches is not None:
             # get the last training chromosome if valid_chromosome is not specified
             tmp_chrs = self.dataset.regions.chromosomes
-            [tmp_chrs.remove(i) for i in self.dataset.test_chrs]
-            [tmp_chrs.remove(i) for i in self.dataset.valid_chrs]
+            for i in self.dataset.test_chrs:
+                tmp_chrs.remove(i)
+            for i in self.dataset.valid_chrs:
+                tmp_chrs.remove(i)
+
             valid_chromosome = tmp_chrs[-1]
 
             # Reserve chromosome 22 from the training data to validate model while training
