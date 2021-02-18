@@ -1,3 +1,4 @@
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/6c2cef0a2eae45399c9caed2d8c81965)](https://app.codacy.com/gh/YosefLab/epitome?utm_source=github.com&utm_medium=referral&utm_content=YosefLab/epitome&utm_campaign=Badge_Grade)
 [![pypi](https://img.shields.io/pypi/v/epitome.svg)](https://pypi.org/project/epitome/)[![docs](https://readthedocs.org/projects/epitome/badge/?version=latest)](https://epitome.readthedocs.io/en/latest/)![Build status](https://github.com/YosefLab/epitome/workflows/epitome/badge.svg)
 
 
