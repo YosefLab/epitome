@@ -74,6 +74,7 @@ class ModelsTest(EpitomeTestCase):
 		results1 = model.test(10)
 
 		# results should be about random
+		m = np.mean(results1['preds'])
 		assert m > 0.4 and m < 0.6
 
 		n_steps = 300
