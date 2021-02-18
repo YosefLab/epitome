@@ -1,9 +1,10 @@
 from epitome.test import EpitomeTestCase
 from epitome.test import *
 from epitome.functions import *
-from epitome.dataset import EpitomeDataset
+from epitome.dataset import EpitomeDataset, REQUIRED_KEYS, EPITOME_H5_FILE
 from epitome.constants import Dataset
 
+import os
 import numpy as np
 import pytest
 import warnings
@@ -127,7 +128,7 @@ class DatasetTest(EpitomeTestCase):
 
         targets = list(targetmap)
         # Make sure only JUND and is in list of assays
-        self.assertTrue(len(targets)) == 2
+        self.assertTrue(len(targets) == 2)
         self.assertTrue(TF in targets)
         self.assertTrue('H3K27ac' in targets)
 

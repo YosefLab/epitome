@@ -26,6 +26,38 @@ from .constants import Dataset
 from .functions import download_and_unzip
 from .viz import plot_assay_heatmap
 
+################### File accession constants #######################
+S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/hg19.zip'
+
+# os env that should be set by user to explicitly set the data path
+EPITOME_DATA_PATH_ENV="EPITOME_DATA_PATH"
+
+# data files required by epitome
+# data.h5 contains data, row information (celltypes and targets) and
+# column information (chr, start, binSize)
+EPITOME_H5_FILE = "data.h5"
+REQUIRED_FILES = [EPITOME_H5_FILE]
+# required keys in h5 file
+REQUIRED_KEYS = ['/',
+ '/columns',
+ '/columns/binSize',
+ '/columns/chr',
+ '/columns/index',
+ '/columns/index/TEST',
+ '/columns/index/TRAIN',
+ '/columns/index/VALID',
+ '/columns/index/test_chrs',
+ '/columns/index/valid_chrs',
+ '/columns/start',
+ '/data',
+ '/meta',
+ '/meta/assembly',
+ '/meta/source',
+ '/rows',
+ '/rows/celltypes',
+ '/rows/targets']
+
+
 class EpitomeDataset:
     '''
     Dataset for holding Epitome data.

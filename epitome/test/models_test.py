@@ -79,7 +79,7 @@ class ModelsTest(EpitomeTestCase):
 		assert m > 0.4 and m < 0.6
 
 		n_steps = 300
-		_, num_steps, train_valid_losses = model.train(n_steps,min_delta=sys.maxsize)
+		_, num_steps, _ = model.train(n_steps,min_delta=sys.maxsize)
 		assert num_steps < n_steps
 
 		results2 = model.test(self.validation_size)
