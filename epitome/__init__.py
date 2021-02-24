@@ -24,7 +24,7 @@ __path__ = __import__('pkgutil').extend_path(__path__, __name__)
 
 # os env that should be set by user to explicitly set the data path
 EPITOME_DATA_PATH_ENV = "EPITOME_DATA_PATH" # Must be an absolute path.
-EPITOME_GENOME_ASSEMBLY_ENV = "EPITOME_GENOME_ASSEMBLY"
+EPITOME_ASSEMBLY_ENV = "EPITOME_ASSEMBLY"
 EPITOME_GENOME_ASSEMBLIES = ['hg19', 'test']
 
 # data files required by epitome
@@ -48,11 +48,11 @@ def GET_DATA_PATH():
         location of epitome data with all required files
     """
     epitome_data_path  = os.environ.get(EPITOME_DATA_PATH_ENV)
-    epitome_assembly = os.environ.get(EPITOME_GENOME_ASSEMBLY_ENV)
+    epitome_assembly = os.environ.get(EPITOME_ASSEMBLY_ENV)
 
     # Throw error if both ENV variables are set
     both_set = (epitome_data_path is not None) and (epitome_assembly is not None)
-    assert not both_set, "Only specify either the %s env variable or %s env variable. Cannot define both." % (EPITOME_DATA_PATH_ENV, EPITOME_GENOME_ASSEMBLY_ENV)
+    assert not both_set, "Only specify either the %s env variable or %s env variable. Cannot define both." % (EPITOME_DATA_PATH_ENV, EPITOME_ASSEMBLY_ENV)
 
     # Return specified data path if env variable is set
     if (epitome_data_path is not None):
@@ -61,6 +61,6 @@ def GET_DATA_PATH():
         # Default to the hg19 assembly if assembly and data path is not specified
         if (epitome_assembly is None):
             epitome_assembly = 'hg19'
-            print("Warning: genome assembly %s env variable was not set. Defaulting genome assembly to %s." % (EPITOME_GENOME_ASSEMBLY_ENV, epitome_assembly))
+            print("Warning: genome assembly %s env variable was not set. Defaulting genome assembly to %s." % (EPITOME_ASSEMBLY_ENV, epitome_assembly))
         epitome_data_dir_path = os.path.join(GET_EPITOME_USER_PATH(), 'data')
         return os.path.join(epitome_data_dir_path, epitome_assembly)

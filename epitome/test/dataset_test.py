@@ -213,7 +213,7 @@ class DatasetTest(EpitomeTestCase):
         assert GET_DATA_PATH() == os.environ["EPITOME_DATA_PATH"]
 
         # Fails if both env variables are set
-        os.environ[EPITOME_GENOME_ASSEMBLY_ENV] = "test"
+        os.environ[EPITOME_ASSEMBLY_ENV] = "test"
         self.assertRaises(AssertionError, GET_DATA_PATH)
 
         # Returns default data path and genome assembly if only 1 env var is set
@@ -221,7 +221,7 @@ class DatasetTest(EpitomeTestCase):
         assert GET_DATA_PATH() == os.path.join(os.path.join(GET_EPITOME_USER_PATH(), "data"), "test")
 
         # Return default data path and default genome assembly if neither env vars are set
-        del os.environ[EPITOME_GENOME_ASSEMBLY_ENV]
+        del os.environ[EPITOME_ASSEMBLY_ENV]
         assert GET_DATA_PATH() == os.path.join(os.path.join(GET_EPITOME_USER_PATH(), "data"), "hg19")
 
         # Clean up test
