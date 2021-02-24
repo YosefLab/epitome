@@ -7,25 +7,25 @@ Models
 .. autosummary::
   :toctree: _generate/
 
-  VariationalPeakModel
-  VLP
+  PeakModel
+  EpitomeModel
 """
 
 
 from epitome import *
 import tensorflow as tf
-import tensorflow_probability as tfp
-# import tensorflow_datasets as tfds
 
 from .functions import *
-from .constants import *
-from .generators import *
+from .constants import Dataset
+from .generators import generator_to_tf_dataset,load_data
 from .dataset import *
 from .metrics import *
+from .conversion import *
 import numpy as np
 
 import tqdm
 import logging
+import sys
 
 # for saving model
 import pickle
@@ -35,10 +35,9 @@ from operator import itemgetter
 #################### Variational Peak Model ###########################
 #######################################################################
 
-class VariationalPeakModel():
+class PeakModel():
     """
     Model for learning from ChIP-seq peaks.
-    Modeled from `this Bayesian Neural Network <https://github.com/tensorflow/probability/blob/master/tensorflow_probability/examples/bayesian_neural_network.py>`_.
     """
 
     def __init__(self,
@@ -52,7 +51,8 @@ class VariationalPeakModel():
                  l2=0.,
                  lr=1e-3,
                  radii=[1,3,10,30],
-                 checkpoint = None):
+                 checkpoint = None,
+                 max_valid_batches = None):
         '''
         Initializes Peak Model
 
@@ -65,9 +65,9 @@ class VariationalPeakModel():
         :param floatl1: l1 regularization (default is 0)
         :param float l2: l2 regularization (default is 0)
         :param float lr: lr (default is 1e-3)
-        :param list radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30])
-        each model.
+        :param list radii: radius of DNase-seq to consider around a peak of interest (default is [1,3,10,30]) each model.
         :param str checkpoint: path to load model from.
+        :param int max_valid_batches: the size of train-validation dataset (default is None, meaning that it doesn't create a train-validation dataset or stop early while training)
         '''
 
         logging.getLogger("tensorflow").setLevel(logging.INFO)
@@ -82,6 +82,31 @@ class VariationalPeakModel():
         self.eval_cell_types = list(self.dataset.cellmap).copy()
         self.test_celltypes = test_celltypes
         [self.eval_cell_types.remove(test_cell) for test_cell in self.test_celltypes]
+
+        if max_valid_batches is not None:
+            # get the last training chromosome if valid_chromosome is not specified
+            tmp_chrs = self.dataset.regions.chromosomes
+            for i in self.dataset.test_chrs:
+                tmp_chrs.remove(i)
+            for i in self.dataset.valid_chrs:
+                tmp_chrs.remove(i)
+
+            valid_chromosome = tmp_chrs[-1]
+
+            # Reserve chromosome 22 from the training data to validate model while training
+            self.dataset.set_train_validation_indices(valid_chromosome)
+            print(self.dataset.get_data(Dataset.TRAIN_VALID).shape)
+
+            # Creating a separate train-validation dataset
+            _, _, self.train_valid_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.TRAIN_VALID),
+                                                    self.eval_cell_types,
+                                                    self.eval_cell_types,
+                                                    dataset.matrix,
+                                                    dataset.targetmap,
+                                                    dataset.cellmap,
+                                                    similarity_targets= dataset.similarity_targets,
+                                                    radii = radii, mode = Dataset.TRAIN),
+                                                    batch_size, shuffle_size, prefetch_size)
 
         input_shapes, output_shape, self.train_iter = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.TRAIN),
                                                 self.eval_cell_types,
@@ -124,35 +149,12 @@ class VariationalPeakModel():
 
         self.num_outputs = output_shape[0]
         self.num_inputs = input_shapes
-        self.max_valid_records = max_valid_records
+        self.max_valid_batches = max_valid_batches
 
         # set self
         self.radii = radii
         self.debug = debug
         self.model = self.create_model()
-
-    def get_weight_parameters(self):
-        '''
-        Extracts weight posterior statistics for layers with weight distributions.
-
-        :param keras model model: keras model
-        :return: triple of layer names, weight means for each layer and stddev for each layer.
-        :rtype: tuple
-        '''
-
-        names = []
-        qmeans = []
-        qstds = []
-        for i, layer in enumerate(self.model.layers):
-            try:
-                q = layer.kernel_posterior
-            except AttributeError:
-                continue
-            names.append("Layer {}".format(i))
-            qmeans.append(q.mean())
-            qstds.append(q.stddev())
-
-        return (names, qmeans, qstds)
 
     def save(self, checkpoint_path):
         '''
@@ -229,13 +231,21 @@ class VariationalPeakModel():
 
         return tf.math.reduce_sum(loss, axis=0)
 
-    def train(self, num_steps):
+    def train(self, max_train_batches, patience=1, min_delta=0):
         '''
-        Trains an Epitome model for num_steps iterations.
+        Trains an Epitome model. If the patience and min_delta are not specified, the model will train on max_train_batches.
+        Else, the model will either train on max_train_batches or stop training early if the train_valid_loss is converging
+        (based on the patience and/or min_delta hyper-parameters), whatever comes first.
 
-        :param int num_steps: number of iterations to train for
+        :param int max_train_batches: max number of batches to train for
+        :param int patience: number of train-valid iterations (200 batches) with no improvement after which training will be stopped.
+        :param float min_delta: minimum change in the monitored quantity to qualify as an improvement,
+          i.e. an absolute change of less than min_delta, will count as no improvement.
+
+        :return triple of number of batches trained for the best model, number of batches the model has trained total,
+          the train_validation losses (returns an empty list if self.max_valid_batches is None).
+        :rtype: tuple
         '''
-
         tf.compat.v1.logging.info("Starting Training")
 
         @tf.function
@@ -247,34 +257,68 @@ class VariationalPeakModel():
             with tf.GradientTape() as tape:
 
                 logits = self.model(features, training=True)
-                kl_loss = tf.reduce_sum(self.model.losses)
-                neg_log_likelihood = self.loss_fn(labels, logits, weights)
-                elbo_loss = neg_log_likelihood + kl_loss
+                loss = self.loss_fn(labels, logits, weights)
 
-            gradients = tape.gradient(elbo_loss, self.model.trainable_variables)
+            gradients = tape.gradient(loss, self.model.trainable_variables)
             self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
-            return elbo_loss, neg_log_likelihood, kl_loss
+            return loss
 
         @tf.function
+        def valid_step(f):
+            features = f[:-2]
+            labels = f[-2]
+            weights = f[-1]
+            logits = self.model(features, training=False)
+            neg_log_likelihood = self.loss_fn(labels, logits, weights)
+            return neg_log_likelihood
+
         def loopiter():
-            for step, f in enumerate(self.train_iter):
+            # Initializing variables
+            mean_valid_loss, decreasing_train_valid_iters, best_model_batches = sys.maxsize, 0, 0
+            train_valid_losses = []
+
+            for current_batch, f in enumerate(self.train_iter):
                 loss = train_step(f)
 
-                if step % 100 == 0:
-                  tf.compat.v1.logging.info(str(step) + " " + str(tf.reduce_mean(loss[0])) +
-                                            str(tf.reduce_mean(loss[1])) +
-                                            str(tf.reduce_mean(loss[2])))
+                if current_batch % 1000 == 0:
+                  tf.print("Batch: ", current_batch)
+                  tf.print("\tLoss: ", tf.reduce_mean(loss))
 
-                  if (self.debug):
-                      tf.compat.v1.logging.info("On validation")
-                      _, _, _, _, _ = self.test(40000, log=False)
-                      tf.compat.v1.logging.info("")
+                if (current_batch % 200 == 0) and (self.max_valid_batches is not None):
+                    # Early Stopping Validation
+                    new_valid_loss = []
 
-                if step > num_steps:
-                  break
+                    for current_valid_batch, f_v in enumerate(self.train_valid_iter):
+                        new_valid_loss.append(valid_step(f_v))
 
-        loopiter()
+                        if (current_valid_batch == self.max_valid_batches):
+                            break
+
+                    new_mean_valid_loss = tf.reduce_mean(new_valid_loss)
+                    train_valid_losses.append(new_mean_valid_loss)
+
+
+                    # Check if the improvement in train-validation loss is at least min_delta.
+                    # If the train-validation loss has increased more than patience consecutive train-validation iterations, the function stops early.
+                    # Else it continues training.
+                    improvement = mean_valid_loss - new_mean_valid_loss
+                    if improvement < min_delta:
+                        decreasing_train_valid_iters += 1
+                        if decreasing_train_valid_iters == patience:
+                            return best_model_batches, current_batch, train_valid_losses
+                    else:
+                        # If the train-validation loss decreases (the model is improving and converging), reset decreasing_train_valid_iters and mean_valid_loss.
+                        decreasing_train_valid_iters = 0
+                        mean_valid_loss = new_mean_valid_loss
+                        best_model_batches = current_batch
+
+                if (current_batch >= max_train_batches):
+                    break
+
+            return best_model_batches, max_train_batches, train_valid_losses
+
+        return loopiter()
 
     def test(self, num_samples, mode = Dataset.VALID, calculate_metrics=False):
         '''
@@ -311,7 +355,7 @@ class VariationalPeakModel():
 
         return self.run_predictions(num_samples, ds, calculate_metrics)
 
-    def eval_vector(self, matrix, indices, samples = 50):
+    def eval_vector(self, matrix, indices):
         '''
         Evaluates a new cell type based on its chromatin (DNase or ATAC-seq) vector, as well
         as any other similarity targets (acetylation, methylation, etc.). len(vector) should equal
@@ -323,6 +367,12 @@ class VariationalPeakModel():
         :return: predictions
         :rtype: dict
         '''
+
+        # verify matrix has correct number of genomic positions
+        assert matrix.shape[-1] == len(self.dataset.regions), \
+          """Error: number of columns in matrix must match genomic regions in dataset.regions.
+          But got matrix.shape[-1]=%i and len(self.dataset.regions)=%i
+          """  % (matrix.shape[-1], len(self.dataset.regions))
 
         input_shapes, output_shape, ds = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.ALL),
                  self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
@@ -340,15 +390,16 @@ class VariationalPeakModel():
 
         results = self.run_predictions(num_samples, ds, calculate_metrics = False)
 
-        return results['preds_mean'], results['preds_std']
+        return results['preds']
 
     @tf.function
     def predict_step_matrix(self, inputs):
         """
-        Run predictions on a numpy matrix. Size of numpy_matrix should be # examples by features.
-        Size should be (number of examples x number of features).
-        This function is mostly used for testing, as it requires the user to pre-generate the
-        features using the generator function in generators.py.
+        Runs predictions on numpy matrix from _predict
+
+        :param np.ndarray inputs: numpy matrix of examples x features
+        :return: predictions
+        :rtype: np.ndarray
         """
 
         # get the shapes for the cell type specific features.
@@ -359,7 +410,7 @@ class VariationalPeakModel():
         split_inputs = tf.split(tf.dtypes.cast(inputs, tf.float32), cell_lens, axis=1)
 
         # predict
-        return predict_step_generator(split_inputs, samples=1)[0]
+        return self.predict_step_generator(split_inputs)
 
     def _predict(self, numpy_matrix):
         '''
@@ -374,33 +425,23 @@ class VariationalPeakModel():
         return self.predict_step_matrix(numpy_matrix)
 
     @tf.function
-    def predict_step_generator(self, inputs_b, samples = 50):
+    def predict_step_generator(self, inputs_b):
         '''
         Runs predictions on inputs from run_predictions
 
         :param tf.Tensor inputs_b: batch of input data
-        :param int samples: Number of samples to test. Defaults to 50.
-        :return: mean and standard deviations of predictions
+        :return: predictions
         :rtype: tuple
         '''
+        return tf.sigmoid(self.model(inputs_b))
 
-        # sample n times by tiling batch by rows, running
-        # predictions for each row
-        inputs_tiled = [tf.tile(i, (samples, 1)) for i in inputs_b]
-        tmp = self.model(inputs_tiled)
-        y_pred = tf.sigmoid(tmp)
-        # split up batches into a third dimension and stack them in third dimension
-        preds = tf.stack(tf.split(y_pred, samples, axis=0), axis=0)
-        return tf.math.reduce_mean(preds, axis=0), tf.math.reduce_std(preds, axis=0)
-
-    def run_predictions(self, num_samples, iter_, calculate_metrics = True, samples = 50):
+    def run_predictions(self, num_samples, iter_, calculate_metrics = True):
         '''
         Runs predictions on num_samples records
 
         :param int num_samples: number of samples to test
         :param tf.dataset iter_: output of self.sess.run(generator_to_one_shot_iterator()), handle to one shot iterator of records
         :param bool calculate_metrics: whether to return auROC/auPR
-        :param int samples: number of times to sample from network
 
         :return: dict of preds, truth, target_dict, auROC, auPRC, False
             preds = predictions,
@@ -416,36 +457,28 @@ class VariationalPeakModel():
 
         # empty arrays for concatenation
         truth = []
-        preds_mean = []
-        preds_std = []
+        preds = []
         sample_weight = []
 
         for f in tqdm.tqdm(iter_.take(batches)):
             inputs_b = f[:-2]
             truth_b = f[-2]
             weights_b = f[-1]
-            # Calculate epistemic uncertainty for batch by iterating over a certain number of times,
-            # getting y_preds. You can then calculate the mean and sigma of the predictions,
-            # and use this to gather uncertainty: (see http://krasserm.github.io/2019/03/14/bayesian-neural-networks/)
-            # inputs, truth, sample_weight
-            preds_mean_b, preds_std_b = self.predict_step_generator(inputs_b, samples)
+            preds_b = self.predict_step_generator(inputs_b)
 
-            preds_mean.append(preds_mean_b)
-            preds_std.append(preds_std_b)
+            preds.append(preds_b)
             truth.append(truth_b)
             sample_weight.append(weights_b)
 
         # concat all results
-        preds_mean = tf.concat(preds_mean, axis=0)
-        preds_std = tf.concat(preds_std, axis=0)
+        preds = tf.concat(preds, axis=0)
 
         truth = tf.concat(truth, axis=0)
         sample_weight = tf.concat(sample_weight, axis=0)
 
         # trim off extra from last batch
         truth = truth[:num_samples, :].numpy()
-        preds_mean = preds_mean[:num_samples, :].numpy()
-        preds_std = preds_std[:num_samples, :].numpy()
+        preds = preds[:num_samples, :].numpy()
         sample_weight = sample_weight[:num_samples, :].numpy()
 
         # reset truth back to 0 to compute metrics
@@ -456,8 +489,7 @@ class VariationalPeakModel():
         # do not continue to calculate metrics. Just return predictions and true values
         if (not calculate_metrics):
             return {
-                'preds_mean': preds_mean,
-                'preds_std': preds_std,
+                'preds': preds,
                 'truth': truth,
                 'weights': sample_weight,
                 'target_dict': None,
@@ -465,12 +497,12 @@ class VariationalPeakModel():
                 'auPRC': None
             }
 
-        assert(preds_mean.shape == sample_weight.shape)
+        assert(preds.shape == sample_weight.shape)
 
         try:
 
             # try/accept for cases with only one class (throws ValueError)
-            target_dict = get_performance(self.dataset.targetmap, preds_mean, truth_reset, sample_weight, self.dataset.predict_targets)
+            target_dict = get_performance(self.dataset.targetmap, preds, truth_reset, sample_weight, self.dataset.predict_targets)
 
             # calculate averages
             auROC = np.nanmean(list(map(lambda x: x['AUC'],target_dict.values())))
@@ -484,8 +516,7 @@ class VariationalPeakModel():
             tf.compat.v1.logging.info("Failed to calculate metrics")
 
         return {
-            'preds_mean': preds_mean,
-            'preds_std': preds_std,
+            'preds': preds,
             'truth': truth,
             'weights': sample_weight,
             'target_dict': target_dict,
@@ -505,107 +536,77 @@ class VariationalPeakModel():
         :param list chrs: list of chromosome names to score. If none, scores all chromosomes.
         '''
 
-        # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set,
-        # and their indices are stored in missing_idx for future use
-        peak_vectors = [pyranges2Vector(bed2Pyranges(f), self.dataset.regions)[0] for f in similarity_peak_files]
-        peak_matrix = np.vstack(peak_vectors)
-        del peak_vectors
+        restructured_similarity = []
+        for f in similarity_peak_files:
+            tmpConversion = RegionConversion(self.dataset.regions, f)
+            restructured_similarity.append(tmpConversion.get_binary_vector()[0])
 
+        peak_matrix = np.vstack(restructured_similarity)
+
+        # get sorted indices to score
         regions  = self.dataset.regions
 
         # filter regions by chrs
         if chrs is not None:
             regions = regions[regions.Chromosome.isin(chrs)]
 
-
-        # get sorted indices to score
         idx = np.array(sorted(list(regions.idx)))
 
         print("scoring %i regions" % idx.shape[0])
 
-        # tuple of means and stds
         predictions = self.eval_vector(peak_matrix, idx)
-        print("finished predictions...", predictions[0].shape)
-
-        # zip together means for each position in idx
+        print("finished predictions...", predictions.shape)
 
         # return matrix of region, TF information. trim off idx column
-        npRegions = regions.df.sort_values(by='idx').values[:,:-1]
+        npRegions =  regions.df.sort_values(by='idx').drop(labels='idx', axis=1).values
+
         # TODO turn into right types (all strings right now)
         # predictions[0] is means of size n regions by # ChIP-seq peaks predicted
-        means = np.concatenate([npRegions, predictions[0]], axis=1)
+        preds = np.concatenate([npRegions, predictions], axis=1)
 
         # can load back in using:
         # > loaded = np.load('file_prefix.npz')
-        # > loaded['means'], loaded['stds']
+        # > loaded['preds']
         # TODO: save the right types!  (currently all strings!)
-        np.savez_compressed(file_prefix, means = means,
+        np.savez_compressed(file_prefix, preds = preds,
                             names=np.array(['chr','start','end'] + self.dataset.predict_targets))
 
         print("columns for matrices are chr, start, end, %s" % ", ".join(self.dataset.predict_targets))
 
-    def score_matrix(self, accessilibility_peak_matrix, regions, all_data = None):
+    def score_matrix(self, accessilibility_peak_matrix, regions):
         """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
         rows are regions from regions_peak_file. rows in accessilibility_peak_matrix should matching
 
-        Args:
-            :param accessilibility_peak_matrix: numpy matrix of (samples by genomic regions)
-            :param regions_peak_file: either narrowpeak or bed file containing regions to score, OR a pyranges object
-                with columns [Chomosome, Start, End, idx]. Index matches each genomic region to a row in
-                accessilibility_peak_matrix. In both cases, number of regions Should
-                match rows in accessilibility_peak_matrix
-            :param all_data: for testing. If none, generates a concatenated matrix of all data when called.
+        :param numpy.matrix accessilibility_peak_matrix:  of (samples by genomic regions)
+        :param str regions: either narrowpeak or bed file containing regions to score, OR a pyranges object
+            with columns [Chomosome, Start, End, idx]. Index matches each genomic region to a row in
+            accessilibility_peak_matrix. In both cases, number of regions Should
+            match rows in accessilibility_peak_matrix
 
-        Returns:
-            3-dimensional numpy matrix of predictions: sized (samples by regions by ChIP-seq targets)
+        :return: 3-dimensional numpy matrix of predictions: sized (samples by regions by ChIP-seq targets)
+        :rtype: numpy matrix
         """
 
-        if type(regions) == str:
-            regions_bed = bed2Pyranges(regions)
-        elif type(regions) == pr.PyRanges:
-            regions_bed = regions
-        else:
-            raise Exception("regions must be type scring or pr.Pyranges, but got type %s" % type(regions))
-
-        joined = regions_bed.join(self.dataset.regions, how='left',suffix='_alldata').df
-
-        idx = joined['idx_alldata']
+        conversionObject = RegionConversion(self.dataset.regions, regions)
 
         results = []
 
         # TODO 9/10/2020: should do something more efficiently than a for loop
         for sample_i in tqdm.tqdm(range(accessilibility_peak_matrix.shape[0])):
-            # tuple of means and stds
-            peaks_i = np.zeros((len(self.dataset.regions)))
-            peaks_i[idx] = accessilibility_peak_matrix[sample_i, joined['idx']]
 
-            means, _ = self.eval_vector(peaks_i, idx, samples = 1)
+            peaks_i, idx = conversionObject.get_binary_vector(vector = accessilibility_peak_matrix[sample_i,:])
 
-            # group means by joined['idx']
-            results.append(means)
+            preds = self.eval_vector(peaks_i, idx)
+
+            # group preds by joined['idx']
+            results.append(preds)
 
         # stack all samples along 0th axis
+        # shape: samples x regions x TFs
         tmp = np.stack(results)
 
-        # get the index break for each region_bed region
-        reduce_indices = joined.drop_duplicates('idx',keep='first').index.values
-
-        # get the number of times there was a scored region for each region_bed region
-        # used to calculate reduced means
-        indices_counts = joined['idx'].value_counts(sort=False).values[:,None]
-
-        # reduce means on middle axis
-        final = np.add.reduceat(tmp, reduce_indices, axis = 1)/indices_counts
-
-        # TODO 9/10/2020: code is currently scoring missing values and setting to nan.
-        # You could be more efficient and remove these so you are not taking
-        # the time to score garbage data.
-
-        # fill missing indices with nans
-        missing_indices = joined[joined['idx_alldata']==-1]['idx'].values
-        final[:,missing_indices, :] = np.NAN
-
-        return final
+        # mean and merge along 1st axis
+        return conversionObject.merge(tmp, axis = 1)
 
 
     def score_peak_file(self, similarity_peak_files, regions_peak_file):
@@ -619,69 +620,37 @@ class VariationalPeakModel():
         :rtype: pandas.dataframe
         '''
 
-
         # get peak_vector, which is a vector matching train set. Some peaks will not overlap train set,
         # and their indices are stored in missing_idx for future use
-        similarity_peak_prs = [bed2Pyranges(f) for f in similarity_peak_files]
-        peak_matrix = np.vstack([pyranges2Vector(f, self.dataset.regions)[0] for f in similarity_peak_prs])
-
-        peak_vector_regions, all_peaks_regions = pyranges2Vector(bed2Pyranges(regions_peak_file), self.dataset.regions)
-
-        print("finished loading peak file")
+        restructured_similarity = []
+        for f in similarity_peak_files:
+          tmpConversion = RegionConversion(self.dataset.regions, f)
+          restructured_similarity.append(tmpConversion.get_binary_vector()[0])
+        peak_matrix = np.vstack(restructured_similarity)
 
         # only select peaks to score
-        idx = np.where(peak_vector_regions == True)[0]
+        compareObject = RegionConversion(self.dataset.regions, regions_peak_file)
+        # get indices in self.dataset.regions that we will be scoring
+        idx = compareObject.get_base_overlap_index()
 
         print("scoring %i regions" % idx.shape[0])
 
         if len(idx) == 0:
             raise ValueError("No positive peaks found in %s" % regions_peak_file)
 
-        # tuple of means and stds
-        means, stds = self.eval_vector(peak_matrix, idx)
-        print("finished predictions...", means.shape)
+        preds = self.eval_vector(peak_matrix, idx)
+        print("finished predictions...", preds.shape)
 
-        assert type(means) == type(stds), "Means and STDs variables not of the same type"
-        if not isinstance(means, np.ndarray):
-            means = means.numpy()
-            stds = stds.numpy()
+        if not isinstance(preds, np.ndarray):
+            preds = preds.numpy()
+
+        merged_preds = compareObject.merge(preds, axis = 0) # TODO is this the correct axis?
+
+        preds_df = pd.DataFrame(data=merged_preds, columns=self.dataset.predict_targets)
+        return pd.concat([compareObject.compare_df(), preds_df], axis=1)
 
 
-        means_df =  pd.DataFrame(data=means, columns=self.dataset.predict_targets)
-        std_cols = list(map(lambda x: x + "_stds",self.dataset.predict_targets))
-        stds_df =  pd.DataFrame(data=stds, columns=std_cols)
-
-        # read in regions file and filter by indices that were scored
-        p = self.dataset.regions.df
-        p['idx']=p.index # keep original bed region ordering using idx column
-        p.columns = ['Chromosome', 'Start','End','idx']
-        prediction_positions = p[p['idx'].isin(idx)] # select regions that were scored
-        # reset index to match predictions shape
-        prediction_positions = prediction_positions.reset_index()
-        prediction_positions['idx'] = prediction_positions.index
-        prediction_positions = pd.concat([prediction_positions,means_df,stds_df],axis=1)
-        prediction_positions_pr = pr.PyRanges(prediction_positions, int64=True).sort()
-
-        original_file = bed2Pyranges(regions_peak_file)
-        # left join
-        joined = original_file.join(prediction_positions_pr, how='left')
-        # turn into dataframe
-        joined_df = joined.df
-        joined_df = joined_df.drop(['index','Start_b','End_b','idx_b'],axis=1)
-        # set missing values to 0
-        num = joined_df._get_numeric_data()
-        num[num < 0] = 0
-        mean_results = joined_df.groupby('idx').mean()
-
-        tmp = original_file.df
-        tmp = tmp.set_index(tmp['idx']) # correctly set index to original ordering
-
-        assert np.all(tmp.sort_index()['Start'].values == mean_results['Start'].values), "Error: genomic position start sites in mean results and original bed file do not match!"
-        assert np.all(tmp.sort_index()['End'].values == mean_results['End'].values), "Error: genomic position end sites in mean results and original bed file do not match!"
-
-        return pd.concat([tmp[['Chromosome']],mean_results], axis=1)
-
-class VLP(VariationalPeakModel):
+class EpitomeModel(PeakModel):
     def __init__(self,
              *args,
              **kwargs):
@@ -691,7 +660,7 @@ class VLP(VariationalPeakModel):
 
             .. code-block:: python
 
-                model = VLP(checkpoint=path_to_saved_model)
+                model = EpitomeModel(checkpoint=path_to_saved_model)
         '''
         self.activation = tf.tanh
         self.layers = 2
@@ -706,7 +675,7 @@ class VLP(VariationalPeakModel):
             metadata['dataset'] = dataset
             del metadata['dataset_params']
 
-            VariationalPeakModel.__init__(self, **metadata, **kwargs)
+            PeakModel.__init__(self, **metadata, **kwargs)
             file = h5py.File(os.path.join(kwargs["checkpoint"], "weights.h5"), 'r')
 
             # load model weights back in
@@ -717,7 +686,7 @@ class VLP(VariationalPeakModel):
             file.close()
 
         else:
-            VariationalPeakModel.__init__(self, *args, **kwargs)
+            PeakModel.__init__(self, *args, **kwargs)
 
     def create_model(self, **kwargs):
         '''
@@ -729,16 +698,12 @@ class VLP(VariationalPeakModel):
         # make a channel for each cell type
         cell_channels = []
 
-        # TODO resize by max iterations. 5000 is an estimate for data size
-        kl_divergence_function = (lambda q, p, _: tfp.distributions.kl_divergence(q, p) /
-                            tf.cast(self.batch_size * 5000, dtype=tf.float32))
         for i in range(len(self.num_inputs)):
             # make input layer for cell
             last = cell_inputs[i]
             for j in range(self.layers):
                 num_units = int(self.num_inputs[i]/(2 * (j+1)))
-                d = tfp.layers.DenseFlipout(num_units,
-                                                kernel_divergence_fn=kl_divergence_function,
+                d = tf.keras.layers.Dense(num_units,
                                                 activation = self.activation)(last)
                 last = d
             cell_channels.append(last)
@@ -750,10 +715,10 @@ class VLP(VariationalPeakModel):
         else:
             last = cell_channels[0]
 
-        outputs = tfp.layers.DenseFlipout(self.num_outputs,
-                                        kernel_divergence_fn=kl_divergence_function,
+        outputs =  tf.keras.layers.Dense(self.num_outputs,
                                         activity_regularizer=tf.keras.regularizers.l1_l2(self.l1, self.l2),
                                         name="output_layer")(last)
 
         model = tf.keras.models.Model(inputs=cell_inputs, outputs=outputs)
+
         return model

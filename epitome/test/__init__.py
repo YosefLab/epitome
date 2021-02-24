@@ -17,7 +17,7 @@ class EpitomeTestCase(unittest.TestCase):
 
 	@staticmethod
 	def setEpitomeDataPath():
-		
+
 		# set Epitome data path to test data files for testing
 		# this data was saved using functions.saveToyData(<epitome_repo_path>/epitome/test/data)
 		dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -39,19 +39,17 @@ class EpitomeTestCase(unittest.TestCase):
 				min_targets_per_cell = min_targets_per_cell)
 
 	def makeSmallModel(self):
-
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_targets = ['DNase','CTCF']
 
 		dataset = EpitomeDataset(targets = eligible_targets,
 			cells = eligible_cells)
 
-		# Returns model
-		return VLP(dataset,
+
+		return EpitomeModel(dataset,
 			test_celltypes = ['K562'])
 
 	def tmpFile(self):
-
 		tempFile = tempfile.NamedTemporaryFile(delete=True)
 		tempFile.close()
 		return tempFile.name

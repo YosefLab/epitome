@@ -1,11 +1,14 @@
 from epitome.test import EpitomeTestCase
 from epitome.constants import Dataset
 import numpy as np
-from epitome.models import VLP
+from epitome.models import EpitomeModel
+from epitome.dataset import EpitomeDataset
 import pytest
 import tempfile
 import pyranges as pr
+import tensorflow as tf
 from epitome.dataset import *
+import sys
 
 class ModelsTest(EpitomeTestCase):
 
@@ -50,14 +53,45 @@ class ModelsTest(EpitomeTestCase):
 
 		# Make sure predictions are not random
 		# after first iterations
-		assert(results1['preds_mean'].shape[0] == self.validation_size)
-		assert(results2['preds_mean'][0] < results1['preds_mean'].shape[0])
+		assert(results1['preds'].shape[0] == self.validation_size)
+		assert(results2['preds'][0] < results1['preds'].shape[0])
+
+	def test_train_early_stop_model(self):
+		tf.random.set_seed(5)
+		eligible_cells = ['K562','HepG2','H1']
+		eligible_targets = ['DNase','CTCF']
+
+		dataset = EpitomeDataset(targets = eligible_targets,
+			cells = eligible_cells)
+
+		# set all data to ones so it converges quickly
+		dataset_shape = dataset.get_data(Dataset.ALL).shape
+		dataset._data = np.ones(dataset_shape)
+
+		# create model and train
+		model = EpitomeModel(dataset,
+			radii=[],
+			max_valid_batches=10)
+		results1 = model.test(10)
+
+		# results should be about random
+		m = np.mean(results1['preds'])
+		assert m > 0.4 and m < 0.6
+
+		n_steps = 300
+		_, num_steps, _ = model.train(n_steps,min_delta=sys.maxsize)
+		assert num_steps < n_steps
+
+		results2 = model.test(self.validation_size)
+		m = np.mean(results2['preds'])
+		assert m > 0.6 # TODO should be higher
+
 
 	def test_test_model(self):
 
 		# make sure can run in test mode
 		results = self.model.test(self.validation_size, mode=Dataset.TEST)
-		assert(results['preds_mean'].shape[0] == self.validation_size)
+		assert(results['preds'].shape[0] == self.validation_size)
 
 	def test_specify_assays(self):
 		# test for https://github.com/YosefLab/epitome/issues/23
@@ -66,7 +100,7 @@ class ModelsTest(EpitomeTestCase):
 		eligible_targets = ['CTCF', 'RAD21', 'CEBPB']
 		dataset = EpitomeDataset(targets = eligible_targets)
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
 
 	def test_model_similarity_assays(self):
@@ -75,7 +109,7 @@ class ModelsTest(EpitomeTestCase):
 
 		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['H3K27ac'])
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
 
 	def test_model_two_similarity_assays(self):
@@ -84,7 +118,7 @@ class ModelsTest(EpitomeTestCase):
 
 		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['DNase', 'H3K27ac'])
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 5)
 
 	def test_model_similarity_assays(self):
@@ -93,23 +127,23 @@ class ModelsTest(EpitomeTestCase):
 
 		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['H3K27ac'])
 
-		model = VLP(dataset)
+		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
 
 	def test_eval_vector(self):
 
 		# should be able to evaluate on a dnase vector
-		similarity_matrix = np.ones(self.model.dataset.get_data(Dataset.TRAIN).shape[1])[None,:]
+		similarity_matrix = np.ones(self.model.dataset.get_data(Dataset.ALL).shape[1])[None,:]
 		results = self.model.eval_vector(similarity_matrix, np.arange(0,20))
-		assert(results[0].shape[0] == 20)
+		assert(results.shape[0] == 20)
 
 	def test_save_model(self):
 		# should save and re-load model
 		tmp_path = self.tmpFile()
 		self.model.save(tmp_path)
-		loaded_model = VLP(checkpoint=tmp_path)
+		loaded_model = EpitomeModel(checkpoint=tmp_path)
 		results = loaded_model.test(self.validation_size)
-		assert(results['preds_mean'].shape[0] == self.validation_size)
+		assert(results['preds'].shape[0] == self.validation_size)
 
 	def test_score_matrix(self):
 
@@ -131,6 +165,8 @@ class ModelsTest(EpitomeTestCase):
 								regions_peak_file.name)
 
 		assert(results.shape == (4, 2, 1))
+		masked = np.ma.array(results, mask=np.isnan(results))
+		assert(np.all(masked <= 1))
 
 	def test_score_matrix_missing_data(self):
 		# if there is a region in the regions file that does not overlap anything
@@ -181,9 +217,9 @@ class ModelsTest(EpitomeTestCase):
 		loaded = np.load(file_prefix_name + ".npz", allow_pickle=True)
 
 		file_prefix.close()
-		assert 'means' in loaded.keys() and 'names' in loaded.keys()
+		assert 'preds' in loaded.keys() and 'names' in loaded.keys()
 
-		preds = loaded['means']
+		preds = loaded['preds']
 		names = loaded['names']
 		assert preds.shape == (200,4)
 		assert names.shape[0] == 4 # chr, start, end, CTCF
@@ -201,7 +237,7 @@ class ModelsTest(EpitomeTestCase):
 		# this is where the bug was
 		assert np.where(ds.matrix == -1)[0].shape[0] == 0
 
-		model = VLP(ds)
+		model = EpitomeModel(ds)
 		model.train(1)
 		results = model.test(1000, calculate_metrics = True)
 		assert np.where(results['weights']==0)[0].shape[0] == 0

@@ -14,6 +14,7 @@ also includes scripts for processing ENCODE peaks.
 .. automodule:: epitome.constants
 .. automodule:: epitome.dataset
 .. automodule:: epitome.generators
+.. automodule:: epitome.conversion
 
 """
 import os
@@ -21,10 +22,8 @@ from os.path import expanduser
 
 __path__ = __import__('pkgutil').extend_path(__path__, __name__)
 
-S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com'
-
 # os env that should be set by user to explicitly set the data path
-EPITOME_DATA_PATH_ENV= "EPITOME_DATA_PATH" # Must be an absolute path.
+EPITOME_DATA_PATH_ENV = "EPITOME_DATA_PATH" # Must be an absolute path.
 EPITOME_GENOME_ASSEMBLY_ENV = "EPITOME_GENOME_ASSEMBLY"
 EPITOME_GENOME_ASSEMBLIES = ['hg19', 'test']
 
@@ -33,25 +32,6 @@ EPITOME_GENOME_ASSEMBLIES = ['hg19', 'test']
 # column information (chr, start, binSize)
 EPITOME_H5_FILE = "data.h5"
 REQUIRED_FILES = [EPITOME_H5_FILE]
-# required keys in h5 file
-REQUIRED_KEYS = ['/',
- '/columns',
- '/columns/binSize',
- '/columns/chr',
- '/columns/index',
- '/columns/index/TEST',
- '/columns/index/TRAIN',
- '/columns/index/VALID',
- '/columns/index/test_chrs',
- '/columns/index/valid_chrs',
- '/columns/start',
- '/data',
- '/meta',
- '/meta/assembly',
- '/meta/source',
- '/rows',
- '/rows/celltypes',
- '/rows/targets']
 
 def GET_EPITOME_USER_PATH():
     return os.path.join(os.path.expanduser('~'), '.epitome')

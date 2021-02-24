@@ -9,8 +9,6 @@ Helper functions
 
   download_and_unzip
   bed2Pyranges
-  pyranges_intersect
-  pyranges2Vector
   indices_for_weighted_resample
   get_radius_indices
 """
@@ -128,67 +126,6 @@ def bed2Pyranges(bed_file):
     p.columns = ['Chromosome', 'Start','End','idx']
     return pr.PyRanges(p, int64=True).sort()
 
-
-def pyranges_intersect(triple):
-    '''
-    Runs intersection between 2 bed files and returns a vector of 0/1s
-    indicating absense or presense of overlap.
-
-
-    :param tuple triple: triple of (pr1, pr2, boolean).
-            pr1: pyranges object to run intersection against.
-            pr2: pyranges object to check for overlaps with pr1.
-            boolean: boolean determines wheather to return
-            original peaks from pr1.
-    :return: tuple of (pr1 peaks, vector of 0/1s) whose length is len(pr1).
-        1s in vector indicate overlap of pr1 and pr2).
-    :rtype: tuple
-    '''
-    bed1 = triple[0]
-    bed2 = triple[1]
-
-    res = bed1.join(bed2, how='left')
-    overlap_vector = np.zeros(len(bed1),dtype=bool)
-
-    # get regions with overlap and set to 1
-    res_df = res.df
-    if not res_df.empty: # throws error if empty because no columns
-        overlap_vector[res_df[res_df['Start_b'] != -1]['idx']] = 1
-
-    if (triple[2]):
-        # for some reason chaining takes a lot longer, so we run ops separately.
-        t1 = bed1.df.sort_values(by='idx')[['Chromosome','Start','End']]
-        t1.reset_index(inplace=True)
-        return (t1, overlap_vector)
-    else:
-        return (None, overlap_vector)
-
-def pyranges2Vector(pr1, pr2):
-    '''
-    This function takes in a pyranges of peaks and converts it to a vector or 0/1s that can be
-    used as input into an Epitome model. Each 0/1 represents a region in pr2.
-
-    Most likely, the bed file will be the output of the IDR function, which detects peaks based on the
-    reproducibility of multiple samples.
-
-    :param pyranges pr1: pyranges object containing peaks (should have idx column specifying original index)
-    :param pyranges pr2: pyranges object containing all genomic positions in the dataset (should have idx column specifying original index)
-
-    :return: tuple (numpy_train_array, (bed_peaks, numpy_bed_array).
-        numpy_train_array: boolean numpy array indicating overlap of training data with peak file (length of training data).
-        bed_peaks: a list of intervals loaded from bed_file.
-        numpy_bed_array: boolean numpy array indicating presence or absense of each bed_peak region in the training dataset.
-    :rtype: tuple
-    '''
-
-    prs = [(pr2, pr1, False), (pr1, pr2, True)]
-    pool = multiprocessing.Pool(processes=2)
-    results = pool.map(pyranges_intersect, prs)
-
-    pool.close()
-    pool.join()
-
-    return (results[0][1], results[1])
 
 def indices_for_weighted_resample(data, n,  matrix, cellmap, assaymap, weights = None):
     '''
