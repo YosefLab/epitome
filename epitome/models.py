@@ -26,6 +26,7 @@ import numpy as np
 import tqdm
 import logging
 import sys
+import copy
 
 # for saving model
 import pickle
@@ -591,15 +592,25 @@ class PeakModel():
 
         results = []
 
+        matrix, indices = conversionObject.get_binary_vector(vector = accessilibility_peak_matrix[0,:])
+        gen = load_data(self.dataset.get_data(Dataset.ALL),
+                 self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
+                 self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                 self.dataset.matrix,
+                 self.dataset.targetmap,
+                 self.dataset.cellmap,
+                 radii = self.radii,
+                 mode = Dataset.RUNTIME,
+                 similarity_matrix = matrix,
+                 similarity_targets = self.dataset.similarity_targets,
+                 indices = indices)
+
+        gen_to_list = list(gen)
+
         # TODO 9/10/2020: should do something more efficiently than a for loop
-        for sample_i in tqdm.tqdm(range(accessilibility_peak_matrix.shape[0])):
+        for sample_i in tqdm.tqdm(range(accessilibility_peak_matrix.shape[0][1:])):
 
-            peaks_i, idx = conversionObject.get_binary_vector(vector = accessilibility_peak_matrix[sample_i,:])
-
-            preds = self.eval_vector(peaks_i, idx)
-
-            # group preds by joined['idx']
-            results.append(preds)
+            results.append(copy.deepcopy(gen_to_list))
 
         # stack all samples along 0th axis
         # shape: samples x regions x TFs
