@@ -267,6 +267,130 @@ def load_data(data,
 
     return g
 
+def load_data_runtime(data,
+                 label_cell_types,  # used for labels. Should be all for train/eval and subset for test
+                 eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                 matrix,
+                 targetmap,
+                 cellmap,
+                 radii,
+                 similarity_targets = ['DNase'],
+                 mode = Dataset.RUNTIME,
+                 similarity_matrix = None,
+                 indices = None,
+                 return_feature_names = False,
+                 **kwargs):
+    """
+    Takes Deepsea data and calculates distance metrics from cell types whose locations
+    are specified by label_cell_indices, and the other cell types in the set. Label space is only one cell type.
+    :param data: dictionary of matrices. Should have keys x and y. x contains n by 1000 rows. y contains n by 919 labels.
+    :param label_cell_types: list of cell types to be rotated through and used as labels (subset of eval_cell_types)
+    :param eval_cell_types: list of cell types to be used in evaluation (includes label_cell_types)
+    :param matrix: matrix of celltype, target positions
+    :param targetmap: map of column target positions in matrix
+    :param cellmap: map of row cell type positions in matrix
+    :param radii: radii to compute similarity distances from
+    :param similarity_targets: list of targets used to measure cell type similarity (default is DNase-seq)
+    :param mode: Dataset.TRAIN, VALID, TEST or RUNTIME
+    :param similarity_matrix: matrix with shape (len(similarity_targets), genome_size) containing binary 0/1s of peaks for similarity_targets
+    to be compared in the CASV.
+    :param indices: indices in genome to generate records for.
+    :param return_feature_names: boolean whether to return string names of features
+    :param kwargs: kargs
+
+    :returns: generator of data with three elements:
+        1. record features
+        2. record labels for a given cell type
+        3. 0/1 mask of labels that have validation data. For example, if this record is for celltype A549,
+        and A549 does not have data for ATF3, there will be a 0 in the position corresponding to the label space.
+    """
+
+    # reshape similarity_matrix to a matrix if there is only one target
+    if similarity_matrix is not None:
+        if len(similarity_matrix.shape) == 1:
+            similarity_matrix = similarity_matrix[None,:]
+
+    if type(similarity_targets) is not list:
+        similarity_targets = [similarity_targets]
+
+    if len(similarity_targets) == 0 and len(radii) > 0:
+        raise ValueError("Cannot set radii to anything if there are no similarity assays, but found len(radii)=%i" % len(radii))
+
+    # get indices for features. rows are cells and cols are targets
+    cellmap_idx = [cellmap[c] for c in list(eval_cell_types)]
+    feature_cell_indices = matrix[cellmap_idx,:]
+
+    # indices to be deleted. used for similarity comparison, not predictions.
+    delete_indices = np.array([targetmap[s] for s in similarity_targets]).astype(int)
+
+    # make sure no similarity comparison data is missing for all cell types
+    assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \
+        "missing data for similarity target at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
+
+    # names of labels that are being predicted
+    feature_targets = [a for a in list(targetmap)] # targets used as features for each evaluation cell type
+    label_targets = [a for a in feature_targets if a not in similarity_targets]
+
+    if (not isinstance(mode, Dataset)):
+        raise ValueError("mode is not a Dataset enum")
+
+    if (not isinstance(indices, np.ndarray) and not isinstance(indices, list)):
+        # model performs better when there are less 0s
+        
+        indices = range(0, data.shape[-1]) # not training mode, set to all points
+
+    if (mode == Dataset.RUNTIME):
+        label_cell_types = ["PLACEHOLDER_CELL"]
+        if similarity_matrix is None:
+            raise Exception("similarity_matrix must be defined in runtime mode")
+        assert similarity_matrix.shape[0] == len(similarity_targets), \
+            "similarity_matrix is missing data for targets (should have %i rows)" % (len(similarity_targets))
+        random_cell = list(cellmap)[0] # placeholder to get label vector length
+
+    print("using %s as labels for mode %s" % (label_cell_types, mode))
+
+    # string of radii for meta data labeling
+    radii_str = list(map(lambda x: "RADII_%i" % x, radii))
+
+    def g():
+        for i in indices: # for all records specified
+
+            for cell in label_cell_types: # for all cell types to be used in labels
+
+                # labels for this cell
+                if (mode != Dataset.RUNTIME):
+                    label_cell_indices = EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, cell)
+
+                    # delete all indices being used in the similarity computation
+                    label_cell_indices_no_similarities = np.delete(label_cell_indices, delete_indices)
+
+                    # Copy target_index_no_similarities and turn into mask of 0/1 for whether data for this cell type for
+                    # a given label is available.
+                    target_mask = np.copy(label_cell_indices_no_similarities)
+                    target_mask[target_mask > -1] = 1
+                    target_mask[target_mask == -1] = 0
+
+                else:
+                    label_count = len(EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, random_cell))-len(similarity_targets)
+
+                    # Mask and labels are all 0's because labels are missing during runtime
+                    garbage_labels = target_mask = np.zeros(label_count)
+
+
+                # get indices for targets used in similarity computation
+                # for cell types that are going to be features
+                similarity_indices = feature_cell_indices[:, delete_indices]
+
+                # casv code
+                ## casv code
+                ##### Concatenate all cell type features together ####
+                final_features = np.concatenate([data[feature_cell_indices, i]],axis=1).flatten()
+
+                #### Finish appending feature labels together ####
+                yield final_features
+
+
+    return g
 
 def generator_to_tf_dataset(g, batch_size, shuffle_size, prefetch_size):
     """

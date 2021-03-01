@@ -17,7 +17,7 @@ import tensorflow as tf
 
 from .functions import *
 from .constants import Dataset
-from .generators import generator_to_tf_dataset,load_data
+from .generators import generator_to_tf_dataset,load_data, load_data_runtime
 from .dataset import *
 from .metrics import *
 from .conversion import *
@@ -593,12 +593,12 @@ class PeakModel():
         results = []
 
         matrix, indices = conversionObject.get_binary_vector(vector = accessibility_peak_matrix[0,:])
-        gen = load_data(self.dataset.get_data(Dataset.ALL),
-                 self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
-                 self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
-                 self.dataset.matrix,
-                 self.dataset.targetmap,
-                 self.dataset.cellmap,
+        gen = load_data_runtime(data=self.dataset.get_data(Dataset.ALL),
+                 label_cell_types=self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
+                 eval_cell_types=self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                 matrix=self.dataset.matrix,
+                 targetmap=self.dataset.targetmap,
+                 cellmap=self.dataset.cellmap,
                  radii = self.radii,
                  mode = Dataset.RUNTIME,
                  similarity_matrix = matrix,
@@ -608,22 +608,20 @@ class PeakModel():
         gen_to_list = list(gen())
         print('---------------------')
         print(np.array(gen_to_list).shape)
-        # TODO 9/10/2020: should do something more efficiently than a for loop
-        # for sample_i in tqdm.tqdm(range(1, accessilibility_peak_matrix.shape[0])):
 
-            # results.append(copy.deepcopy(gen_to_list))
         type(gen_to_list)
         gen_to_list = np.stack([gen_to_list] * accessibility_peak_matrix.shape[0], axis=0)
+        
+        
 
         # stack all samples along 0th axis
         # shape: samples x regions x TFs
-        print(gen_to_list.shape)
+        print(gen_to_list.shape) # num cells x 505 x 3
         # tmp = np.stack(results)
 
         # mean and merge along 1st axis
 
         self.predict_step_matrix(gen_to_list) # issue with inputs passed into predict
-        # return conversionObject.merge(gen_to_list, axis = 1)
 
 
     def score_peak_file(self, similarity_peak_files, regions_peak_file):
