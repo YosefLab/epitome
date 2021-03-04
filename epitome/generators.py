@@ -109,7 +109,7 @@ def load_data(data,
 
             else:
                 # single TF model
-                # get indices for DNAse and chip for this mark
+                # get indices for DNase and chip for this mark
                 feature_indices = np.concatenate(list(map(lambda c: EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, c),
                                                      list(cellmap))))
 
@@ -305,27 +305,11 @@ def load_data_runtime(data,
         and A549 does not have data for ATF3, there will be a 0 in the position corresponding to the label space.
     """
 
+    assert mode == Dataset.RUNTIME, 'Must be in runtime mode'
     # reshape similarity_matrix to a matrix if there is only one target
-    if similarity_matrix is not None:
-        if len(similarity_matrix.shape) == 1:
-            similarity_matrix = similarity_matrix[None,:]
-
-    if type(similarity_targets) is not list:
-        similarity_targets = [similarity_targets]
-
-    if len(similarity_targets) == 0 and len(radii) > 0:
-        raise ValueError("Cannot set radii to anything if there are no similarity assays, but found len(radii)=%i" % len(radii))
-
     # get indices for features. rows are cells and cols are targets
     cellmap_idx = [cellmap[c] for c in list(eval_cell_types)]
     feature_cell_indices = matrix[cellmap_idx,:]
-
-    # indices to be deleted. used for similarity comparison, not predictions.
-    delete_indices = np.array([targetmap[s] for s in similarity_targets]).astype(int)
-
-    # make sure no similarity comparison data is missing for all cell types
-    assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \
-        "missing data for similarity target at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
 
     # names of labels that are being predicted
     feature_targets = [a for a in list(targetmap)] # targets used as features for each evaluation cell type
@@ -336,53 +320,20 @@ def load_data_runtime(data,
 
     if (not isinstance(indices, np.ndarray) and not isinstance(indices, list)):
         # model performs better when there are less 0s
-        
         indices = range(0, data.shape[-1]) # not training mode, set to all points
 
-    if (mode == Dataset.RUNTIME):
-        label_cell_types = ["PLACEHOLDER_CELL"]
-        if similarity_matrix is None:
-            raise Exception("similarity_matrix must be defined in runtime mode")
-        assert similarity_matrix.shape[0] == len(similarity_targets), \
-            "similarity_matrix is missing data for targets (should have %i rows)" % (len(similarity_targets))
-        random_cell = list(cellmap)[0] # placeholder to get label vector length
-
-    print("using %s as labels for mode %s" % (label_cell_types, mode))
-
-    # string of radii for meta data labeling
-    radii_str = list(map(lambda x: "RADII_%i" % x, radii))
+    random_cell = list(cellmap)[0] # placeholder to get label vector length
 
     def g():
         for i in indices: # for all records specified
 
-            for cell in label_cell_types: # for all cell types to be used in labels
-
+            for cell in ["PLACEHOLDER_CELL"]: # for all cell types to be used in labels
                 # labels for this cell
-                if (mode != Dataset.RUNTIME):
-                    label_cell_indices = EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, cell)
+                label_count = len(EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, random_cell))-len(similarity_targets)
 
-                    # delete all indices being used in the similarity computation
-                    label_cell_indices_no_similarities = np.delete(label_cell_indices, delete_indices)
+                # Mask and labels are all 0's because labels are missing during runtime
+                garbage_labels = target_mask = np.zeros(label_count)
 
-                    # Copy target_index_no_similarities and turn into mask of 0/1 for whether data for this cell type for
-                    # a given label is available.
-                    target_mask = np.copy(label_cell_indices_no_similarities)
-                    target_mask[target_mask > -1] = 1
-                    target_mask[target_mask == -1] = 0
-
-                else:
-                    label_count = len(EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, random_cell))-len(similarity_targets)
-
-                    # Mask and labels are all 0's because labels are missing during runtime
-                    garbage_labels = target_mask = np.zeros(label_count)
-
-
-                # get indices for targets used in similarity computation
-                # for cell types that are going to be features
-                similarity_indices = feature_cell_indices[:, delete_indices]
-
-                # casv code
-                ## casv code
                 ##### Concatenate all cell type features together ####
                 final_features = np.concatenate([data[feature_cell_indices, i]],axis=1).flatten()
 

@@ -612,7 +612,6 @@ class PeakModel():
         type(gen_to_list)
         gen_to_list = np.stack([gen_to_list] * accessibility_peak_matrix.shape[0], axis=0)
         
-        
 
         # stack all samples along 0th axis
         # shape: samples x regions x TFs

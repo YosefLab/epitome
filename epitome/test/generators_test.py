@@ -11,8 +11,12 @@ class GeneratorsTest(EpitomeTestCase):
 		# get shape of train data
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_targets = ['DNase','CTCF']
-		matrix, cellmap, targetmap = self.getFeatureData(eligible_targets, eligible_cells)
-		self.train_shape = (np.max(matrix)+1, 1800)  # 1800 is size of toy data training
+		self.matrix, self.cellmap, self.targetmap = self.getFeatureData(eligible_targets, eligible_cells)
+		self.train_shape = (np.max(self.matrix)+1, 1800)  # 1800 is size of toy data training
+		self.data = np.zeros(self.train_shape)
+		self.data[::2] = 1
+		self.eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
+		self.eligible_targets = ['DNase','CTCF']
 
 	def test_generator_no_dnase(self):
 
@@ -228,3 +232,63 @@ class GeneratorsTest(EpitomeTestCase):
 
 		# if we reach here, an error was not thrown :)
 		assert(len(li_results) == 10)
+	
+	def test_load_data_runtime(self):
+		results = load_data_runtime(self.data,
+			['K562'],
+			self.eligible_cells,
+			self.matrix,
+			self.targetmap,
+			self.cellmap,
+			radii = [1, 10], # no dnase
+			mode = Dataset.RUNTIME,
+			indices=np.arange(0,10))()
+		li_results = np.array(list(results))
+		assert li_results.shape == (10, 10)
+
+# if __name__ == '__main__':
+# 	gt = GeneratorsTest()
+# 	print(gt.matrix)
+# 	print(gt.cellmap)
+# 	print(gt.targetmap)
+
+# 	eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
+# 	eligible_targets = ['DNase','CTCF','RAD21','LARP7']
+# 	dataset = EpitomeDataset(targets = eligible_targets,
+# 						cells = eligible_cells)
+# 	test_celltypes = ['K562']
+# 	eligible_cells.remove(test_celltypes[0])
+# 	radii = [1,10]
+# 	# fake data for DNase
+# 	similarity_matrix = np.ones(dataset.get_data(Dataset.TRAIN).shape[1])
+# 	data = dataset.get_data(Dataset.TRAIN)
+# 	print(data.shape)
+
+
+
+# 	results = load_data_runtime(gt.data,
+# 			['K562'],
+# 			gt.eligible_cells,
+# 			gt.matrix,
+# 			gt.targetmap,
+# 			gt.cellmap,
+# 			radii = radii, # no dnase
+# 			mode = Dataset.RUNTIME,
+# 			indices=np.arange(0,10))()
+# 	li_results = np.array(list(results))
+# 	print(li_results)
+# 	print(li_results.shape)
+
+# 	results = load_data(gt.data,
+# 			['K562'],
+# 			gt.eligible_cells,
+# 			gt.matrix,
+# 			gt.targetmap,
+# 			gt.cellmap,
+# 			radii = [], # no dnase
+# 			mode = Dataset.VALID,
+# 			indices=np.arange(0,10))()
+# 	li_results = list(results)
+# 	li_results = np.array(list(results))
+# 	print(li_results)
+# 	print(li_results.shape)
