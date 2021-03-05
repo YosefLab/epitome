@@ -22,9 +22,41 @@ from sklearn.metrics import jaccard_score
 
 # local imports
 from epitome import *
-from .constants import *
+from .constants import Dataset
 from .functions import download_and_unzip
 from .viz import plot_assay_heatmap
+
+################### File accession constants #######################
+S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/hg19.zip'
+
+# os env that should be set by user to explicitly set the data path
+EPITOME_DATA_PATH_ENV="EPITOME_DATA_PATH"
+
+# data files required by epitome
+# data.h5 contains data, row information (celltypes and targets) and
+# column information (chr, start, binSize)
+EPITOME_H5_FILE = "data.h5"
+REQUIRED_FILES = [EPITOME_H5_FILE]
+# required keys in h5 file
+REQUIRED_KEYS = ['/',
+ '/columns',
+ '/columns/binSize',
+ '/columns/chr',
+ '/columns/index',
+ '/columns/index/TEST',
+ '/columns/index/TRAIN',
+ '/columns/index/VALID',
+ '/columns/index/test_chrs',
+ '/columns/index/valid_chrs',
+ '/columns/start',
+ '/data',
+ '/meta',
+ '/meta/assembly',
+ '/meta/source',
+ '/rows',
+ '/rows/celltypes',
+ '/rows/targets']
+
 
 class EpitomeDataset:
     '''
@@ -118,6 +150,7 @@ class EpitomeDataset:
         self.indices[Dataset.TRAIN] = dataset['columns']['index'][Dataset.TRAIN.name][:]
         self.indices[Dataset.VALID] = dataset['columns']['index'][Dataset.VALID.name][:]
         self.indices[Dataset.TEST] = dataset['columns']['index'][Dataset.TEST.name][:]
+        self.indices[Dataset.TRAIN_VALID] = [] # placeholder for if early stop is used
         self.valid_chrs = [i.decode() for i in dataset['columns']['index']['valid_chrs'][:]]
         self.test_chrs = [i.decode() for i in dataset['columns']['index']['test_chrs'][:]]
 
@@ -127,8 +160,34 @@ class EpitomeDataset:
 
         dataset.close()
 
+    def set_train_validation_indices(self, chrom):
+        '''
+        Removes and reserves a given chromosome from the TRAIN dataset into
+        its own TRAIN_VALID dataset.
+
+        :param str chrom: string representation of chromosome in 'chr{int}' format (Ex: 'chr22').
+        '''
+        assert chrom in self.regions.chromosomes, "%s must be part of the genome assembly. Not found in regions."
+        assert chrom  not in self.valid_chrs and chrom not in self.test_chrs, "%s cannot be a valid or test chromosome."
+
+        # load in original training indices
+        dataset = h5py.File(self.h5_path, 'r')
+        train_indices = dataset['columns']['index'][Dataset.TRAIN.name][:]
+        dataset.close()
+
+        chr_indices = self.regions[self.regions.Chromosome == chrom].idx
+
+        # make sure this chromosome is in train set
+        assert len(np.setdiff1d(chr_indices, train_indices)) == 0, "chr_indices must be a subset of train_indices"
+
+        # remove valid indices
+        self.indices[Dataset.TRAIN] = np.setdiff1d(train_indices, chr_indices)
+        self.indices[Dataset.TRAIN_VALID] = chr_indices
+
+
     def get_parameter_dict(self):
-        ''' Returns dict of all parameters required to reconstruct this dataset
+        '''
+        Returns dict of all parameters required to reconstruct this dataset
 
         :return: dict containing all parameters to reconstruct dataset.
         :rtype: dict

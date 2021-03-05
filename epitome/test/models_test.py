@@ -2,10 +2,13 @@ from epitome.test import EpitomeTestCase
 from epitome.constants import Dataset
 import numpy as np
 from epitome.models import EpitomeModel
+from epitome.dataset import EpitomeDataset
 import pytest
 import tempfile
 import pyranges as pr
+import tensorflow as tf
 from epitome.dataset import *
+import sys
 
 class ModelsTest(EpitomeTestCase):
 
@@ -52,6 +55,37 @@ class ModelsTest(EpitomeTestCase):
 		# after first iterations
 		assert(results1['preds'].shape[0] == self.validation_size)
 		assert(results2['preds'][0] < results1['preds'].shape[0])
+
+	def test_train_early_stop_model(self):
+		tf.random.set_seed(5)
+		eligible_cells = ['K562','HepG2','H1']
+		eligible_targets = ['DNase','CTCF']
+
+		dataset = EpitomeDataset(targets = eligible_targets,
+			cells = eligible_cells)
+
+		# set all data to ones so it converges quickly
+		dataset_shape = dataset.get_data(Dataset.ALL).shape
+		dataset._data = np.ones(dataset_shape)
+
+		# create model and train
+		model = EpitomeModel(dataset,
+			radii=[],
+			max_valid_batches=10)
+		results1 = model.test(10)
+
+		# results should be about random
+		m = np.mean(results1['preds'])
+		assert m > 0.4 and m < 0.6
+
+		n_steps = 300
+		_, num_steps, _ = model.train(n_steps,min_delta=sys.maxsize)
+		assert num_steps < n_steps
+
+		results2 = model.test(self.validation_size)
+		m = np.mean(results2['preds'])
+		assert m > 0.6 # TODO should be higher
+
 
 	def test_test_model(self):
 

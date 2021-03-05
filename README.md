@@ -1,3 +1,9 @@
+[![pypi](https://img.shields.io/pypi/v/epitome.svg)](https://pypi.org/project/epitome/)
+[![docs](https://readthedocs.org/projects/epitome/badge/?version=latest)](https://epitome.readthedocs.io/en/latest/)
+![Build status](https://github.com/YosefLab/epitome/workflows/epitome/badge.svg)
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/6c2cef0a2eae45399c9caed2d8c81965)](https://app.codacy.com/gh/YosefLab/epitome?utm_source=github.com&utm_medium=referral&utm_content=YosefLab/epitome&utm_campaign=Badge_Grade)
+
+
 # Epitome
 
 Pipeline for predicting ChIP-seq peaks in novel cell types using chromatin accessibility.
@@ -5,6 +11,10 @@ Pipeline for predicting ChIP-seq peaks in novel cell types using chromatin acces
 ![Epitome Diagram](https://github.com/YosefLab/epitome/raw/master/docs/figures/epitome_diagram_celllines.png)
 
 Epitome leverages chromatin accessibility (either DNase-seq or ATAC-seq) to predict epigenetic events in a novel cell type of interest. Such epigenetic events include transcription factor binding sites and histone modifications. Epitome computes chromatin accessibility similarity between ENCODE cell types and the novel cell type, and uses this information to transfer known epigentic signal to the novel cell type of interest.
+
+# Documentation
+
+Epitome documentation is hosted at [readthedocs](https://epitome.readthedocs.io/en/latest/). Documentation for Epitome includes tutorials for creating Epitome datasets, training, testing, and evaluated models.
 
 
 ## Requirements
@@ -24,8 +34,6 @@ pip install epitome
 
 
 ## Training a Model
-
-TODO: link to documentation
 
 First, create an Epitome dataset that defines the cell types and ChIP-seq
 targets you want to train on,
