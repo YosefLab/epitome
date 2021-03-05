@@ -73,7 +73,7 @@ find . -name "*${release}.bak" -exec rm -f {} \;
 git add version.py
 git commit -m "bumped version from ${release} to ${devel}"
 
-pull request devel to master
+# pull request devel to master
 git push origin ${release}
 
 # if prompted, push to YOUR remote (not YosefLab/epitome)!
