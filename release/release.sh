@@ -59,11 +59,7 @@ if [ $? != 0 ]; then
   exit 1
 fi
 
-<<<<<<< HEAD
-push branch to upstream
-=======
 # push branch to upstream
->>>>>>> 44908518d0268762d66c2a4146b7d62935070a93
 git push upstream ${release}
 
 # update version to devel
