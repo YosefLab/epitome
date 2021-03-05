@@ -2,6 +2,13 @@
 
 set -e -x
 
+# make sure gh is installed
+if ! command -v gh &> /dev/null
+then
+    echo "github client (gh) needs to be installed to make a release. See https://cli.github.com/"
+    exit
+fi
+
 # do we have enough arguments?
 if [ $# -lt 2 ]; then
     echo "Usage:"
@@ -16,7 +23,7 @@ current_version=$(python version.py)
 # get current branch
 branch=$(git status -bs | awk '{ print $2 }' | awk -F'.' '{ print $1 }' | head -n 1)
 
-# fclean up if something goes wrong
+# clean up if something goes wrong
 function clean_up {
 
     find . -name "*.bak" -exec rm -f {} \;
@@ -52,22 +59,27 @@ if [ $? != 0 ]; then
   exit 1
 fi
 
-# push branch to upstream
+push branch to upstream
 git push upstream ${release}
 
 # update version to devel
 current_version=$(python version.py)
-find . -name "version.py" -exec sed -e "s/${release}/${devel}/g" \
+find . -name "version.py" -exec sed -e "s/${current_version}/${devel}/g" \
     -i.${release}.bak '{}' \;
 
 find . -name "*${release}.bak" -exec rm -f {} \;
 
-# commit version changes
+commit version changes
 git add version.py
 git commit -m "bumped version from ${release} to ${devel}"
 
-# pull request devel to master
+pull request devel to master
 git push origin ${release}
 
+# if prompted, push to YOUR remote (not YosefLab/epitome)!
+gh pr create --title "v${devel}" \
+        --body "bumped version from ${release} to ${devel}" \
+        --repo YosefLab/epitome
+
 git checkout master
-echo "Done. Now make a pull request from ${release} and tag a release on github for ${release}"
+echo "Done. Now tag a release on github for ${release}"
