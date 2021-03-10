@@ -374,6 +374,9 @@ class PeakModel():
           But got matrix.shape[-1]=%i and len(self.dataset.regions)=%i
           """  % (matrix.shape[-1], len(self.dataset.regions))
 
+        # TODO: here, you would have to filter indices by regions that have no data
+        filtered_indices = ...
+
         input_shapes, output_shape, ds = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.ALL),
                  self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
                  self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
@@ -384,11 +387,14 @@ class PeakModel():
                  mode = Dataset.RUNTIME,
                  similarity_matrix = matrix,
                  similarity_targets = self.dataset.similarity_targets,
-                 indices = indices), self.batch_size, 1, self.prefetch_size)
+                 indices = filtered_indices), self.batch_size, 1, self.prefetch_size)
 
         num_samples = len(indices)
 
-        results = self.run_predictions(num_samples, ds, calculate_metrics = False)
+        results = self.run_predictions(num_samples, ds, calculate_metrics = False)['preds']
+
+        # mix back filtered_indices with original indices
+
 
         return results['preds']
 

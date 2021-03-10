@@ -35,6 +35,7 @@ def load_data(data,
                  mode = Dataset.TRAIN,
                  similarity_matrix = None,
                  indices = None,
+                 continuous=False,
                  return_feature_names = False,
                  **kwargs):
     """
@@ -52,6 +53,7 @@ def load_data(data,
     :param similarity_matrix: matrix with shape (len(similarity_targets), genome_size) containing binary 0/1s of peaks for similarity_targets
     to be compared in the CASV.
     :param indices: indices in genome to generate records for.
+    :param boolean continous: determines whether similarity_matrix has continuous values
     :param return_feature_names: boolean whether to return string names of features
     :param kwargs: kargs
 
