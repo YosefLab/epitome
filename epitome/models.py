@@ -388,10 +388,8 @@ class PeakModel():
         region_sums = np.sum(self.dataset.get_data(Dataset.ALL)[:,indices], axis=0)
 
         # only pick indices that have some signal
-
         nonzero_indices = np.where(region_sums > 0)[0]
         filtered_indices = indices[nonzero_indices]
-        print("filtered_indices", filtered_indices.shape)
 
         input_shapes, output_shape, ds = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.ALL),
                  self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
@@ -408,14 +406,11 @@ class PeakModel():
 
         num_samples = len(filtered_indices)
         results = self.run_predictions(num_samples, ds, calculate_metrics = False)['preds']
-        print("results", results.shape)
 
         # mix back in filtered_indices with original indices
         all_results = np.empty((indices.shape[0], results.shape[-1]))
-        print("all_results", all_results.shape)
 
         all_results[:] = np.nan # set missing values to nan
-        # TODO: this is wrong, it is indexing original dataset, not indices
         all_results[nonzero_indices,:] = results
 
         return all_results
