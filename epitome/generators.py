@@ -324,21 +324,26 @@ def load_data_runtime(data,
 
     random_cell = list(cellmap)[0] # placeholder to get label vector length
 
+    print("memes", len(indices))
+    # c = 0
     def g():
+        c = 0
         for i in indices: # for all records specified
 
-            for cell in ["PLACEHOLDER_CELL"]: # for all cell types to be used in labels
-                # labels for this cell
-                label_count = len(EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, random_cell))-len(similarity_targets)
+            cell = ["PLACEHOLDER_CELL"] # for all cell types to be used in labels
+            # labels for this cell
+            label_count = len(EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, random_cell))-len(similarity_targets)
 
-                # Mask and labels are all 0's because labels are missing during runtime
-                garbage_labels = target_mask = np.zeros(label_count)
+            # Mask and labels are all 0's because labels are missing during runtime
+            garbage_labels = target_mask = np.zeros(label_count)
 
-                ##### Concatenate all cell type features together ####
-                final_features = np.concatenate([data[feature_cell_indices, i]],axis=1).flatten()
+            ##### Concatenate all cell type features together ####
+            final_features = np.concatenate([data[feature_cell_indices, i]],axis=1).flatten()
 
-                #### Finish appending feature labels together ####
-                yield final_features
+            #### Finish appending feature labels together ####
+            # print(c, i)
+            c += 1
+            yield final_features
 
 
     return g
