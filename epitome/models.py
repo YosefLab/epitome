@@ -43,6 +43,7 @@ class PeakModel():
     def __init__(self,
                  dataset,
                  test_celltypes = [],
+                 single_cell = False,
                  debug = False,
                  batch_size = 64,
                  shuffle_size = 10,
@@ -58,6 +59,7 @@ class PeakModel():
 
         :param EpitomeDataset dataset: EpitomeDataset
         :param list test_celltypes: list of cell types to hold out for test. Should be in cellmap
+        :param boolean single_cell: whether you are building a model to predict using scATAC-seq posteriors. Defaults to False.
         :param bool debug: used to print out intermediate validation values
         :param int batch_size: batch size (default is 64)
         :param int shuffle_size: data shuffle size (default is 10)
@@ -74,6 +76,8 @@ class PeakModel():
 
         # set the dataset
         self.dataset = dataset
+        # whether or not this model can train using continous datas
+        self.single_cell = single_cell
 
         assert (set(test_celltypes) < set(list(self.dataset.cellmap))), \
                 "test_celltypes %s must be subsets of available cell types %s" % (str(test_celltypes), str(list(dataset.cellmap)))
@@ -104,6 +108,7 @@ class PeakModel():
                                                     dataset.matrix,
                                                     dataset.targetmap,
                                                     dataset.cellmap,
+                                                    continous = self.single_cell,
                                                     similarity_targets= dataset.similarity_targets,
                                                     radii = radii, mode = Dataset.TRAIN),
                                                     batch_size, shuffle_size, prefetch_size)
@@ -114,6 +119,7 @@ class PeakModel():
                                                 dataset.matrix,
                                                 dataset.targetmap,
                                                 dataset.cellmap,
+                                                continous = self.single_cell,
                                                 similarity_targets = dataset.similarity_targets,
                                                 radii = radii, mode = Dataset.TRAIN),
                                                 batch_size, shuffle_size, prefetch_size)
@@ -124,6 +130,7 @@ class PeakModel():
                                                 dataset.matrix,
                                                 dataset.targetmap,
                                                 dataset.cellmap,
+                                                continous = self.single_cell,
                                                 similarity_targets = dataset.similarity_targets,
                                                 radii = radii, mode = Dataset.VALID),
                                                 batch_size, 1, prefetch_size)
@@ -136,6 +143,7 @@ class PeakModel():
                                                    dataset.matrix,
                                                    dataset.targetmap,
                                                    dataset.cellmap,
+                                                   continous = self.single_cell,
                                                    similarity_targets = dataset.similarity_targets,
                                                    radii = radii, mode = Dataset.TEST),
                                                    batch_size, 1, prefetch_size)
@@ -374,8 +382,14 @@ class PeakModel():
           But got matrix.shape[-1]=%i and len(self.dataset.regions)=%i
           """  % (matrix.shape[-1], len(self.dataset.regions))
 
-        # TODO: here, you would have to filter indices by regions that have no data
-        filtered_indices = ...
+        # find regions that have some signal (sum > 0)
+        region_sums = np.sum(self.dataset.get_data(Dataset.ALL)[:,indices], axis=0)
+
+        # only pick indices that have some signal
+
+        nonzero_indices = np.where(region_sums > 0)[0]
+        filtered_indices = indices[nonzero_indices]
+        print("filtered_indices", filtered_indices.shape)
 
         input_shapes, output_shape, ds = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.ALL),
                  self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
@@ -383,20 +397,26 @@ class PeakModel():
                  self.dataset.matrix,
                  self.dataset.targetmap,
                  self.dataset.cellmap,
+                 continous = self.single_cell,
                  radii = self.radii,
                  mode = Dataset.RUNTIME,
                  similarity_matrix = matrix,
                  similarity_targets = self.dataset.similarity_targets,
                  indices = filtered_indices), self.batch_size, 1, self.prefetch_size)
 
-        num_samples = len(indices)
-
+        num_samples = len(filtered_indices)
         results = self.run_predictions(num_samples, ds, calculate_metrics = False)['preds']
+        print("results", results.shape)
 
-        # mix back filtered_indices with original indices
+        # mix back in filtered_indices with original indices
+        all_results = np.empty((indices.shape[0], results.shape[-1]))
+        print("all_results", all_results.shape)
 
+        all_results[:] = np.nan # set missing values to nan
+        # TODO: this is wrong, it is indexing original dataset, not indices
+        all_results[nonzero_indices,:] = results
 
-        return results['preds']
+        return all_results
 
     @tf.function
     def predict_step_matrix(self, inputs):

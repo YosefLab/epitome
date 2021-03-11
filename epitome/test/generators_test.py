@@ -223,8 +223,45 @@ class GeneratorsTest(EpitomeTestCase):
                  mode = Dataset.RUNTIME,
                  similarity_matrix = similarity_matrix,
                  similarity_targets = 'DNase',
+				 return_feature_names = True,
                  indices=np.arange(0,10))()
 		li_results = list(results)
 
 		# if we reach here, an error was not thrown :)
 		assert(len(li_results) == 10)
+		assert(len(li_results[0][0][0]) == 28)
+
+		feature_names = li_results[0][1][0]
+		assert(len(list(filter(lambda x: '_agree' in x, feature_names))) == len(radii) * len(eligible_cells))
+
+
+	def test_continous_generator(self):
+		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
+		eligible_targets = ['DNase','CTCF','RAD21','LARP7']
+		dataset = EpitomeDataset(targets = eligible_targets,
+							cells = eligible_cells)
+		test_celltypes = ['K562']
+		eligible_cells.remove(test_celltypes[0])
+		radii = [1,10]
+		# fake data for DNase
+		similarity_matrix = np.ones(dataset.get_data(Dataset.TRAIN).shape[1])
+
+		results = load_data(dataset.get_data(Dataset.TRAIN),
+                 test_celltypes,
+                 eligible_cells,
+                 dataset.matrix,
+                 dataset.targetmap,
+                 dataset.cellmap,
+				 radii,
+                 mode = Dataset.RUNTIME,
+				 continuous = True,
+                 similarity_matrix = similarity_matrix,
+                 similarity_targets = 'DNase',
+				 return_feature_names = True,
+                 indices=np.arange(0,10))()
+		li_results = list(results)
+		feature_names = li_results[0][1][0]
+
+		# make sure we don't have the agreement features
+		assert(len(li_results[0][0][0]) == 20)
+		assert(len(list(filter(lambda x: '_agree' in x, feature_names))) == 0)
