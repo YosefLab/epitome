@@ -14,11 +14,12 @@ Models
 
 from epitome import *
 import tensorflow as tf
+import pandas as pd
 
 from .functions import *
 from .constants import Dataset
 from .generators import generator_to_tf_dataset,load_data
-from .dataset import *
+from .dataset import EpitomeDataset
 from .metrics import *
 from .conversion import *
 import numpy as np
@@ -26,6 +27,7 @@ import numpy as np
 import tqdm
 import logging
 import sys
+import os
 
 # for saving model
 import pickle
@@ -43,6 +45,7 @@ class PeakModel():
     def __init__(self,
                  dataset,
                  test_celltypes = [],
+                 single_cell = False,
                  debug = False,
                  batch_size = 64,
                  shuffle_size = 10,
@@ -58,6 +61,7 @@ class PeakModel():
 
         :param EpitomeDataset dataset: EpitomeDataset
         :param list test_celltypes: list of cell types to hold out for test. Should be in cellmap
+        :param boolean single_cell: whether you are building a model to predict using scATAC-seq posteriors. Defaults to False.
         :param bool debug: used to print out intermediate validation values
         :param int batch_size: batch size (default is 64)
         :param int shuffle_size: data shuffle size (default is 10)
@@ -74,6 +78,8 @@ class PeakModel():
 
         # set the dataset
         self.dataset = dataset
+        # whether or not this model can train using continous datas
+        self.single_cell = single_cell
 
         assert (set(test_celltypes) < set(list(self.dataset.cellmap))), \
                 "test_celltypes %s must be subsets of available cell types %s" % (str(test_celltypes), str(list(dataset.cellmap)))
@@ -104,6 +110,7 @@ class PeakModel():
                                                     dataset.matrix,
                                                     dataset.targetmap,
                                                     dataset.cellmap,
+                                                    continous = self.single_cell,
                                                     similarity_targets= dataset.similarity_targets,
                                                     radii = radii, mode = Dataset.TRAIN),
                                                     batch_size, shuffle_size, prefetch_size)
@@ -114,6 +121,7 @@ class PeakModel():
                                                 dataset.matrix,
                                                 dataset.targetmap,
                                                 dataset.cellmap,
+                                                continous = self.single_cell,
                                                 similarity_targets = dataset.similarity_targets,
                                                 radii = radii, mode = Dataset.TRAIN),
                                                 batch_size, shuffle_size, prefetch_size)
@@ -124,6 +132,7 @@ class PeakModel():
                                                 dataset.matrix,
                                                 dataset.targetmap,
                                                 dataset.cellmap,
+                                                continous = self.single_cell,
                                                 similarity_targets = dataset.similarity_targets,
                                                 radii = radii, mode = Dataset.VALID),
                                                 batch_size, 1, prefetch_size)
@@ -136,6 +145,7 @@ class PeakModel():
                                                    dataset.matrix,
                                                    dataset.targetmap,
                                                    dataset.cellmap,
+                                                   continous = self.single_cell,
                                                    similarity_targets = dataset.similarity_targets,
                                                    radii = radii, mode = Dataset.TEST),
                                                    batch_size, 1, prefetch_size)
@@ -374,23 +384,36 @@ class PeakModel():
           But got matrix.shape[-1]=%i and len(self.dataset.regions)=%i
           """  % (matrix.shape[-1], len(self.dataset.regions))
 
+        # find regions that have some signal (sum > 0)
+        region_sums = np.sum(self.dataset.get_data(Dataset.ALL)[:,indices], axis=0)
+
+        # only pick indices that have some signal
+        nonzero_indices = np.where(region_sums > 0)[0]
+        filtered_indices = indices[nonzero_indices]
+
         input_shapes, output_shape, ds = generator_to_tf_dataset(load_data(self.dataset.get_data(Dataset.ALL),
                  self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
                  self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
                  self.dataset.matrix,
                  self.dataset.targetmap,
                  self.dataset.cellmap,
+                 continous = self.single_cell,
                  radii = self.radii,
                  mode = Dataset.RUNTIME,
                  similarity_matrix = matrix,
                  similarity_targets = self.dataset.similarity_targets,
-                 indices = indices), self.batch_size, 1, self.prefetch_size)
+                 indices = filtered_indices), self.batch_size, 1, self.prefetch_size)
 
-        num_samples = len(indices)
+        num_samples = len(filtered_indices)
+        results = self.run_predictions(num_samples, ds, calculate_metrics = False)['preds']
 
-        results = self.run_predictions(num_samples, ds, calculate_metrics = False)
+        # mix back in filtered_indices with original indices
+        all_results = np.empty((indices.shape[0], results.shape[-1]))
 
-        return results['preds']
+        all_results[:] = np.nan # set missing values to nan
+        all_results[nonzero_indices,:] = results
+
+        return all_results
 
     @tf.function
     def predict_step_matrix(self, inputs):
@@ -510,7 +533,7 @@ class PeakModel():
 
             tf.compat.v1.logging.info("macro auROC:     " + str(auROC))
             tf.compat.v1.logging.info("auPRC:     " + str(auPRC))
-        except ValueError as v:
+        except ValueError:
             auROC = None
             auPRC = None
             tf.compat.v1.logging.info("Failed to calculate metrics")
