@@ -13,10 +13,10 @@ Data Generator Functions
 
 import numpy as np
 import tensorflow as tf
-from .constants import *
+from .constants import Dataset
 from .functions import *
 from .sampling import *
-from .dataset import *
+from .dataset import EpitomeDataset
 import glob
 
 ######################### Original Data Generator: Only peak based #####################

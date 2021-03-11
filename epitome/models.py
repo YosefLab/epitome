@@ -14,11 +14,12 @@ Models
 
 from epitome import *
 import tensorflow as tf
+import pandas as pd
 
 from .functions import *
 from .constants import Dataset
 from .generators import generator_to_tf_dataset,load_data
-from .dataset import *
+from .dataset import EpitomeDataset
 from .metrics import *
 from .conversion import *
 import numpy as np
@@ -26,6 +27,7 @@ import numpy as np
 import tqdm
 import logging
 import sys
+import os
 
 # for saving model
 import pickle
@@ -536,7 +538,7 @@ class PeakModel():
 
             tf.compat.v1.logging.info("macro auROC:     " + str(auROC))
             tf.compat.v1.logging.info("auPRC:     " + str(auPRC))
-        except ValueError as v:
+        except ValueError:
             auROC = None
             auPRC = None
             tf.compat.v1.logging.info("Failed to calculate metrics")
