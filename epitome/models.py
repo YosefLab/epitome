@@ -191,6 +191,7 @@ class PeakModel():
                          'test_celltypes':self.test_celltypes,
                          'debug': self.debug,
                          'batch_size':self.batch_size,
+                         'single_cell': self.single_cell,
                          'shuffle_size':self.shuffle_size,
                          'prefetch_size':self.prefetch_size,
                          'radii':self.radii}
