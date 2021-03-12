@@ -305,11 +305,26 @@ def load_data_runtime(data,
         and A549 does not have data for ATF3, there will be a 0 in the position corresponding to the label space.
     """
 
-    assert mode == Dataset.RUNTIME, 'Must be in runtime mode'
-    # reshape similarity_matrix to a matrix if there is only one target
+    if similarity_matrix is not None:
+        if len(similarity_matrix.shape) == 1:
+            similarity_matrix = similarity_matrix[None,:]
+
+    if type(similarity_targets) is not list:
+        similarity_targets = [similarity_targets]
+
+    if len(similarity_targets) == 0 and len(radii) > 0:
+        raise ValueError("Cannot set radii to anything if there are no similarity assays, but found len(radii)=%i" % len(radii))
+
     # get indices for features. rows are cells and cols are targets
     cellmap_idx = [cellmap[c] for c in list(eval_cell_types)]
     feature_cell_indices = matrix[cellmap_idx,:]
+
+    # indices to be deleted. used for similarity comparison, not predictions.
+    delete_indices = np.array([targetmap[s] for s in similarity_targets]).astype(int)
+
+    # make sure no similarity comparison data is missing for all cell types
+    assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \
+        "missing data for similarity target at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
 
     # names of labels that are being predicted
     feature_targets = [a for a in list(targetmap)] # targets used as features for each evaluation cell type
@@ -320,30 +335,184 @@ def load_data_runtime(data,
 
     if (not isinstance(indices, np.ndarray) and not isinstance(indices, list)):
         # model performs better when there are less 0s
-        indices = range(0, data.shape[-1]) # not training mode, set to all points
+        if mode == Dataset.TRAIN:
+            feature_indices = np.concatenate(list(map(lambda c: EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, c),
+                                     list(cellmap))))
+            feature_indices = feature_indices[feature_indices != -1]
 
-    random_cell = list(cellmap)[0] # placeholder to get label vector length
+            # need to re-proportion the indices to oversample underrepresented labels
+            if (len(list(targetmap)) > 2):
+                # configure y: label matrix of ChIP for all targets from all cell lines in train
+                indices = np.concatenate([EpitomeDataset.get_y_indices_for_target(matrix, targetmap, target) for target in label_targets])
+                indices = indices[indices != -1]
+                y = data[indices, :].T
+                m = MLSMOTE(y)
+                indices = m.fit_resample()
 
-    print("memes", len(indices))
-    # c = 0
+            else:
+                # single TF model
+                # get indices for DNase and chip for this mark
+                feature_indices = np.concatenate(list(map(lambda c: EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, c),
+                                                     list(cellmap))))
+
+                # chop off targets being used in similarity metric
+                not_similarity_indices = np.array([v for k,v in targetmap.items() if k not in similarity_targets])
+                TF_indices = feature_indices.reshape([len(cellmap),len(targetmap)])[:,not_similarity_indices]
+
+                TF_indices =  TF_indices[TF_indices != -1]
+                feature_indices = feature_indices[feature_indices != -1]
+
+                # sites where TF is bound in at least 2 cell line
+                positive_indices = np.where(np.sum(data[TF_indices,:], axis=0) > 1)[0]
+                indices_probs = np.ones([data.shape[1]])
+                indices_probs[positive_indices] = 0
+                indices_probs = indices_probs/np.sum(indices_probs, keepdims=1)
+
+                # If there are nans, it means there were no 0 cases.
+                # We use this for testing so models converge quickly
+                # with all ones.
+                if np.any(np.isnan(indices_probs)):
+                  print("Warning: no negative examples in dataset!!!")
+                  indices_probs[:] = 1/indices_probs.shape[0]
+
+                # randomly select 10 fold sites where TF is not in any cell line
+                negative_indices = np.random.choice(np.arange(0,data.shape[1]),
+                                                    positive_indices.shape[0] * 10,
+                                                    p=indices_probs)
+                indices = np.sort(np.concatenate([negative_indices, positive_indices]))
+
+        else:
+            indices = range(0, data.shape[-1]) # not training mode, set to all points
+
+    if (mode == Dataset.RUNTIME):
+        label_cell_types = ["PLACEHOLDER_CELL"]
+        if similarity_matrix is None:
+            raise Exception("similarity_matrix must be defined in runtime mode")
+        assert similarity_matrix.shape[0] == len(similarity_targets), \
+            "similarity_matrix is missing data for targets (should have %i rows)" % (len(similarity_targets))
+        random_cell = list(cellmap)[0] # placeholder to get label vector length
+
+    print("using %s as labels for mode %s" % (label_cell_types, mode))
+
+    # string of radii for meta data labeling
+    radii_str = list(map(lambda x: "RADII_%i" % x, radii))
+
     def g():
-        c = 0
         for i in indices: # for all records specified
 
-            cell = ["PLACEHOLDER_CELL"] # for all cell types to be used in labels
-            # labels for this cell
-            label_count = len(EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, random_cell))-len(similarity_targets)
+            for (cell) in label_cell_types: # for all cell types to be used in labels
 
-            # Mask and labels are all 0's because labels are missing during runtime
-            garbage_labels = target_mask = np.zeros(label_count)
+                # labels for this cell
+                if (mode != Dataset.RUNTIME):
+                    label_cell_indices = EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, cell)
 
-            ##### Concatenate all cell type features together ####
-            final_features = np.concatenate([data[feature_cell_indices, i]],axis=1).flatten()
+                    # delete all indices being used in the similarity computation
+                    label_cell_indices_no_similarities = np.delete(label_cell_indices, delete_indices)
 
-            #### Finish appending feature labels together ####
-            # print(c, i)
-            c += 1
-            yield final_features
+                    # Copy target_index_no_similarities and turn into mask of 0/1 for whether data for this cell type for
+                    # a given label is available.
+                    target_mask = np.copy(label_cell_indices_no_similarities)
+                    target_mask[target_mask > -1] = 1
+                    target_mask[target_mask == -1] = 0
+
+                else:
+                    label_count = len(EpitomeDataset.get_y_indices_for_cell(matrix, cellmap, random_cell))-len(similarity_targets)
+
+                    # Mask and labels are all 0's because labels are missing during runtime
+                    garbage_labels = target_mask = np.zeros(label_count)
+
+
+                # get indices for targets used in similarity computation
+                # for cell types that are going to be features
+                similarity_indices = feature_cell_indices[:, delete_indices]
+
+
+                # get indices for each radius in radii
+                radius_ranges = list(map(lambda x: get_radius_indices(radii, x, i, data.shape[-1]), range(len(radii))))
+
+                if len(radius_ranges) > 0:
+                    radius_indices = np.concatenate(radius_ranges)
+
+                    cell_train_data = data[similarity_indices[:,:,None],radius_indices]
+
+                    if mode == Dataset.RUNTIME:
+
+                        pos = cell_train_data*similarity_matrix[:,radius_indices]
+                        agree = cell_train_data == similarity_matrix[:,radius_indices]
+
+                    else:
+                        cell_label_data = data[label_cell_indices[delete_indices][:,None],radius_indices]
+
+                        # remove middle dimension and flatten similarity targets
+                        pos = (cell_train_data*cell_label_data)
+                        agree = (cell_train_data == cell_label_data)
+
+                    # get indices to split on. remove last because it is empty
+                    split_indices = np.cumsum([len(i) for i in radius_ranges])[:-1]
+                    # slice arrays by radii
+                    pos_arrays = np.split(pos, split_indices, axis= -1 )
+                    agree_arrays = np.split(agree, split_indices, axis = -1)
+
+                    similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays + agree_arrays)),axis=1)
+                else:
+                    # no radius, so no similarities. just an empty placeholder
+                    similarities = np.zeros((len(eval_cell_types),0,0))
+
+                # reshape similarities to flatten 1st dimension, which are the targets
+                # results in the odering:
+                ## row 1: cell 1: pos for each target and agree for each target for each radius
+                similarities = similarities.reshape(similarities.shape[0], similarities.shape[1]*similarities.shape[2])
+
+                ##### Concatenate all cell type features together ####
+                final_features = np.concatenate([data[feature_cell_indices,i], similarities],axis=1).flatten()
+
+                # mask missing data
+                f_mask = np.concatenate([feature_cell_indices!=-1,
+                                         np.ones(similarities.shape)],axis=1).flatten()
+                final_features = final_features[f_mask != 0]
+
+                if (mode != Dataset.RUNTIME):
+                    labels = data[label_cell_indices_no_similarities,i]
+
+                else: # used when just predicting
+                    # The features going into the example.
+                    labels = garbage_labels # all 0's
+
+                # append labels and targetmask
+                final = final_features
+
+                #### Finish appending feature labels together ####
+                # if (return_feature_names):
+                all_labels = []
+                feature_names = []
+                similarity_labels_agreement = ['r%i_%s' % (radius, 'agree') for radius in radii]
+                similarity_labels_dp = ['r%i_%s' % (radius, 'dp') for radius in radii]
+                similarity_labels = np.concatenate([similarity_labels_agreement, similarity_labels_dp])
+
+                # concatenate together feature names
+                for j,c in enumerate(eval_cell_types):
+                    tmp = np.array(feature_targets)[feature_cell_indices[j,:] != -1]
+                    al = ['%s_%s' % (c, a) for a in tmp]
+                    sl = ['%s_%s' % (c, s) for s in similarity_labels]
+
+                    feature_names.append(al)
+                    feature_names.append(sl)
+
+                all_labels.append(np.concatenate(feature_names))
+                # all_labels.append(['lbl_%s_%s' % (cell, a) for a in label_targets]) # of form lbl_cellline_target
+                # all_labels.append(['mask_%s_%s' % (cell, a) for a in label_targets]) # of form mask_cellline_target
+
+                    # yield (final, tuple(all_labels))
+                all_labels = all_labels[0]
+                indx_to_keep = []
+                for i in range(len(all_labels)):
+                    for a in similarity_targets:
+                        # print(a, all_labels[i])
+                        if a in all_labels[i]:
+                            
+                            indx_to_keep.append(final[i])
+
+                yield np.array(indx_to_keep)
 
 
     return g

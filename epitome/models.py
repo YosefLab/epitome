@@ -591,8 +591,15 @@ class PeakModel():
         conversionObject = RegionConversion(self.dataset.regions, regions)
 
         results = []
-
+        # print(accessibility_peak_matrix.shape)
         matrix, indices = conversionObject.get_binary_vector(vector = accessibility_peak_matrix[0,:])
+        # print(len(indices))
+        # print(indices)
+        indices = indices.tolist()
+        indices.remove(1)
+        indices.remove(2)
+        indices.remove(369)
+        indices = np.array(indices)
         gen = load_data_runtime(data=self.dataset.get_data(Dataset.ALL),
                  label_cell_types=self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
                  eval_cell_types=self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
@@ -602,25 +609,39 @@ class PeakModel():
                  radii = self.radii,
                  mode = Dataset.RUNTIME,
                  similarity_matrix = matrix,
-                 similarity_targets = self.dataset.similarity_targets,
-                 indices = indices)
+                 similarity_targets = ['DNase'],
+                 indices = indices,
+                 return_feature_names=True)
+
 
         gen_to_list = list(gen())
-        print('---------------------')
-        print(np.array(gen_to_list).shape)
+        # print('---------------------')
+        # print(gen_to_list[90][0][0].shape)
+        # print(gen_to_list[90][1][0].shape)
+        # print(gen_to_list[90][0])
+        # print(gen_to_list[90][1])
+        # print('---------------------')
+        # print(gen_to_list.shape)
+        gen_to_list = np.array(gen_to_list)
 
-        type(gen_to_list)
-        gen_to_list = np.stack([gen_to_list] * accessibility_peak_matrix.shape[0], axis=0)
-        
+        # reshape to n_regions [from regions] x nassays [acc dim 1] x n_samples
+        radii = self.radii
 
-        # stack all samples along 0th axis
-        # shape: samples x regions x TFs
-        print(gen_to_list.shape) # num cells x 505 x 3
-        # tmp = np.stack(results)
+        # gen_to_list = np.transpose(gen_to_list, axes=[1, 2, 0]) # regions assays cells
+        print(gen_to_list.shape)
+
+        a = np.transpose(accessibility_peak_matrix, axes=[1, 0])
+        a = a[:, None, :]
+        print(a.shape)
+
+        out = compute_casv(gen_to_list, a, radii)
+
+
 
         # mean and merge along 1st axis
+        print(out.shape)
 
-        self.predict_step_matrix(gen_to_list) # issue with inputs passed into predict
+        self.predict_step_matrix(out) # issue with inputs passed into predict
 
 
     def score_peak_file(self, similarity_peak_files, regions_peak_file):
