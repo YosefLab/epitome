@@ -430,7 +430,7 @@ class PeakModel():
         '''
         Runs predictions on inputs from run_predictions
 
-        :param tf.Tensor inputs_b: batch of input data
+        :param tf.Tensor inputs_b: batch of input data (features x labels x mask)
         :return: predictions
         :rtype: tuple
         '''
@@ -462,7 +462,12 @@ class PeakModel():
         sample_weight = []
 
         for f in tqdm.tqdm(iter_.take(batches)):
+            print(len(f))
+            # print(f)
+            # print('--------------------')
             inputs_b = f[:-2]
+            print(len(inputs_b))
+            print(inputs_b)
             truth_b = f[-2]
             weights_b = f[-1]
             preds_b = self.predict_step_generator(inputs_b)
@@ -613,8 +618,21 @@ class PeakModel():
                  indices = indices,
                  return_feature_names=True)
 
+        to_stack = load_data(data=self.dataset.get_data(Dataset.ALL),
+                 label_cell_types=self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
+                 eval_cell_types=self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                 matrix=self.dataset.matrix,
+                 targetmap=self.dataset.targetmap,
+                 cellmap=self.dataset.cellmap,
+                 radii = self.radii,
+                 mode = Dataset.RUNTIME,
+                 similarity_matrix = matrix,
+                 similarity_targets = ['DNase'],
+                 indices = indices,
+                 return_feature_names=True)
 
         gen_to_list = list(gen())
+        to_stack = list(to_stack())
         # print('---------------------')
         # print(gen_to_list[90][0][0].shape)
         # print(gen_to_list[90][1][0].shape)
@@ -627,22 +645,91 @@ class PeakModel():
         # reshape to n_regions [from regions] x nassays [acc dim 1] x n_samples
         radii = self.radii
 
+        stacked = np.stack([to_stack] * accessibility_peak_matrix.shape[0], axis=0)
+        names = stacked[:, :, 1, :]
+        to_stack = stacked[:, :, 0, :]
         # gen_to_list = np.transpose(gen_to_list, axes=[1, 2, 0]) # regions assays cells
-        print(gen_to_list.shape)
+        # print(gen_to_list.shape)
 
         a = np.transpose(accessibility_peak_matrix, axes=[1, 0])
         a = a[:, None, :]
-        print(a.shape)
+        # print(a.shape)
 
         out = compute_casv(gen_to_list, a, radii)
+
+        casv_len = out.shape[1]
+        num_cells = out.shape[3]
+        num_regions = out.shape[0]
+        num_celltypes = out.shape[2]
+        num_targets = len(self.dataset.targets) + 1
+
+        for region in range(num_regions):
+            for cell in range(num_cells):
+                selected_gen = to_stack[cell, region, :]
+                selected_casv = out[region, :, :, cell]
+                len_feats_per_celltype = int(selected_gen[0].shape[0] / num_celltypes) # 24 / 2 = 12
+                # print(selected_gen[0])
+                old_sg = selected_gen[0]
+                # print(selected_gen[0].shape)
+                # print(selected_gen.shape)
+                for celltype in range(num_celltypes):
+                    # print(celltype)
+                    idx = len_feats_per_celltype * celltype
+                    casv_cell = selected_casv[:, celltype]
+                    # print(idx)
+                    # print(selected_gen[0][idx + 4 : idx + len_feats_per_celltype])
+                    # print(casv_cell)
+                    selected_gen[0][idx + 4 : idx + len_feats_per_celltype] = casv_cell
+                    # assert np.any()
 
 
 
         # mean and merge along 1st axis
-        print(out.shape)
+        # print(out)
+        # print(out.shape)
+        # print(stacked.shape)
+        # print(to_stack.shape)
+        # print(names[0, 0:2, :])
 
-        self.predict_step_matrix(out) # issue with inputs passed into predict
+        print(to_stack.shape)
+        for c in range(num_cells):
+            for r in range(num_regions):
+                self.predict_step_generator(to_stack[c, r, :][0][None, :])
 
+        # self._predict(to_stack) # issue with inputs passed into predict
+
+    def score_matrix_orig(self, accessilibility_peak_matrix, regions):
+        """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
+        rows are regions from regions_peak_file. rows in accessilibility_peak_matrix should matching
+        :param numpy.matrix accessilibility_peak_matrix:  of (samples by genomic regions)
+        :param str regions: either narrowpeak or bed file containing regions to score, OR a pyranges object
+            with columns [Chomosome, Start, End, idx]. Index matches each genomic region to a row in
+            accessilibility_peak_matrix. In both cases, number of regions Should
+            match rows in accessilibility_peak_matrix
+        :return: 3-dimensional numpy matrix of predictions: sized (samples by regions by ChIP-seq targets)
+        :rtype: numpy matrix
+        """
+
+        conversionObject = RegionConversion(self.dataset.regions, regions)
+
+        results = []
+
+        # TODO 9/10/2020: should do something more efficiently than a for loop
+        for sample_i in tqdm.tqdm(range(accessilibility_peak_matrix.shape[0])):
+
+            peaks_i, idx = conversionObject.get_binary_vector(vector = accessilibility_peak_matrix[sample_i,:])
+
+            preds = self.eval_vector(peaks_i, idx)
+
+            # group preds by joined['idx']
+            results.append(preds)
+
+        # stack all samples along 0th axis
+        # shape: samples x regions x TFs
+        tmp = np.stack(results)
+
+        # mean and merge along 1st axis
+        return conversionObject.merge(tmp, axis = 1)
 
     def score_peak_file(self, similarity_peak_files, regions_peak_file):
         '''
