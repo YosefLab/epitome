@@ -123,9 +123,11 @@ class ConveresionTest(EpitomeTestCase):
         regions = pr.PyRanges(regions_pr.df, int64=True)
 
         targets = [ 'CTCF']
-        ds = EpitomeDataset(targets = targets,
+        ds = EpitomeDataset(
+                targets = targets,
         		cells=['PC-9','Panc1','IMR-90','H1'],
-                    min_cells_per_target =2)
+                min_cells_per_target =2,
+                data_dir = EpitomeTestCase.getEpitomeTestDataPath())
 
         # set predictions to 1s so means could be greater than 1 if done wrong
         preds = np.ones((1, 10, 1))
@@ -154,7 +156,7 @@ class ConveresionTest(EpitomeTestCase):
         conversionObject = RegionConversion(ds.regions, regions)
 
         preds = np.ones((1, 4, 1))
-        
+
         results = conversionObject.merge(preds, axis=1)
         masked = np.ma.array(results, mask=np.isnan(results))
         assert(np.all(masked <= 1))

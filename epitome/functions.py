@@ -48,18 +48,19 @@ import multiprocessing
 
 ################## LOADING DATA ######################
 
-def download_and_unzip(url, dst, assembly):
+def download_and_unzip(url, dst):
     """ Downloads a url to local destination, unzips it and deletes zip.
 
     Args:
         :param url: url to download.
         :param dst: local absolute path to download data to.
-        :param assembly: genome assembly to download.
     """
     if not os.path.exists(dst):
         os.makedirs(dst)
 
+    og_dst = dst
     dst = os.path.join(dst, os.path.basename(url))
+    print("Debug: dst %s" % dst)
 
     final_dst = dst.split('.zip')[0]
 
@@ -87,12 +88,16 @@ def download_and_unzip(url, dst, assembly):
     if url.endswith('.zip'):
 
         # Extract zip data if it does not exist
-        if not os.path.exists(final_dst):
+        # print("Debug: final_dst %s" % final_dst)
+        # print("Debug: dst %s" % dst)
+        if (not os.path.exists(final_dst)) or (len(os.listdir(final_dst)) == 0):
             with ZipFile(dst, 'r') as zipObj:
                zipObj.extractall(os.path.dirname(dst))
-
             # delete old zip to free space
             os.remove(dst)
+            for f in os.listdir(final_dst):
+                os.rename(os.path.join(final_dst, f), os.path.join(og_dst, f))
+            os.rmdir(final_dst)
 
 ################### Parsing data from bed file ########################
 def bed2Pyranges(bed_file):

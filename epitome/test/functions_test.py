@@ -11,7 +11,7 @@ class FunctionsTest(EpitomeTestCase):
     def __init__(self, *args, **kwargs):
         super(FunctionsTest, self).__init__(*args, **kwargs)
 
-    def test_user_data_path(self):
-        # user data path should be able to be explicitly set
-        datapath = GET_DATA_PATH()
-        assert(datapath == os.environ["EPITOME_DATA_PATH"])
+    # def test_download_and_unzip(self):
+        # Test on "fake" test dataset
+
+        # Test on wrong non-existing URL

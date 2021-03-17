@@ -29,6 +29,9 @@ from .viz import plot_assay_heatmap
 ################### File accession constants #######################
 S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com'
 
+# List of available assembiles in S3_DATA_PATH
+EPITOME_GENOME_ASSEMBLIES = ['hg19', 'hg38', 'test']
+
 # data files required by epitome
 # data.h5 contains data, row information (celltypes and targets) and
 # column information (chr, start, binSize)
@@ -68,7 +71,8 @@ class EpitomeDataset:
                  cells = None,
                  min_cells_per_target = 3,
                  min_targets_per_cell = 2,
-                 similarity_targets = ['DNase']):
+                 similarity_targets = ['DNase'],
+                 assembly=None):
         '''
         Initializes an EpitomeDataset.
 
@@ -84,9 +88,10 @@ class EpitomeDataset:
           (ie. DNase, H3K27ac, etc.)
         '''
 
-
+        if assembly is not None:
+            self.assembly = assembly
         # get directory where h5 file is stored
-        self.data_dir = EpitomeDataset.get_data_dir(data_dir)
+        self.data_dir = EpitomeDataset.get_data_dir(data_dir, assembly)
         self.h5_path = os.path.join(self.data_dir, EPITOME_H5_FILE)
 
         # save all parameters for any future use
@@ -151,9 +156,13 @@ class EpitomeDataset:
         self.valid_chrs = [i.decode() for i in dataset['columns']['index']['valid_chrs'][:]]
         self.test_chrs = [i.decode() for i in dataset['columns']['index']['test_chrs'][:]]
 
-        self.assembly = dataset['meta']['assembly'][:][0].decode()
+        # TODO(jahnavis): Assert that these 2 assemblies are the same
+        dataset_assembly = dataset['meta']['assembly'][:][0].decode()
+        if assembly is not None:
+            assert assembly == dataset_assembly, "Different assemblies"
+        else:
+            self.assembly = dataset_assembly
         self.source = dataset['meta']['source'][:][0].decode()
-
 
         dataset.close()
 
@@ -269,9 +278,16 @@ class EpitomeDataset:
         required_paths = [os.path.join(data_dir, x) for x in REQUIRED_FILES]
         return np.all([os.path.exists(x) for x in required_paths])
 
-    #TODO(jahnavis): Add data_dir stuff here
     @staticmethod
-    def get_data_dir(data_dir=None):
+    def list_genome_assemblies():
+        return ", ".join(EPITOME_GENOME_ASSEMBLIES)
+
+    @staticmethod
+    def get_epitome_user_path():
+        return os.path.join(os.path.expanduser('~'), '.epitome')
+
+    @staticmethod
+    def get_data_dir(data_dir=None, assembly=None):
         '''
         Loads data processed from data/download_encode.py. This will check that all required files
         exist.
@@ -280,20 +296,36 @@ class EpitomeDataset:
         :return: directory containing data.h5 file
         :rtype: str
         '''
+        # none are set --> default data path with default assembly
+        # both are set --> return data path with specified assembly
+        # only assembly is set --> return default data path with specified assembly
+        # only data path is set --> return just data path
+        default_data_dir = os.path.join(EpitomeDataset.get_epitome_user_path(), 'data')
+        epitome_data_dir = None
 
-        if not data_dir:
-            data_dir = GET_DATA_PATH()
-            if not EpitomeDataset.contains_required_files(data_dir):
-                # Grab data directory and download it from S3 if it doesn't have the required files
-                assembly = os.path.basename(data_dir)
-                assert assembly in EPITOME_GENOME_ASSEMBLIES, "assembly %s not in S3 cluster. Must be either in %s" % (assembly, LIST_GENOME_ASSEMBLIES())
-                url_path = os.path.join(os.path.join(S3_DATA_PATH, assembly), 'data.zip')
-                download_and_unzip(url_path, data_dir, assembly)
+        if (data_dir is not None) and (assembly is not None):
+            epitome_data_dir = os.path.join(data_dir, assembly)
+        elif (assembly is not None):
+            epitome_data_dir = os.path.join(default_data_dir, assembly)
+        elif (data_dir is not None):
+            epitome_data_dir = data_dir
+        else:
+            default_assembly = 'hg19'
+            print("Warning: genome assembly was not set in EpitomeDataset. Defaulting assembly to %s." % default_assembly)
+            epitome_data_dir = os.path.join(default_data_dir, default_assembly)
+            assembly = default_assembly
 
-        # make sure all required files exist
-        assert EpitomeDataset.contains_required_files(data_dir)
+        if not EpitomeDataset.contains_required_files(epitome_data_dir):
+            # Grab data directory and download it from S3 if it doesn't have the required files
+            # assert assembly is not None, "Genome assembly is not set. Specify assembly in EpitomeDataset to download data from S3."
+            assert assembly is not None, "Specify assembly to download."
+            assert assembly in EPITOME_GENOME_ASSEMBLIES, "assembly %s data is not in the S3 cluster. Must be either in %s" % (assembly, list_genome_assemblies())
+            url_path = os.path.join(S3_DATA_PATH, assembly + ".zip")
+            download_and_unzip(url_path, epitome_data_dir)
+            # make sure all required files exist
+            assert EpitomeDataset.contains_required_files(epitome_data_dir)
 
-        return data_dir
+        return epitome_data_dir
 
     def list_targets(self):
         '''
@@ -310,6 +342,7 @@ class EpitomeDataset:
     def get_assays(targets = None,
                      cells = None,
                      data_dir = None,
+                     assembly = None,
                      min_cells_per_target = 3,
                      min_targets_per_cell = 2,
                      similarity_targets = ['DNase']):
@@ -329,7 +362,7 @@ class EpitomeDataset:
         '''
 
         if not data_dir:
-            data_dir = GET_DATA_PATH()
+            data_dir = EpitomeDataset.get_data_dir(data_dir, assembly)
 
         data = h5py.File(os.path.join(data_dir, EPITOME_H5_FILE), 'r')
 

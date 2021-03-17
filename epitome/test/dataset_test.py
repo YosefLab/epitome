@@ -14,12 +14,11 @@ class DatasetTest(EpitomeTestCase):
 
     def __init__(self, *args, **kwargs):
         super(DatasetTest, self).__init__(*args, **kwargs)
-        self.dataset = EpitomeDataset()
+        self.dataset = EpitomeDataset(data_dir=EpitomeTestCase.getEpitomeTestDataPath())
 
     def test_user_data_path(self):
         # user data path should be able to be explicitly set
-        datapath = GET_DATA_PATH()
-        self.assertTrue(datapath == os.environ["EPITOME_DATA_PATH"])
+        self.assertTrue(self.dataset.data_dir == EpitomeTestCase.getEpitomeTestDataPath())
 
     def test_save(self):
         out_path = self.tmpFile()
@@ -79,7 +78,10 @@ class DatasetTest(EpitomeTestCase):
 
         matrix, cellmap, targetmap = EpitomeDataset.get_assays(
 				targets = eligible_targets,
-				cells = eligible_cells, min_cells_per_target = 3, min_targets_per_cell = 1)
+				cells = eligible_cells,
+                min_cells_per_target = 3,
+                min_targets_per_cell = 1,
+                data_dir=EpitomeTestCase.getEpitomeTestDataPath())
 
         self.assertTrue(matrix[cellmap['IMR-90']][targetmap['H4K8ac']]==0) # data for first row
 
@@ -87,9 +89,11 @@ class DatasetTest(EpitomeTestCase):
     def test_get_assays_single_target(self):
         TF = ['DNase', 'JUND']
 
-        matrix, cellmap, targetmap = EpitomeDataset.get_assays(targets = TF,
+        matrix, cellmap, targetmap = EpitomeDataset.get_assays(
+                targets = TF,
                 min_cells_per_target = 2,
-                min_targets_per_cell = 2)
+                min_targets_per_cell = 2,
+                data_dir = EpitomeTestCase.getEpitomeTestDataPath())
 
         targets = list(targetmap)
         # Make sure only JUND and DNase are in list of targets
@@ -101,10 +105,12 @@ class DatasetTest(EpitomeTestCase):
     def test_get_targets_without_DNase(self):
         TF = 'JUND'
 
-        matrix, cellmap, targetmap = EpitomeDataset.get_assays(targets = TF,
+        matrix, cellmap, targetmap = EpitomeDataset.get_assays(
+                targets = TF,
                 similarity_targets = ['H3K27ac'],
                 min_cells_per_target = 2,
-                min_targets_per_cell = 1)
+                min_targets_per_cell = 1,
+                data_dir = EpitomeTestCase.getEpitomeTestDataPath())
 
         targets = list(targetmap)
         # Make sure only JUND and is in list of targets
@@ -113,17 +119,19 @@ class DatasetTest(EpitomeTestCase):
         self.assertTrue('H3K27ac' in targets)
 
     def test_list_targets(self):
-        targets =self.dataset.list_targets()
+        targets = self.dataset.list_targets()
         self.assertTrue(len(targets) == len(self.dataset.targetmap))
 
 
     def test_get_assays_without_DNase(self):
         TF = 'JUND'
 
-        matrix, cellmap, targetmap = EpitomeDataset.get_assays(targets = TF,
+        matrix, cellmap, targetmap = EpitomeDataset.get_assays(
+                targets = TF,
                 similarity_targets = ['H3K27ac'],
                 min_cells_per_target = 2,
-                min_targets_per_cell = 1)
+                min_targets_per_cell = 1,
+                data_dir = EpitomeTestCase.getEpitomeTestDataPath())
 
         targets = list(targetmap)
         # Make sure only JUND and is in list of assays
@@ -135,7 +143,11 @@ class DatasetTest(EpitomeTestCase):
         # https://github.com/YosefLab/epitome/issues/22
         with warnings.catch_warnings(record=True) as warning_list:
             warnings.simplefilter('always')
-            matrix, cellmap, targetmap = EpitomeDataset.get_assays(targets = ['DNase','SPI1', 'PAX5'],min_cells_per_target=2, min_targets_per_cell=2)
+            matrix, cellmap, targetmap = EpitomeDataset.get_assays(
+                    targets = ['DNase','SPI1', 'PAX5'],
+                    min_cells_per_target=2,
+                    min_targets_per_cell=2,
+                    data_dir=EpitomeTestCase.getEpitomeTestDataPath())
             self.assertTrue(len(warning_list) == 1) # one for SPI1 and PAX5
             self.assertTrue(all(item.category == UserWarning for item in warning_list))
 
@@ -183,7 +195,7 @@ class DatasetTest(EpitomeTestCase):
 
     def test_reserve_validation_indices(self):
         # new dataset because we are modifying it
-        dataset = EpitomeDataset()
+        dataset = EpitomeDataset(data_dir=EpitomeTestCase.getEpitomeTestDataPath())
         self.assertTrue(dataset.get_data(Dataset.TRAIN).shape == (746, 1800))
         self.assertTrue(dataset.get_data(Dataset.TRAIN_VALID).shape == (746,0))
 
@@ -205,24 +217,67 @@ class DatasetTest(EpitomeTestCase):
         self.assertTrue(len(np.setdiff1d(joined_indices, old_indices)) == 0 and len(np.setdiff1d(old_indices, joined_indices)) == 0)
 
     def test_list_genome_assemblies(self):
-        assert LIST_GENOME_ASSEMBLIES() == "hg19, test"
+        assert EpitomeDataset.list_genome_assemblies() == "hg19, hg38, test"
 
-    def test_get_data_path(self):
-        # Returns env data_path variable when only env data_path var is set
-        EpitomeTestCase.setEpitomeDataPath()
-        assert GET_DATA_PATH() == os.environ["EPITOME_DATA_PATH"]
+    # def test_get_data_path(self):
+    #     # Returns env data_path variable when only env data_path var is set
+    #     EpitomeTestCase.setEpitomeDataPath()
+    #     assert GET_DATA_PATH() == os.environ[EPITOME_DATA_PATH_ENV]
+    #
+    #     # # Fails if both env variables are set
+    #     # os.environ[EPITOME_ASSEMBLY_ENV] = "test"
+    #     # self.assertRaises(AssertionError, GET_DATA_PATH)
+    #
+    #     # Returns env data_path variable when both data_path and genome_assembly env vars are set
+    #     os.environ[EPITOME_ASSEMBLY_ENV] = "test"
+    #     assert GET_DATA_PATH() == os.environ[EPITOME_DATA_PATH_ENV]
+    #
+    #     # Returns default data path and genome assembly if only 1 env var is set
+    #     del os.environ[EPITOME_DATA_PATH_ENV]
+    #     assert GET_DATA_PATH() == os.path.join(os.path.join(GET_EPITOME_USER_PATH(), "data"), "test")
+    #
+    #     # Return default data path and default genome assembly if neither env vars are set
+    #     del os.environ[EPITOME_ASSEMBLY_ENV]
+    #     assert GET_DATA_PATH() == os.path.join(os.path.join(GET_EPITOME_USER_PATH(), "data"), "hg19")
+    #
+    #     # Clean up test
+    #     EpitomeTestCase.setEpitomeDataPath()
 
-        # Fails if both env variables are set
-        os.environ[EPITOME_ASSEMBLY_ENV] = "test"
-        self.assertRaises(AssertionError, GET_DATA_PATH)
+    def test_get_data_dir(self):
+        # Test unspecified model to have default data dir path
+        assert self.dataset.data_dir == EpitomeTestCase.getEpitomeTestDataPath()
 
-        # Returns default data path and genome assembly if only 1 env var is set
-        del os.environ[EPITOME_DATA_PATH_ENV]
-        assert GET_DATA_PATH() == os.path.join(os.path.join(GET_EPITOME_USER_PATH(), "data"), "test")
+        # Create new dataset with new undownloaded datapath
+        default_data_dir = os.path.join(EpitomeDataset.get_epitome_user_path(), 'data')
+        assert EpitomeDataset.get_data_dir() == os.path.join(default_data_dir, "hg19")
 
-        # Return default data path and default genome assembly if neither env vars are set
-        del os.environ[EPITOME_ASSEMBLY_ENV]
-        assert GET_DATA_PATH() == os.path.join(os.path.join(GET_EPITOME_USER_PATH(), "data"), "hg19")
+        # Create new dataset with new undownloaded datapath
+        assert EpitomeDataset.get_data_dir(data_dir=EpitomeTestCase.getEpitomeTestDataPath(), assembly="hg38") == os.path.join(EpitomeTestCase.getEpitomeTestDataPath(), "hg38")
 
-        # Clean up test
-        EpitomeTestCase.setEpitomeDataPath()
+        # # Should error because undownloaded data path doesn't have a specified assembly
+        # self.assertRaises(AssertionError, EpitomeDataset.get_data_dir())
+
+        # Should error because assembly isn't contained in S3 cluster
+        self.assertRaises(AssertionError, EpitomeDataset.get_data_dir(assembly="fake_assembly"))
+
+        # Should error because data_dir doesn't have required files & assembly isn't specified
+        data_dir = os.path.join(EpitomeTestCase.getEpitomeTestDataPath(), "fake_dir")
+        self.assertRaises(AssertionError, EpitomeDataset.get_data_dir(data_dir=data_dir))
+
+        # Pass because data_dir doesn't have required files & assembly isn't specified
+        data_dir = os.path.join(EpitomeTestCase.getEpitomeTestDataPath(), "fake_dir")
+        assert EpitomeDataset.get_data_dir(data_dir=data_dir, assembly="test") == data_dir
+
+        # Pass because data_dir now has the required files
+        data_dir = os.path.join(EpitomeTestCase.getEpitomeTestDataPath(), "fake_dir")
+        assert EpitomeDataset.get_data_dir(data_dir=data_dir) == data_dir
+
+
+        # os.environ[EPITOME_ASSEMBLY_ENV] = "hg38"
+        # assert EpitomeDataset().data_dir == os.environ[EPITOME_DATA_PATH_ENV]
+
+        # # create new dataset for new paths
+        # dir_path = os.path.dirname(os.path.realpath(__file__))
+        # data_dir = os.path.abspath(os.path.join(dir_path, "data", "hg19"))
+        # dataset = EpitomeDataset(data_dir=data_dir, assembly="hg19")
+        # assert dataset.data_dir == data_dir
