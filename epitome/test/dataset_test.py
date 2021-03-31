@@ -219,65 +219,36 @@ class DatasetTest(EpitomeTestCase):
     def test_list_genome_assemblies(self):
         assert EpitomeDataset.list_genome_assemblies() == "hg19, hg38, test"
 
-    # def test_get_data_path(self):
-    #     # Returns env data_path variable when only env data_path var is set
-    #     EpitomeTestCase.setEpitomeDataPath()
-    #     assert GET_DATA_PATH() == os.environ[EPITOME_DATA_PATH_ENV]
-    #
-    #     # # Fails if both env variables are set
-    #     # os.environ[EPITOME_ASSEMBLY_ENV] = "test"
-    #     # self.assertRaises(AssertionError, GET_DATA_PATH)
-    #
-    #     # Returns env data_path variable when both data_path and genome_assembly env vars are set
-    #     os.environ[EPITOME_ASSEMBLY_ENV] = "test"
-    #     assert GET_DATA_PATH() == os.environ[EPITOME_DATA_PATH_ENV]
-    #
-    #     # Returns default data path and genome assembly if only 1 env var is set
-    #     del os.environ[EPITOME_DATA_PATH_ENV]
-    #     assert GET_DATA_PATH() == os.path.join(os.path.join(GET_EPITOME_USER_PATH(), "data"), "test")
-    #
-    #     # Return default data path and default genome assembly if neither env vars are set
-    #     del os.environ[EPITOME_ASSEMBLY_ENV]
-    #     assert GET_DATA_PATH() == os.path.join(os.path.join(GET_EPITOME_USER_PATH(), "data"), "hg19")
-    #
-    #     # Clean up test
-    #     EpitomeTestCase.setEpitomeDataPath()
-
     def test_get_data_dir(self):
         # Test unspecified model to have default data dir path
         assert self.dataset.data_dir == EpitomeTestCase.getEpitomeTestDataPath()
 
-        # Create new dataset with new undownloaded datapath
-        default_data_dir = os.path.join(EpitomeDataset.get_epitome_user_path(), 'data')
-        assert EpitomeDataset.get_data_dir() == os.path.join(default_data_dir, "hg19")
+        # Create new dataset with new undownloaded data path
+        epitome_test_data_dir = os.path.dirname(EpitomeTestCase.getEpitomeTestDataPath())
+        assert EpitomeDataset.get_data_dir(data_dir=epitome_test_data_dir, assembly="hg38") == os.path.join(epitome_test_data_dir, "hg38")
 
-        # Create new dataset with new undownloaded datapath
-        assert EpitomeDataset.get_data_dir(data_dir=EpitomeTestCase.getEpitomeTestDataPath(), assembly="hg38") == os.path.join(EpitomeTestCase.getEpitomeTestDataPath(), "hg38")
-
-        # # Should error because undownloaded data path doesn't have a specified assembly
-        # self.assertRaises(AssertionError, EpitomeDataset.get_data_dir())
+        # Should error because undownloaded data path doesn't have a specified assembly
+        default_data_dir = os.path.join(os.path.join(EpitomeDataset.get_epitome_user_path(), 'data'), "hg19")
+        assert EpitomeDataset.get_data_dir() == default_data_dir
 
         # Should error because assembly isn't contained in S3 cluster
-        self.assertRaises(AssertionError, EpitomeDataset.get_data_dir(assembly="fake_assembly"))
+        with pytest.raises(AssertionError):
+            EpitomeDataset.get_data_dir(assembly="fake_assembly")
 
         # Should error because data_dir doesn't have required files & assembly isn't specified
-        data_dir = os.path.join(EpitomeTestCase.getEpitomeTestDataPath(), "fake_dir")
-        self.assertRaises(AssertionError, EpitomeDataset.get_data_dir(data_dir=data_dir))
+        data_dir = os.path.join(epitome_test_data_dir, "fake_dir")
+        with pytest.raises(AssertionError):
+            EpitomeDataset.get_data_dir(data_dir=data_dir)
 
         # Pass because data_dir doesn't have required files & assembly isn't specified
-        data_dir = os.path.join(EpitomeTestCase.getEpitomeTestDataPath(), "fake_dir")
-        assert EpitomeDataset.get_data_dir(data_dir=data_dir, assembly="test") == data_dir
+        data_dir = os.path.join(epitome_test_data_dir, "fake_dir")
+        assert EpitomeDataset.get_data_dir(data_dir=data_dir, assembly="test") == os.path.join(data_dir, "test")
+
+        # Still fails because data_dir isn't the absolute data path downloaded above.
+        data_dir = os.path.join(epitome_test_data_dir, "fake_dir")
+        with pytest.raises(AssertionError):
+            EpitomeDataset.get_data_dir(data_dir=data_dir)
 
         # Pass because data_dir now has the required files
-        data_dir = os.path.join(EpitomeTestCase.getEpitomeTestDataPath(), "fake_dir")
+        data_dir = os.path.join(os.path.join(epitome_test_data_dir, "fake_dir"), "test")
         assert EpitomeDataset.get_data_dir(data_dir=data_dir) == data_dir
-
-
-        # os.environ[EPITOME_ASSEMBLY_ENV] = "hg38"
-        # assert EpitomeDataset().data_dir == os.environ[EPITOME_DATA_PATH_ENV]
-
-        # # create new dataset for new paths
-        # dir_path = os.path.dirname(os.path.realpath(__file__))
-        # data_dir = os.path.abspath(os.path.join(dir_path, "data", "hg19"))
-        # dataset = EpitomeDataset(data_dir=data_dir, assembly="hg19")
-        # assert dataset.data_dir == data_dir

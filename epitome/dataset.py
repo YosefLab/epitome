@@ -319,7 +319,7 @@ class EpitomeDataset:
             # Grab data directory and download it from S3 if it doesn't have the required files
             # assert assembly is not None, "Genome assembly is not set. Specify assembly in EpitomeDataset to download data from S3."
             assert assembly is not None, "Specify assembly to download."
-            assert assembly in EPITOME_GENOME_ASSEMBLIES, "assembly %s data is not in the S3 cluster. Must be either in %s" % (assembly, list_genome_assemblies())
+            assert assembly in EPITOME_GENOME_ASSEMBLIES, "assembly %s data is not in the S3 cluster. Must be either in %s" % (assembly, EpitomeDataset.list_genome_assemblies())
             url_path = os.path.join(S3_DATA_PATH, assembly + ".zip")
             download_and_unzip(url_path, epitome_data_dir)
             # make sure all required files exist
