@@ -14,11 +14,11 @@ class DatasetTest(EpitomeTestCase):
 
     def __init__(self, *args, **kwargs):
         super(DatasetTest, self).__init__(*args, **kwargs)
-        self.dataset = EpitomeDataset(data_dir=EpitomeTestCase.getEpitomeTestDataPath())
+        self.dataset = EpitomeDataset(data_dir=self.epitome_test_path)
 
     def test_user_data_path(self):
         # user data path should be able to be explicitly set
-        self.assertTrue(self.dataset.data_dir == EpitomeTestCase.getEpitomeTestDataPath())
+        self.assertTrue(self.dataset.data_dir == self.epitome_test_path)
 
     def test_save(self):
         out_path = self.tmpFile()
@@ -81,7 +81,7 @@ class DatasetTest(EpitomeTestCase):
 				cells = eligible_cells,
                 min_cells_per_target = 3,
                 min_targets_per_cell = 1,
-                data_dir=EpitomeTestCase.getEpitomeTestDataPath())
+                data_dir=self.epitome_test_path)
 
         self.assertTrue(matrix[cellmap['IMR-90']][targetmap['H4K8ac']]==0) # data for first row
 
@@ -93,7 +93,7 @@ class DatasetTest(EpitomeTestCase):
                 targets = TF,
                 min_cells_per_target = 2,
                 min_targets_per_cell = 2,
-                data_dir = EpitomeTestCase.getEpitomeTestDataPath())
+                data_dir = self.epitome_test_path)
 
         targets = list(targetmap)
         # Make sure only JUND and DNase are in list of targets
@@ -110,7 +110,7 @@ class DatasetTest(EpitomeTestCase):
                 similarity_targets = ['H3K27ac'],
                 min_cells_per_target = 2,
                 min_targets_per_cell = 1,
-                data_dir = EpitomeTestCase.getEpitomeTestDataPath())
+                data_dir = self.epitome_test_path)
 
         targets = list(targetmap)
         # Make sure only JUND and is in list of targets
@@ -131,7 +131,7 @@ class DatasetTest(EpitomeTestCase):
                 similarity_targets = ['H3K27ac'],
                 min_cells_per_target = 2,
                 min_targets_per_cell = 1,
-                data_dir = EpitomeTestCase.getEpitomeTestDataPath())
+                data_dir = self.epitome_test_path)
 
         targets = list(targetmap)
         # Make sure only JUND and is in list of assays
@@ -147,7 +147,7 @@ class DatasetTest(EpitomeTestCase):
                     targets = ['DNase','SPI1', 'PAX5'],
                     min_cells_per_target=2,
                     min_targets_per_cell=2,
-                    data_dir=EpitomeTestCase.getEpitomeTestDataPath())
+                    data_dir=self.epitome_test_path)
             self.assertTrue(len(warning_list) == 1) # one for SPI1 and PAX5
             self.assertTrue(all(item.category == UserWarning for item in warning_list))
 
@@ -195,7 +195,7 @@ class DatasetTest(EpitomeTestCase):
 
     def test_reserve_validation_indices(self):
         # new dataset because we are modifying it
-        dataset = EpitomeDataset(data_dir=EpitomeTestCase.getEpitomeTestDataPath())
+        dataset = EpitomeDataset(data_dir=self.epitome_test_path)
         self.assertTrue(dataset.get_data(Dataset.TRAIN).shape == (746, 1800))
         self.assertTrue(dataset.get_data(Dataset.TRAIN_VALID).shape == (746,0))
 
@@ -221,10 +221,10 @@ class DatasetTest(EpitomeTestCase):
 
     def test_get_data_dir(self):
         # Test unspecified model to have default data dir path
-        assert self.dataset.data_dir == EpitomeTestCase.getEpitomeTestDataPath()
+        assert self.dataset.data_dir == self.epitome_test_path
 
         # Create new dataset with new undownloaded data path
-        epitome_test_data_dir = os.path.dirname(EpitomeTestCase.getEpitomeTestDataPath())
+        epitome_test_data_dir = os.path.dirname(self.epitome_test_path)
         assert EpitomeDataset.get_data_dir(data_dir=epitome_test_data_dir, assembly="hg38") == os.path.join(epitome_test_data_dir, "hg38")
 
         # Should error because undownloaded data path doesn't have a specified assembly

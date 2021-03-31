@@ -111,7 +111,7 @@ class GeneratorsTest(EpitomeTestCase):
 			cells = eligible_cells,
 			min_cells_per_target = 1,
 			min_targets_per_cell = 1,
-			data_dir=EpitomeTestCase.getEpitomeTestDataPath())
+			data_dir=self.epitome_test_path)
 
 
 		label_cell_types = ['HepG2']
@@ -152,7 +152,7 @@ class GeneratorsTest(EpitomeTestCase):
 		dataset = EpitomeDataset(
 			targets = eligible_targets,
 			cells = eligible_cells,
-			data_dir=EpitomeTestCase.getEpitomeTestDataPath())
+			data_dir=self.epitome_test_path)
 
 		label_cell_types = ['K562']
 		eligible_cells.remove(label_cell_types[0])
@@ -179,7 +179,7 @@ class GeneratorsTest(EpitomeTestCase):
 		dataset = EpitomeDataset(
 					targets = eligible_targets,
 					cells = eligible_cells,
-					data_dir=EpitomeTestCase.getEpitomeTestDataPath())
+					data_dir=self.epitome_test_path)
 
 		label_cell_types = ['K562']
 		eligible_cells.remove(label_cell_types[0])
@@ -213,7 +213,7 @@ class GeneratorsTest(EpitomeTestCase):
 		dataset = EpitomeDataset(
 							targets = eligible_targets,
 							cells = eligible_cells,
-							data_dir=EpitomeTestCase.getEpitomeTestDataPath())
+							data_dir=self.epitome_test_path)
 		test_celltypes = ['K562']
 		eligible_cells.remove(test_celltypes[0])
 		radii = [1,10]
