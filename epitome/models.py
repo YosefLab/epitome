@@ -17,7 +17,7 @@ import tensorflow as tf
 
 from .functions import *
 from .constants import Dataset
-from .generators import generator_to_tf_dataset,load_data, load_data_runtime
+from .generators import generator_to_tf_dataset,load_data, load_data_runtime, load_data_no_label_mask
 from .dataset import *
 from .metrics import *
 from .conversion import *
@@ -616,9 +616,9 @@ class PeakModel():
                  similarity_matrix = matrix,
                  similarity_targets = ['DNase'],
                  indices = indices,
-                 return_feature_names=True)
+                 return_feature_names=False)
 
-        to_stack = load_data(data=self.dataset.get_data(Dataset.ALL),
+        to_stack = load_data_no_label_mask(data=self.dataset.get_data(Dataset.ALL),
                  label_cell_types=self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
                  eval_cell_types=self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
                  matrix=self.dataset.matrix,
@@ -646,8 +646,13 @@ class PeakModel():
         radii = self.radii
 
         stacked = np.stack([to_stack] * accessibility_peak_matrix.shape[0], axis=0)
-        names = stacked[:, :, 1, :]
-        to_stack = stacked[:, :, 0, :]
+        print(stacked.shape)
+        print(stacked[0, 0, 0:2])
+        names = stacked[:, :, 1]
+        to_stack = stacked[:, :, 0]
+        print(to_stack[0, 0])
+        to_stack = np.expand_dims(to_stack, axis=-1)
+        print("to stack", to_stack.shape)
         # gen_to_list = np.transpose(gen_to_list, axes=[1, 2, 0]) # regions assays cells
         # print(gen_to_list.shape)
 
@@ -665,11 +670,12 @@ class PeakModel():
 
         for region in range(num_regions):
             for cell in range(num_cells):
+                # print(to_stack.shape)
                 selected_gen = to_stack[cell, region, :]
                 selected_casv = out[region, :, :, cell]
                 len_feats_per_celltype = int(selected_gen[0].shape[0] / num_celltypes) # 24 / 2 = 12
                 # print(selected_gen[0])
-                old_sg = selected_gen[0]
+                old_sg = selected_gen
                 # print(selected_gen[0].shape)
                 # print(selected_gen.shape)
                 for celltype in range(num_celltypes):
@@ -679,6 +685,11 @@ class PeakModel():
                     # print(idx)
                     # print(selected_gen[0][idx + 4 : idx + len_feats_per_celltype])
                     # print(casv_cell)
+                    print(selected_gen[0])
+                    print(type(selected_gen[0]))
+                    print("", idx+4, idx+len_feats_per_celltype, len_feats_per_celltype)
+                    print(selected_gen[0][idx + 4 : idx + len_feats_per_celltype])
+                    print(casv_cell)
                     selected_gen[0][idx + 4 : idx + len_feats_per_celltype] = casv_cell
                     # assert np.any()
 
@@ -692,9 +703,13 @@ class PeakModel():
         # print(names[0, 0:2, :])
 
         print(to_stack.shape)
+        # to_stack = to_stack.reshape((to_stack.shape[0] * to_stack.shape[1], to_stack.shape[2]))
+        print(to_stack[:, 0].shape)
+        print(to_stack.shape)
+        # self._predict(to_stack[:, 0])
         for c in range(num_cells):
             for r in range(num_regions):
-                self.predict_step_generator(to_stack[c, r, :][0][None, :])
+                self._predict(to_stack[c, r, :][0][None, :])
 
         # self._predict(to_stack) # issue with inputs passed into predict
 
