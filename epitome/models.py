@@ -600,11 +600,12 @@ class PeakModel():
         matrix, indices = conversionObject.get_binary_vector(vector = accessibility_peak_matrix[0,:])
         # print(len(indices))
         # print(indices)
-        indices = indices.tolist()
-        indices.remove(1)
-        indices.remove(2)
-        indices.remove(369)
-        indices = np.array(indices)
+        # indices = indices.tolist()
+        # indices.remove(1)
+        # indices.remove(2)
+        # indices.remove(369)
+        # del indices[1:4]
+        # indices = np.array(indices)
         gen = load_data_runtime(data=self.dataset.get_data(Dataset.ALL),
                  label_cell_types=self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
                  eval_cell_types=self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
@@ -633,13 +634,6 @@ class PeakModel():
 
         gen_to_list = list(gen())
         to_stack = list(to_stack())
-        # print('---------------------')
-        # print(gen_to_list[90][0][0].shape)
-        # print(gen_to_list[90][1][0].shape)
-        # print(gen_to_list[90][0])
-        # print(gen_to_list[90][1])
-        # print('---------------------')
-        # print(gen_to_list.shape)
         gen_to_list = np.array(gen_to_list)
 
         # reshape to n_regions [from regions] x nassays [acc dim 1] x n_samples
@@ -653,15 +647,23 @@ class PeakModel():
         print(to_stack[0, 0])
         to_stack = np.expand_dims(to_stack, axis=-1)
         print("to stack", to_stack.shape)
-        # gen_to_list = np.transpose(gen_to_list, axes=[1, 2, 0]) # regions assays cells
-        # print(gen_to_list.shape)
 
-        a = np.transpose(accessibility_peak_matrix, axes=[1, 0])
+        if len(indices) != to_stack.shape[1]:
+            added_indices = []
+            for i in conversionObject.joined.idx:
+                added_indices.append(accessibility_peak_matrix[:, i])
+            
+            a = np.stack(added_indices)
+        else:
+            a = np.transpose(accessibility_peak_matrix, axes=[1, 0])
+        
         a = a[:, None, :]
-        # print(a.shape)
 
+        print('------------------------')
+        print(indices, conversionObject.joined.idx)
+        print(gen_to_list.shape, a.shape)
         out = compute_casv(gen_to_list, a, radii)
-
+        
         casv_len = out.shape[1]
         num_cells = out.shape[3]
         num_regions = out.shape[0]
@@ -670,50 +672,33 @@ class PeakModel():
 
         for region in range(num_regions):
             for cell in range(num_cells):
-                # print(to_stack.shape)
+
                 selected_gen = to_stack[cell, region, :]
                 selected_casv = out[region, :, :, cell]
                 len_feats_per_celltype = int(selected_gen[0].shape[0] / num_celltypes) # 24 / 2 = 12
-                # print(selected_gen[0])
+
                 old_sg = selected_gen
-                # print(selected_gen[0].shape)
-                # print(selected_gen.shape)
+
                 for celltype in range(num_celltypes):
                     # print(celltype)
                     idx = len_feats_per_celltype * celltype
                     casv_cell = selected_casv[:, celltype]
-                    # print(idx)
-                    # print(selected_gen[0][idx + 4 : idx + len_feats_per_celltype])
-                    # print(casv_cell)
-                    print(selected_gen[0])
-                    print(type(selected_gen[0]))
-                    print("", idx+4, idx+len_feats_per_celltype, len_feats_per_celltype)
-                    print(selected_gen[0][idx + 4 : idx + len_feats_per_celltype])
-                    print(casv_cell)
                     selected_gen[0][idx + 4 : idx + len_feats_per_celltype] = casv_cell
                     # assert np.any()
 
-
-
-        # mean and merge along 1st axis
-        # print(out)
-        # print(out.shape)
-        # print(stacked.shape)
-        # print(to_stack.shape)
-        # print(names[0, 0:2, :])
-
-        print(to_stack.shape)
-        # to_stack = to_stack.reshape((to_stack.shape[0] * to_stack.shape[1], to_stack.shape[2]))
-        print(to_stack[:, 0].shape)
-        print(to_stack.shape)
-        # self._predict(to_stack[:, 0])
+        results = []
         for c in range(num_cells):
             for r in range(num_regions):
-                self._predict(to_stack[c, r, :][0][None, :])
+                results.append(self._predict(to_stack[c, r, :][0][None, :]))
+        
+        
+        results = np.stack(results)
+        results = np.squeeze(results)
+        results = results.reshape((a.shape[2], a.shape[0], results.shape[1]))
+        return results
 
-        # self._predict(to_stack) # issue with inputs passed into predict
 
-    def score_matrix_orig(self, accessilibility_peak_matrix, regions):
+    def score_matrix_o(self, accessilibility_peak_matrix, regions):
         """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
         rows are regions from regions_peak_file. rows in accessilibility_peak_matrix should matching
         :param numpy.matrix accessilibility_peak_matrix:  of (samples by genomic regions)
