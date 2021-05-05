@@ -634,6 +634,11 @@ class PeakModel():
 
         gen_to_list = list(gen())
         to_stack = list(to_stack())
+        print(gen_to_list)
+        print('==')
+        print(to_stack)
+        print('--------------------------')
+        # assert False
         gen_to_list = np.array(gen_to_list)
 
         # reshape to n_regions [from regions] x nassays [acc dim 1] x n_samples
@@ -647,34 +652,61 @@ class PeakModel():
         print(to_stack[0, 0])
         to_stack = np.expand_dims(to_stack, axis=-1)
         print("to stack", to_stack.shape)
+        print(len(indices), to_stack.shape[1])
 
-        if len(indices) != to_stack.shape[1]:
+        same_size = accessibility_peak_matrix.shape[1] == len(conversionObject.joined.idx_base)
+
+        if not same_size:
             added_indices = []
-            for i in conversionObject.joined.idx:
+            old_idx, counter, old_i = 0, 0, 0
+            indices_to_merge = []
+            for ctr, (i, i_base) in enumerate(zip(conversionObject.joined.idx, conversionObject.joined.idx_base)):
+                if i_base == -1:
+                    continue
+                if i != old_i:
+                    indices_to_merge.append((old_idx, counter))
+                    old_idx = counter
                 added_indices.append(accessibility_peak_matrix[:, i])
+                counter += 1
+                old_i = i
+            indices_to_merge.append((old_idx, len(conversionObject.joined.idx)))
             
             a = np.stack(added_indices)
         else:
             a = np.transpose(accessibility_peak_matrix, axes=[1, 0])
         
+        print(a)
+        print(gen_to_list.shape)
+        
         a = a[:, None, :]
 
         print('------------------------')
-        print(indices, conversionObject.joined.idx)
-        print(gen_to_list.shape, a.shape)
-        out = compute_casv(gen_to_list, a, radii)
+        print(indices)
+        print(conversionObject.joined)
+        print(conversionObject.joined.idx_base)
         
+        # assert False
+        print(to_stack.shape)
+        out = compute_casv(gen_to_list, a, radii)
+        # assert False
         casv_len = out.shape[1]
         num_cells = out.shape[3]
         num_regions = out.shape[0]
         num_celltypes = out.shape[2]
-        num_targets = len(self.dataset.targets) + 1
+        num_targets = len(self.dataset.targets) if 'DNase' in self.dataset.targets else len(self.dataset.targets) + 1
+
+        print(out)
+        print(out.shape)
+        # assert False
 
         for region in range(num_regions):
             for cell in range(num_cells):
 
                 selected_gen = to_stack[cell, region, :]
                 selected_casv = out[region, :, :, cell]
+                print(selected_casv)
+                print(gen_to_list)
+                assert False
                 len_feats_per_celltype = int(selected_gen[0].shape[0] / num_celltypes) # 24 / 2 = 12
 
                 old_sg = selected_gen
@@ -683,9 +715,14 @@ class PeakModel():
                     # print(celltype)
                     idx = len_feats_per_celltype * celltype
                     casv_cell = selected_casv[:, celltype]
-                    selected_gen[0][idx + 4 : idx + len_feats_per_celltype] = casv_cell
+                    # print(idx + 4, idx + len_feats_per_celltype)
+                    # print(names)
+                    # print(num_targets)
+                    selected_gen[0][idx + num_targets : idx + len_feats_per_celltype] = casv_cell
                     # assert np.any()
 
+        print(to_stack)
+        assert False
         results = []
         for c in range(num_cells):
             for r in range(num_regions):
@@ -693,8 +730,25 @@ class PeakModel():
         
         
         results = np.stack(results)
-        results = np.squeeze(results)
-        results = results.reshape((a.shape[2], a.shape[0], results.shape[1]))
+        results = results.reshape((gen_to_list.shape[1], gen_to_list.shape[0])) # 4 x 5
+        print(results)
+        print('--------------------')
+        print(out)
+
+        if not same_size:
+            final = []
+            final = np.empty((accessibility_peak_matrix.shape[0], accessibility_peak_matrix.shape[1], 1))
+            final.fill(np.nan)
+            for tup in indices_to_merge:
+                final[:, 0, 0] = np.mean(results[:, tup[0]:tup[1]], axis=1)
+            print(indices_to_merge)
+            print('--')
+            print(results)
+            # final = np.stack(final)
+            # final = final.reshape((accessibility_peak_matrix.shape[0], accessibility_peak_matrix.shape[1], 1))
+            return final
+        
+        results = results.reshape((results.shape[0], results.shape[1], 1))
         return results
 
 
