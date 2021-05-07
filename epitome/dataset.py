@@ -290,18 +290,16 @@ class EpitomeDataset:
     def get_data_dir(data_dir=None, assembly=None):
         '''
         Loads data processed from data/download_encode.py. This will check that all required files
-        exist.
+        exist. If both data_dir and assembly are set, it will return the data_dir with the specified
+        assembly. If only the assembly is set, it will return the default data_dir with the specified
+        assembly. If only the data_dir is set, it will just return the data_path. If neither data_dir
+        nor assembly are set, it will return the default data_dir with the default assembly.
 
         :param str data_dir: Directory containing data.h5 file saved in data/download_encode.py script.
         :return: directory containing data.h5 file
         :rtype: str
         '''
-        # none are set --> default data path with default assembly
-        # both are set --> return data path with specified assembly
-        # only assembly is set --> return default data path with specified assembly
-        # only data path is set --> return just data path
         default_data_dir = os.path.join(EpitomeDataset.get_epitome_user_path(), 'data')
-        epitome_data_dir = None
 
         if (data_dir is not None) and (assembly is not None):
             epitome_data_dir = os.path.join(data_dir, assembly)
@@ -317,12 +315,11 @@ class EpitomeDataset:
 
         if not EpitomeDataset.contains_required_files(epitome_data_dir):
             # Grab data directory and download it from S3 if it doesn't have the required files
-            # assert assembly is not None, "Genome assembly is not set. Specify assembly in EpitomeDataset to download data from S3."
             assert assembly is not None, "Specify assembly to download."
             assert assembly in EPITOME_GENOME_ASSEMBLIES, "assembly %s data is not in the S3 cluster. Must be either in %s" % (assembly, EpitomeDataset.list_genome_assemblies())
             url_path = os.path.join(S3_DATA_PATH, assembly + ".zip")
             download_and_unzip(url_path, epitome_data_dir)
-            # make sure all required files exist
+            # Make sure all required files exist
             assert EpitomeDataset.contains_required_files(epitome_data_dir)
 
         return epitome_data_dir
