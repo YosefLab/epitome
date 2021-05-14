@@ -89,7 +89,7 @@ class DatasetTest(EpitomeTestCase):
     def test_get_assays_single_target(self):
         TF = ['DNase', 'JUND']
 
-        matrix, cellmap, targetmap = EpitomeDataset.get_assays(
+        __, cellmap, targetmap = EpitomeDataset.get_assays(
                 targets = TF,
                 min_cells_per_target = 2,
                 min_targets_per_cell = 2,
@@ -105,7 +105,7 @@ class DatasetTest(EpitomeTestCase):
     def test_get_targets_without_DNase(self):
         TF = 'JUND'
 
-        matrix, cellmap, targetmap = EpitomeDataset.get_assays(
+        __, cellmap, targetmap = EpitomeDataset.get_assays(
                 targets = TF,
                 similarity_targets = ['H3K27ac'],
                 min_cells_per_target = 2,
@@ -126,7 +126,7 @@ class DatasetTest(EpitomeTestCase):
     def test_get_assays_without_DNase(self):
         TF = 'JUND'
 
-        matrix, cellmap, targetmap = EpitomeDataset.get_assays(
+        __, cellmap, targetmap = EpitomeDataset.get_assays(
                 targets = TF,
                 similarity_targets = ['H3K27ac'],
                 min_cells_per_target = 2,
@@ -143,7 +143,7 @@ class DatasetTest(EpitomeTestCase):
         # https://github.com/YosefLab/epitome/issues/22
         with warnings.catch_warnings(record=True) as warning_list:
             warnings.simplefilter('always')
-            matrix, cellmap, targetmap = EpitomeDataset.get_assays(
+            __, cellmap, targetmap = EpitomeDataset.get_assays(
                     targets = ['DNase','SPI1', 'PAX5'],
                     min_cells_per_target=2,
                     min_targets_per_cell=2,

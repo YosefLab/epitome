@@ -17,6 +17,7 @@ also includes scripts for processing ENCODE peaks.
 .. automodule:: epitome.conversion
 
 """
+
 import os
 from os.path import expanduser
 
