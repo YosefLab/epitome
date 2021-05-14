@@ -1,7 +1,8 @@
 from epitome.test import EpitomeTestCase
 import numpy as np
-from epitome.generators import *
-from epitome.dataset import *
+from epitome.generators import load_data
+from epitome.constants import Dataset
+from epitome.dataset import EpitomeDataset
 
 class GeneratorsTest(EpitomeTestCase):
 
@@ -103,7 +104,8 @@ class GeneratorsTest(EpitomeTestCase):
 		labels = li_results[0][1][0]
 		assert(labels[0] =='HepG2_H3K27ac')
 
-	def test_generator_sparse_data():
+	def test_generator_sparse_data(self):
+
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_targets = ['DNase','CTCF','RAD21','LARP7']
 		dataset = EpitomeDataset(targets = eligible_targets,
@@ -148,8 +150,7 @@ class GeneratorsTest(EpitomeTestCase):
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_targets = ['DNase','CTCF','RAD21']
 
-		dataset = EpitomeDataset(
-			targets = eligible_targets,
+		dataset = EpitomeDataset(targets = eligible_targets,
 			cells = eligible_cells,
 			data_dir=self.epitome_test_path)
 
@@ -175,8 +176,7 @@ class GeneratorsTest(EpitomeTestCase):
 	def test_generator_multiple_sim(self):
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_targets = ['DNase','CTCF','RAD21']
-		dataset = EpitomeDataset(
-					targets = eligible_targets,
+		dataset = EpitomeDataset(targets = eligible_targets,
 					cells = eligible_cells,
 					data_dir=self.epitome_test_path)
 
@@ -209,8 +209,7 @@ class GeneratorsTest(EpitomeTestCase):
 		# https://github.com/YosefLab/epitome/issues/4
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_targets = ['DNase','CTCF','RAD21','LARP7']
-		dataset = EpitomeDataset(
-							targets = eligible_targets,
+		dataset = EpitomeDataset(targets = eligible_targets,
 							cells = eligible_cells,
 							data_dir=self.epitome_test_path)
 		test_celltypes = ['K562']
@@ -220,17 +219,55 @@ class GeneratorsTest(EpitomeTestCase):
 		similarity_matrix = np.ones(dataset.get_data(Dataset.TRAIN).shape[1])
 
 		results = load_data(dataset.get_data(Dataset.TRAIN),
-                 test_celltypes,
-                 eligible_cells,
-                 dataset.matrix,
-                 dataset.targetmap,
-                 dataset.cellmap,
+	             test_celltypes,
+	             eligible_cells,
+	             dataset.matrix,
+	             dataset.targetmap,
+	             dataset.cellmap,
 				 radii,
-                 mode = Dataset.RUNTIME,
-                 similarity_matrix = similarity_matrix,
-                 similarity_targets = 'DNase',
-                 indices=np.arange(0,10))()
+	             mode = Dataset.RUNTIME,
+	             similarity_matrix = similarity_matrix,
+	             similarity_targets = 'DNase',
+				 return_feature_names = True,
+	             indices=np.arange(0,10))()
 		li_results = list(results)
 
 		# if we reach here, an error was not thrown :)
 		assert(len(li_results) == 10)
+		assert(len(li_results[0][0][0]) == 28)
+
+		feature_names = li_results[0][1][0]
+		assert(len(list(filter(lambda x: '_agree' in x, feature_names))) == len(radii) * len(eligible_cells))
+
+
+	def test_continous_generator(self):
+		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
+		eligible_targets = ['DNase','CTCF','RAD21','LARP7']
+		dataset = EpitomeDataset(targets = eligible_targets,
+							cells = eligible_cells,
+							data_dir=self.epitome_test_path)
+		test_celltypes = ['K562']
+		eligible_cells.remove(test_celltypes[0])
+		radii = [1,10]
+		# fake data for DNase
+		similarity_matrix = np.ones(dataset.get_data(Dataset.TRAIN).shape[1])
+
+		results = load_data(dataset.get_data(Dataset.TRAIN),
+	             test_celltypes,
+	             eligible_cells,
+	             dataset.matrix,
+	             dataset.targetmap,
+	             dataset.cellmap,
+				 radii,
+	             mode = Dataset.RUNTIME,
+				 continuous = True,
+	             similarity_matrix = similarity_matrix,
+	             similarity_targets = 'DNase',
+				 return_feature_names = True,
+	             indices=np.arange(0,10))()
+		li_results = list(results)
+		feature_names = li_results[0][1][0]
+
+		# make sure we don't have the agreement features
+		assert(len(li_results[0][0][0]) == 20)
+		assert(len(list(filter(lambda x: '_agree' in x, feature_names))) == 0)

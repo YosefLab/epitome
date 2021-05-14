@@ -74,10 +74,6 @@ check_clean_working_copy:
                 || ( printf "$(red)Your working copy looks dirty.$(normal)" ; false )
 	@git diff --cached --exit-code > /dev/null \
                 || ( printf "$(red)Your index looks dirty.$(normal)" ; false )
-	@test -z "$$(git ls-files --other --exclude-standard --directory)" \
-                || ( printf "$(red)You have are untracked files:$(normal)" \
-                        ; git ls-files --other --exclude-standard --directory \
-                        ; false )
 
 pypi: clean clean_sdist check_clean_working_copy
 	set -x \

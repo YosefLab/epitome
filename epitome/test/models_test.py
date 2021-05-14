@@ -241,3 +241,22 @@ class ModelsTest(EpitomeTestCase):
 		model.train(1)
 		results = model.test(1000, calculate_metrics = True)
 		assert np.where(results['weights']==0)[0].shape[0] == 0
+
+	def test_zeros_eval_vector(self):
+		x = self.model.dataset.get_data(Dataset.ALL)
+
+		zero_indices = np.where(np.sum(x, axis=0)==0)[0]
+		nonzero_indices = np.where(np.sum(x, axis=0)>0)[0]
+
+		# take two of each and sort
+		indices = np.sort(np.concatenate([zero_indices[:2], nonzero_indices[-2:]]))
+
+		# results = model.test(1000, calculate_metrics = True)
+		# assert np.where(results['weights']==0)[0].shape[0] == 0
+		similarity_matrix = np.ones(self.model.dataset.get_data(Dataset.ALL).shape[1])[None,:]
+		results = self.model.eval_vector(similarity_matrix, indices)
+
+		# first two items have zero indices, so should be na
+		# second two items have data, so should NOT be na
+		assert np.all(np.isnan(results[:2,:]))
+		assert np.all(~np.isnan(results[-2:,:]))
