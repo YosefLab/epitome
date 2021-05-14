@@ -9,4 +9,4 @@ gast==0.3.3
 tqdm
 pyranges>=0.0.84
 h5sparse==0.0.5
-setuptools==52.0.0.post20210125
+setuptools==56.2.0
