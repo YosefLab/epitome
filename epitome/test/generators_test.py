@@ -103,8 +103,7 @@ class GeneratorsTest(EpitomeTestCase):
 		labels = li_results[0][1][0]
 		assert(labels[0] =='HepG2_H3K27ac')
 
-	def test_generator_sparse_data(self):
-
+	def test_generator_sparse_data():
 		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
 		eligible_targets = ['DNase','CTCF','RAD21','LARP7']
 		dataset = EpitomeDataset(targets = eligible_targets,
