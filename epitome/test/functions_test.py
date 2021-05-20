@@ -1,12 +1,12 @@
 from epitome.test import EpitomeTestCase
 from epitome.test import *
 from epitome.functions import *
+from epitome.functions import download_and_unzip
 from epitome.dataset import *
 import urllib
 import os
 import pytest
 import warnings
-
 
 class FunctionsTest(EpitomeTestCase):
 

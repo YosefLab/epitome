@@ -89,7 +89,7 @@ class DatasetTest(EpitomeTestCase):
     def test_get_assays_single_target(self):
         TF = ['DNase', 'JUND']
 
-        __, cellmap, targetmap = EpitomeDataset.get_assays(
+        __, __, targetmap = EpitomeDataset.get_assays(
                 targets = TF,
                 min_cells_per_target = 2,
                 min_targets_per_cell = 2,
@@ -216,9 +216,6 @@ class DatasetTest(EpitomeTestCase):
         joined_indices.sort()
         self.assertTrue(len(np.setdiff1d(joined_indices, old_indices)) == 0 and len(np.setdiff1d(old_indices, joined_indices)) == 0)
 
-    def test_list_genome_assemblies(self):
-        assert EpitomeDataset.list_genome_assemblies() == "hg19, hg38, test"
-
     def test_get_data_dir(self):
         # Test unspecified model to have default data dir path
         assert self.dataset.data_dir == self.epitome_test_path
@@ -252,3 +249,6 @@ class DatasetTest(EpitomeTestCase):
         # Pass because data_dir now has the required files
         data_dir = os.path.join(os.path.join(epitome_test_data_dir, "fake_dir"), "test")
         assert EpitomeDataset.get_data_dir(data_dir=data_dir) == data_dir
+
+def test_list_genome_assemblies():
+    assert EpitomeDataset.list_genome_assemblies() == "hg19, hg38, test"

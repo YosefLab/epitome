@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from epitome.models import *
 from epitome.dataset import *
+from epitome.functions import download_and_unzip
 
 class EpitomeTestCase(unittest.TestCase):
 
