@@ -143,7 +143,7 @@ class DatasetTest(EpitomeTestCase):
         # https://github.com/YosefLab/epitome/issues/22
         with warnings.catch_warnings(record=True) as warning_list:
             warnings.simplefilter('always')
-            __, cellmap, targetmap = EpitomeDataset.get_assays(
+            __, __, __ = EpitomeDataset.get_assays(
                     targets = ['DNase','SPI1', 'PAX5'],
                     min_cells_per_target=2,
                     min_targets_per_cell=2,
