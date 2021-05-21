@@ -3,7 +3,6 @@ from epitome.functions import download_and_unzip
 import urllib
 import os
 import pytest
-import warnings
 
 class FunctionsTest(EpitomeTestCase):
 
