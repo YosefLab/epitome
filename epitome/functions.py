@@ -50,7 +50,6 @@ import multiprocessing
 
 def download_and_unzip(url, dst):
     """ Downloads a url to local destination, unzips it and deletes zip.
-
     :param url: url to download.
     :param dst: local absolute path to download data to.
     """

@@ -105,7 +105,7 @@ class DatasetTest(EpitomeTestCase):
     def test_get_targets_without_DNase(self):
         TF = 'JUND'
 
-        __, cellmap, targetmap = EpitomeDataset.get_assays(
+        __, __, targetmap = EpitomeDataset.get_assays(
                 targets = TF,
                 similarity_targets = ['H3K27ac'],
                 min_cells_per_target = 2,

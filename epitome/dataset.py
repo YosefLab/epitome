@@ -21,7 +21,6 @@ import warnings
 from sklearn.metrics import jaccard_score
 
 # local imports
-from epitome import *
 from .constants import Dataset
 from .functions import download_and_unzip
 from .viz import plot_assay_heatmap

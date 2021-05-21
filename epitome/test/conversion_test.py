@@ -2,7 +2,7 @@ from epitome.test import EpitomeTestCase
 from epitome.test import *
 from epitome.functions import *
 from epitome.conversion import *
-from epitome.dataset import *
+from epitome.dataset import EpitomeDataset
 import pytest
 import warnings
 import pyranges as pr

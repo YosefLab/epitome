@@ -18,7 +18,6 @@ also includes scripts for processing ENCODE peaks.
 
 """
 
-import os
 from os.path import expanduser
 
 __path__ = __import__('pkgutil').extend_path(__path__, __name__)
