@@ -43,6 +43,8 @@ from zipfile import ZipFile
 import gzip
 import shutil
 
+from IPython.core.debugger import set_trace
+
 # to load in positions file
 import multiprocessing
 
@@ -213,13 +215,16 @@ def compute_casv(m1, m2, radii, indices= None):
       # in this case, there is no CASV to compute, so we just return
       return np.zeros((len(indices),0, ncells,m2.shape[-1]))
 
-    print(m1.shape, m2.shape)
     assert m1.shape[0] == m2.shape[0]
     # verify number of assays match
     assert m2.shape[1] == m1.shape[-1]/ncells
     # print('HERE')
+    
+#     set_trace()
 
     def f(i):
+        
+#         set_trace()
         # get indices for each radius in radii
         radius_ranges = list(map(lambda x: get_radius_indices(radii, x, i, m1.shape[0]), range(len(radii))))
 
@@ -233,21 +238,21 @@ def compute_casv(m1, m2, radii, indices= None):
 
             # shape: radius size x (nassaysxncells) by nsamples
             pos = (m1_slice.T*m2_slice.T).T
-            agree = (m1_slice.T == m2_slice.T).T
+#             agree = (m1_slice.T == m2_slice.T).T
 
             # split pos and agree arrays to create new dimension for ncells
             # the new dimension will be 4D: (radius x nassays x ncells x nsamples)
             pos = np.stack(np.split(pos, ncells, axis=1), axis=2)
-            agree = np.stack(np.split(agree, ncells, axis=1), axis=2)
+#             agree = np.stack(np.split(agree, ncells, axis=1), axis=2)
             
             # get indices to split on. remove last because it is empty
             split_indices = np.cumsum([len(i) for i in radius_ranges])[:-1]
             # slice arrays by radii
             pos_arrays = np.split(pos, split_indices, axis= 0 )
-            agree_arrays = np.split(agree, split_indices, axis = 0)
+#             agree_arrays = np.split(agree, split_indices, axis = 0)
 
             # average over the radius (0th axis)
-            tmp1 = list(map(lambda x: np.average(x, axis = 0), pos_arrays + agree_arrays)) # this line is problematic
+            tmp1 = list(map(lambda x: np.average(x, axis = 0), pos_arrays)) # this line is problematic
             # final concatenation combines agree, nassays, and radii on the 0th axis
             # this axis is ordered by (1) pos/agree, then (2) radii, then (2) n assays.
             # See ordering example when there are 2 radii (r1, r2):
@@ -261,6 +266,7 @@ def compute_casv(m1, m2, radii, indices= None):
 
     # for every region of interest
     # TODO: maybe something more efficient?
+    
     return np.stack([f(i) for i in indices])
 
 def get_radius_indices(radii, r, i, max_index):

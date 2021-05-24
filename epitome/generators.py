@@ -196,22 +196,22 @@ def load_data(data,
                     if mode == Dataset.RUNTIME:
 
                         pos = cell_train_data*similarity_matrix[:,radius_indices]
-                        agree = cell_train_data == similarity_matrix[:,radius_indices]
+                        # agree = cell_train_data == similarity_matrix[:,radius_indices]
 
                     else:
                         cell_label_data = data[label_cell_indices[delete_indices][:,None],radius_indices]
 
                         # remove middle dimension and flatten similarity targets
                         pos = (cell_train_data*cell_label_data)
-                        agree = (cell_train_data == cell_label_data)
+                        # agree = (cell_train_data == cell_label_data)
 
                     # get indices to split on. remove last because it is empty
                     split_indices = np.cumsum([len(i) for i in radius_ranges])[:-1]
                     # slice arrays by radii
                     pos_arrays = np.split(pos, split_indices, axis= -1 )
-                    agree_arrays = np.split(agree, split_indices, axis = -1)
+                    # agree_arrays = np.split(agree, split_indices, axis = -1)
 
-                    similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays + agree_arrays)),axis=1)
+                    similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays)),axis=1)
                 else:
                     # no radius, so no similarities. just an empty placeholder
                     similarities = np.zeros((len(eval_cell_types),0,0))
@@ -244,8 +244,9 @@ def load_data(data,
                     all_labels = []
                     feature_names = []
                     similarity_labels_agreement = ['r%i_%s' % (radius, 'agree') for radius in radii]
-                    similarity_labels_dp = ['r%i_%s' % (radius, 'dp') for radius in radii]
-                    similarity_labels = np.concatenate([similarity_labels_agreement, similarity_labels_dp])
+                    # similarity_labels_dp = ['r%i_%s' % (radius, 'dp') for radius in radii]
+                    # similarity_labels = np.concatenate([similarity_labels_agreement, similarity_labels_dp])
+                    similarity_labels = similarity_labels_agreement
 
                     # concatenate together feature names
                     for j,c in enumerate(eval_cell_types):
@@ -439,22 +440,22 @@ def load_data_no_label_mask(data,
                     if mode == Dataset.RUNTIME:
 
                         pos = cell_train_data*similarity_matrix[:,radius_indices]
-                        agree = cell_train_data == similarity_matrix[:,radius_indices]
+#                         agree = cell_train_data == similarity_matrix[:,radius_indices]
 
                     else:
                         cell_label_data = data[label_cell_indices[delete_indices][:,None],radius_indices]
 
                         # remove middle dimension and flatten similarity targets
                         pos = (cell_train_data*cell_label_data)
-                        agree = (cell_train_data == cell_label_data)
+#                         agree = (cell_train_data == cell_label_data)
 
                     # get indices to split on. remove last because it is empty
                     split_indices = np.cumsum([len(i) for i in radius_ranges])[:-1]
                     # slice arrays by radii
                     pos_arrays = np.split(pos, split_indices, axis= -1 )
-                    agree_arrays = np.split(agree, split_indices, axis = -1)
+#                     agree_arrays = np.split(agree, split_indices, axis = -1)
 
-                    similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays + agree_arrays)),axis=1)
+                    similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays)),axis=1)
                 else:
                     # no radius, so no similarities. just an empty placeholder
                     similarities = np.zeros((len(eval_cell_types),0,0))
@@ -487,8 +488,8 @@ def load_data_no_label_mask(data,
                     all_labels = []
                     feature_names = []
                     similarity_labels_agreement = ['r%i_%s' % (radius, 'agree') for radius in radii]
-                    similarity_labels_dp = ['r%i_%s' % (radius, 'dp') for radius in radii]
-                    similarity_labels = np.concatenate([similarity_labels_agreement, similarity_labels_dp])
+#                     similarity_labels_dp = ['r%i_%s' % (radius, 'dp') for radius in radii]
+                    similarity_labels = similarity_labels_agreement
 
                     # concatenate together feature names
                     for j,c in enumerate(eval_cell_types):
@@ -681,22 +682,22 @@ def load_data_runtime(data,
                     if mode == Dataset.RUNTIME:
 
                         pos = cell_train_data*similarity_matrix[:,radius_indices]
-                        agree = cell_train_data == similarity_matrix[:,radius_indices]
+#                         agree = cell_train_data == similarity_matrix[:,radius_indices]
 
                     else:
                         cell_label_data = data[label_cell_indices[delete_indices][:,None],radius_indices]
 
                         # remove middle dimension and flatten similarity targets
                         pos = (cell_train_data*cell_label_data)
-                        agree = (cell_train_data == cell_label_data)
+#                         agree = (cell_train_data == cell_label_data)
 
                     # get indices to split on. remove last because it is empty
                     split_indices = np.cumsum([len(i) for i in radius_ranges])[:-1]
                     # slice arrays by radii
                     pos_arrays = np.split(pos, split_indices, axis= -1 )
-                    agree_arrays = np.split(agree, split_indices, axis = -1)
+#                     agree_arrays = np.split(agree, split_indices, axis = -1)
 
-                    similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays + agree_arrays)),axis=1)
+                    similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays)),axis=1)
                 else:
                     # no radius, so no similarities. just an empty placeholder
                     similarities = np.zeros((len(eval_cell_types),0,0))
@@ -729,8 +730,8 @@ def load_data_runtime(data,
                 all_labels = []
                 feature_names = []
                 similarity_labels_agreement = ['r%i_%s' % (radius, 'agree') for radius in radii]
-                similarity_labels_dp = ['r%i_%s' % (radius, 'dp') for radius in radii]
-                similarity_labels = np.concatenate([similarity_labels_agreement, similarity_labels_dp])
+#                 similarity_labels_dp = ['r%i_%s' % (radius, 'dp') for radius in radii]
+                similarity_labels = similarity_labels_agreement
 
                 # concatenate together feature names
                 for j,c in enumerate(eval_cell_types):
