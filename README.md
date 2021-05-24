@@ -8,7 +8,7 @@
 
 Pipeline for predicting ChIP-seq peaks in novel cell types using chromatin accessibility.
 
-![Epitome Diagram](docs/figures/epitome_diagram_celllines.png)
+![Epitome Diagram](https://github.com/YosefLab/epitome/raw/master/docs/figures/epitome_diagram_celllines.png)
 
 Epitome leverages chromatin accessibility (either DNase-seq or ATAC-seq) to predict epigenetic events in a novel cell type of interest. Such epigenetic events include transcription factor binding sites and histone modifications. Epitome computes chromatin accessibility similarity between ENCODE cell types and the novel cell type, and uses this information to transfer known epigentic signal to the novel cell type of interest.
 
