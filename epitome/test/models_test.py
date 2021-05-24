@@ -1,7 +1,7 @@
 from epitome.test import EpitomeTestCase
 from epitome.constants import Dataset
 import numpy as np
-from epitome.models import EpitomeModel
+from epitome.models import EpitomeModel, WrapperModel
 from epitome.dataset import EpitomeDataset
 import pytest
 import tempfile
@@ -164,6 +164,7 @@ class ModelsTest(EpitomeTestCase):
 		results = self.model.score_matrix(accessilibility_peak_matrix,
 								regions_peak_file.name)
 
+		print(results)
 		assert(results.shape == (4, 2, 1))
 		masked = np.ma.array(results, mask=np.isnan(results))
 		assert(np.all(masked <= 1))
@@ -260,3 +261,34 @@ class ModelsTest(EpitomeTestCase):
 		# second two items have data, so should NOT be na
 		assert np.all(np.isnan(results[:2,:]))
 		assert np.all(~np.isnan(results[-2:,:]))
+	
+	def test_score_matrix_fast(self):
+		eligible_cells = ['K562','HepG2','H1','A549','HeLa-S3']
+		eligible_targets = ['DNase','CTCF', 'RAD21']
+
+		dataset = EpitomeDataset(targets = eligible_targets,
+			cells = eligible_cells)
+
+
+		model = WrapperModel(dataset,
+			test_celltypes = ['K562'], radii=[1])
+		
+		regions_peak_file = tempfile.NamedTemporaryFile(delete=False)
+
+		# Create dummy data
+		regions_dict = {'Chromosome': ['chr1', 'chr1'],
+							'Start': [10000, 30000],
+							'End': [10300, 31200]}
+
+		regions_pr = pr.from_dict(regions_dict)
+
+		# Write to tmp bed file
+		regions_pr.to_bed(regions_peak_file.name)
+		regions_peak_file.flush()
+
+		accessilibility_peak_matrix = np.zeros((4, 2))
+
+		res = model.score_matrix_fast(accessilibility_peak_matrix, regions_peak_file.name)
+		assert np.all(np.isnan(res[:,0,:]))
+		assert res.shape == (4, 2, 1)
+
