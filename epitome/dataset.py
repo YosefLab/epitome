@@ -30,6 +30,9 @@ S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com'
 
 # List of available assembiles in S3_DATA_PATH
 EPITOME_GENOME_ASSEMBLIES = ['hg19', 'hg38', 'test']
+DEFAULT_EPITOME_ASSEMBLY = "hg19"
+EPITOME_USER_PATH = os.path.join(os.path.expanduser('~'), '.epitome')
+DEFAULT_EPITOME_DATA_PATH = os.path.join(EPITOME_USER_PATH, 'data')
 
 # data files required by epitome
 # data.h5 contains data, row information (celltypes and targets) and
@@ -155,7 +158,6 @@ class EpitomeDataset:
         self.valid_chrs = [i.decode() for i in dataset['columns']['index']['valid_chrs'][:]]
         self.test_chrs = [i.decode() for i in dataset['columns']['index']['test_chrs'][:]]
 
-        # TODO(jahnavis): Assert that these 2 assemblies are the same
         dataset_assembly = dataset['meta']['assembly'][:][0].decode()
         if assembly is not None:
             assert assembly == dataset_assembly, "Different assemblies"
@@ -282,10 +284,6 @@ class EpitomeDataset:
         return ", ".join(EPITOME_GENOME_ASSEMBLIES)
 
     @staticmethod
-    def get_epitome_user_path():
-        return os.path.join(os.path.expanduser('~'), '.epitome')
-
-    @staticmethod
     def get_data_dir(data_dir=None, assembly=None):
         '''
         Loads data processed from data/download_encode.py. This will check that all required files
@@ -298,19 +296,16 @@ class EpitomeDataset:
         :return: directory containing data.h5 file
         :rtype: str
         '''
-        default_data_dir = os.path.join(EpitomeDataset.get_epitome_user_path(), 'data')
-
         if (data_dir is not None) and (assembly is not None):
             epitome_data_dir = os.path.join(data_dir, assembly)
         elif (assembly is not None):
-            epitome_data_dir = os.path.join(default_data_dir, assembly)
+            epitome_data_dir = os.path.join(DEFAULT_EPITOME_DATA_PATH, assembly)
         elif (data_dir is not None):
             epitome_data_dir = data_dir
         else:
-            default_assembly = 'hg19'
-            print("Warning: genome assembly was not set in EpitomeDataset. Defaulting assembly to %s." % default_assembly)
-            epitome_data_dir = os.path.join(default_data_dir, default_assembly)
-            assembly = default_assembly
+            print("Warning: genome assembly was not set in EpitomeDataset. Defaulting assembly to %s." % DEFAULT_EPITOME_ASSEMBLY)
+            epitome_data_dir = os.path.join(DEFAULT_EPITOME_DATA_PATH, DEFAULT_EPITOME_ASSEMBLY)
+            assembly = DEFAULT_EPITOME_ASSEMBLY
 
         if not EpitomeDataset.contains_required_files(epitome_data_dir):
             # Grab data directory and download it from S3 if it doesn't have the required files
@@ -332,7 +327,6 @@ class EpitomeDataset:
         :rtype str
         '''
         return list(self.targetmap)
-
 
     @staticmethod
     def get_assays(targets = None,

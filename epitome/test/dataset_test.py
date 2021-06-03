@@ -1,7 +1,7 @@
 from epitome.test import EpitomeTestCase
 from epitome.test import *
 from epitome.functions import *
-from epitome.dataset import EpitomeDataset, REQUIRED_KEYS, EPITOME_H5_FILE
+from epitome.dataset import EpitomeDataset, REQUIRED_KEYS, EPITOME_H5_FILE, DEFAULT_EPITOME_DATA_PATH
 from epitome.constants import Dataset
 
 import os
@@ -225,7 +225,7 @@ class DatasetTest(EpitomeTestCase):
         assert EpitomeDataset.get_data_dir(data_dir=epitome_test_data_dir, assembly="hg38") == os.path.join(epitome_test_data_dir, "hg38")
 
         # Should error because undownloaded data path doesn't have a specified assembly
-        default_data_dir = os.path.join(os.path.join(EpitomeDataset.get_epitome_user_path(), 'data'), "hg19")
+        default_data_dir = os.path.join(DEFAULT_EPITOME_DATA_PATH, "hg19")
         assert EpitomeDataset.get_data_dir() == default_data_dir
 
         # Should error because assembly isn't contained in S3 cluster
