@@ -14,7 +14,7 @@ class DatasetTest(EpitomeTestCase):
 
     def __init__(self, *args, **kwargs):
         super(DatasetTest, self).__init__(*args, **kwargs)
-        self.dataset = EpitomeDataset(data_dir=self.epitome_test_path)
+        self.dataset = EpitomeDataset(data_dir=self.epitome_test_path2, assembly="test")
 
     def test_user_data_path(self):
         # user data path should be able to be explicitly set
@@ -62,7 +62,7 @@ class DatasetTest(EpitomeTestCase):
 
 
         # load back in dataset and make sure it checks out
-        dataset = EpitomeDataset(data_dir = out_path)
+        dataset = EpitomeDataset(data_dir = out_path, assembly=assembly)
 
         assert dataset.assembly == assembly
         assert dataset.source == source
@@ -81,7 +81,8 @@ class DatasetTest(EpitomeTestCase):
 				cells = eligible_cells,
                 min_cells_per_target = 3,
                 min_targets_per_cell = 1,
-                data_dir=self.epitome_test_path)
+                data_dir = self.epitome_test_path2,
+                assembly = "test")
 
         self.assertTrue(matrix[cellmap['IMR-90']][targetmap['H4K8ac']]==0) # data for first row
 
@@ -93,7 +94,8 @@ class DatasetTest(EpitomeTestCase):
                 targets = TF,
                 min_cells_per_target = 2,
                 min_targets_per_cell = 2,
-                data_dir = self.epitome_test_path)
+                data_dir = self.epitome_test_path2,
+                assembly = "test")
 
         targets = list(targetmap)
         # Make sure only JUND and DNase are in list of targets
@@ -110,7 +112,8 @@ class DatasetTest(EpitomeTestCase):
                 similarity_targets = ['H3K27ac'],
                 min_cells_per_target = 2,
                 min_targets_per_cell = 1,
-                data_dir = self.epitome_test_path)
+                data_dir = self.epitome_test_path2,
+                assembly = "test")
 
         targets = list(targetmap)
         # Make sure only JUND and is in list of targets
@@ -131,7 +134,8 @@ class DatasetTest(EpitomeTestCase):
                 similarity_targets = ['H3K27ac'],
                 min_cells_per_target = 2,
                 min_targets_per_cell = 1,
-                data_dir = self.epitome_test_path)
+                data_dir = self.epitome_test_path2,
+                assembly = "test")
 
         targets = list(targetmap)
         # Make sure only JUND and is in list of assays
@@ -147,7 +151,8 @@ class DatasetTest(EpitomeTestCase):
                     targets = ['DNase','SPI1', 'PAX5'],
                     min_cells_per_target=2,
                     min_targets_per_cell=2,
-                    data_dir=self.epitome_test_path)
+                    data_dir = self.epitome_test_path,
+                    assembly = "test")
             self.assertTrue(len(warning_list) == 1) # one for SPI1 and PAX5
             self.assertTrue(all(item.category == UserWarning for item in warning_list))
 
@@ -195,7 +200,7 @@ class DatasetTest(EpitomeTestCase):
 
     def test_reserve_validation_indices(self):
         # new dataset because we are modifying it
-        dataset = EpitomeDataset(data_dir=self.epitome_test_path)
+        dataset = EpitomeDataset(data_dir=self.epitome_test_path2, assembly="test")
         self.assertTrue(dataset.get_data(Dataset.TRAIN).shape == (746, 1800))
         self.assertTrue(dataset.get_data(Dataset.TRAIN_VALID).shape == (746,0))
 

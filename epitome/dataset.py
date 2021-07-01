@@ -159,6 +159,7 @@ class EpitomeDataset:
         self.test_chrs = [i.decode() for i in dataset['columns']['index']['test_chrs'][:]]
 
         dataset_assembly = dataset['meta']['assembly'][:][0].decode()
+        print("DEBUG: dataset_assembly ", dataset_assembly)
         if assembly is not None:
             assert assembly == dataset_assembly, "Different assemblies"
         else:
@@ -316,6 +317,7 @@ class EpitomeDataset:
             # Make sure all required files exist
             assert EpitomeDataset.contains_required_files(epitome_data_dir)
 
+        print("DEBUG: epitome_data_dir ", epitome_data_dir)
         return epitome_data_dir
 
     def list_targets(self):
@@ -351,8 +353,8 @@ class EpitomeDataset:
         :rtype: tuple
         '''
 
-        if not data_dir:
-            data_dir = EpitomeDataset.get_data_dir(data_dir, assembly)
+        # if not data_dir:
+        data_dir = EpitomeDataset.get_data_dir(data_dir, assembly)
 
         data = h5py.File(os.path.join(data_dir, EPITOME_H5_FILE), 'r')
 

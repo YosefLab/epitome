@@ -81,7 +81,7 @@ default data directory on your machine. See `Load your processed dataset <./data
 
   from epitome.dataset import *
 
-  dataset = EpitomeDataset(data_dir=path/to/configured/data, assembly="hg19")
+  dataset = EpitomeDataset(data_dir="path/to/configured/data", assembly="hg19")
   ...
 
 
