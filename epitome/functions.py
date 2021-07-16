@@ -43,8 +43,6 @@ from zipfile import ZipFile
 import gzip
 import shutil
 
-from IPython.core.debugger import set_trace
-
 # to load in positions file
 import multiprocessing
 
