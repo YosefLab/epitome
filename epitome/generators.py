@@ -13,10 +13,10 @@ Data Generator Functions
 
 import numpy as np
 import tensorflow as tf
-from .constants import *
+from .constants import Dataset
 from .functions import *
 from .sampling import *
-from .dataset import *
+from .dataset import EpitomeDataset
 import glob
 
 ######################### Original Data Generator: Only peak based #####################
@@ -35,6 +35,7 @@ def load_data(data,
                  mode = Dataset.TRAIN,
                  similarity_matrix = None,
                  indices = None,
+                 continuous = False,
                  return_feature_names = False,
                  **kwargs):
     """
@@ -52,6 +53,8 @@ def load_data(data,
     :param similarity_matrix: matrix with shape (len(similarity_targets), genome_size) containing binary 0/1s of peaks for similarity_targets
     to be compared in the CASV.
     :param indices: indices in genome to generate records for.
+    :param boolean continous: determines whether similarity_matrix has continuous values. If continous, we do not calculate agreement in the decreasing_train_valid_iters
+      TODO: remove this eventually, if you can show agreement does not help performance
     :param return_feature_names: boolean whether to return string names of features
     :param kwargs: kargs
 
@@ -209,9 +212,13 @@ def load_data(data,
                     split_indices = np.cumsum([len(i) for i in radius_ranges])[:-1]
                     # slice arrays by radii
                     pos_arrays = np.split(pos, split_indices, axis= -1 )
-                    # agree_arrays = np.split(agree, split_indices, axis = -1)
 
-                    similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays)),axis=1)
+                    if not continuous:
+                      agree_arrays = np.split(agree, split_indices, axis = -1)
+                      similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays + agree_arrays)),axis=1)
+                    else:
+                      # don't use agreement features when there are continous values
+                      similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays)),axis=1)
                 else:
                     # no radius, so no similarities. just an empty placeholder
                     similarities = np.zeros((len(eval_cell_types),0,0))
@@ -243,10 +250,13 @@ def load_data(data,
                 if (return_feature_names):
                     all_labels = []
                     feature_names = []
-                    similarity_labels_agreement = ['r%i_%s' % (radius, 'agree') for radius in radii]
-                    # similarity_labels_dp = ['r%i_%s' % (radius, 'dp') for radius in radii]
-                    # similarity_labels = np.concatenate([similarity_labels_agreement, similarity_labels_dp])
-                    similarity_labels = similarity_labels_agreement
+
+                    similarity_labels_dp = ['r%i_%s' % (radius, 'dp') for radius in radii]
+                    if continuous:
+                      similarity_labels = similarity_labels_dp
+                    else:
+                      similarity_labels_agreement = ['r%i_%s' % (radius, 'agree') for radius in radii]
+                      similarity_labels = np.concatenate([similarity_labels_dp, similarity_labels_agreement])
 
                     # concatenate together feature names
                     for j,c in enumerate(eval_cell_types):

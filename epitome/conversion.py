@@ -105,9 +105,6 @@ class RegionConversion:
         base_indices = tmp.idx_base.values
         convert_indices = tmp.idx.values
 
-        print("bv",base_vector[base_indices])
-        print("v",vector[convert_indices])
-
         base_vector[base_indices] = vector[convert_indices]
 
         return base_vector, base_indices
