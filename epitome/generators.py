@@ -325,8 +325,7 @@ def load_data_no_label_mask(data,
     delete_indices = np.array([targetmap[s] for s in similarity_targets]).astype(int)
 
     # make sure no similarity comparison data is missing for all cell types
-    assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \
-        "missing data for similarity target at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
+    assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)),         "missing data for similarity target at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
 
     # names of labels that are being predicted
     feature_targets = [a for a in list(targetmap)] # targets used as features for each evaluation cell type
@@ -390,8 +389,7 @@ def load_data_no_label_mask(data,
         label_cell_types = ["PLACEHOLDER_CELL"]
         if similarity_matrix is None:
             raise Exception("similarity_matrix must be defined in runtime mode")
-        assert similarity_matrix.shape[0] == len(similarity_targets), \
-            "similarity_matrix is missing data for targets (should have %i rows)" % (len(similarity_targets))
+        assert similarity_matrix.shape[0] == len(similarity_targets),             "similarity_matrix is missing data for targets (should have %i rows)" % (len(similarity_targets))
         random_cell = list(cellmap)[0] # placeholder to get label vector length
 
     print("using %s as labels for mode %s" % (label_cell_types, mode))
@@ -567,8 +565,7 @@ def load_data_runtime(data,
     delete_indices = np.array([targetmap[s] for s in similarity_targets]).astype(int)
 
     # make sure no similarity comparison data is missing for all cell types
-    assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)), \
-        "missing data for similarity target at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
+    assert np.invert(np.any(feature_cell_indices[:,delete_indices] == -1)),         "missing data for similarity target at %s" % (np.where(feature_cell_indices[:,delete_indices] == -1)[0])
 
     # names of labels that are being predicted
     feature_targets = [a for a in list(targetmap)] # targets used as features for each evaluation cell type
@@ -632,8 +629,7 @@ def load_data_runtime(data,
         label_cell_types = ["PLACEHOLDER_CELL"]
         if similarity_matrix is None:
             raise Exception("similarity_matrix must be defined in runtime mode")
-        assert similarity_matrix.shape[0] == len(similarity_targets), \
-            "similarity_matrix is missing data for targets (should have %i rows)" % (len(similarity_targets))
+        assert similarity_matrix.shape[0] == len(similarity_targets),             "similarity_matrix is missing data for targets (should have %i rows)" % (len(similarity_targets))
         random_cell = list(cellmap)[0] # placeholder to get label vector length
 
     print("using %s as labels for mode %s" % (label_cell_types, mode))
@@ -760,6 +756,7 @@ def load_data_runtime(data,
 
 
     return g
+
 
 def generator_to_tf_dataset(g, batch_size, shuffle_size, prefetch_size):
     """

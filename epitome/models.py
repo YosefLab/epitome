@@ -17,7 +17,7 @@ import tensorflow as tf
 
 from .functions import *
 from .constants import Dataset
-from .generators import generator_to_tf_dataset,load_data, load_data_runtime, load_data_no_label_mask
+from .generators import *
 from .dataset import *
 from .metrics import *
 from .conversion import *
@@ -27,6 +27,7 @@ import tqdm
 import logging
 import sys
 import copy
+import gc
 
 # for saving model
 import pickle
@@ -898,3 +899,149 @@ class EpitomeModel(PeakModel):
         model = tf.keras.models.Model(inputs=cell_inputs, outputs=outputs)
 
         return model
+    
+    def score_matrix_fast(self, accessibility_peak_matrix, regions):
+        """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
+        rows are regions from regions_peak_file. rows in accessilibility_peak_matrix should matching
+
+        :param numpy.matrix accessilibility_peak_matrix:  of (samples by genomic regions)
+        :param str regions: either narrowpeak or bed file containing regions to score, OR a pyranges object
+            with columns [Chomosome, Start, End, idx]. Index matches each genomic region to a row in
+            accessilibility_peak_matrix. In both cases, number of regions Should
+            match rows in accessilibility_peak_matrix
+
+        :return: 3-dimensional numpy matrix of predictions: sized (samples by regions by ChIP-seq targets)
+        :rtype: numpy matrix
+        """
+
+        s = time.time()
+
+        conversionObject = RegionConversion(self.dataset.regions, regions)
+
+        results = []
+        # print(accessibility_peak_matrix.shape)
+        matrix, indices = conversionObject.get_binary_vector(vector = accessibility_peak_matrix[0,:])
+        gen = load_data_runtime(data=self.dataset.get_data(Dataset.ALL),
+                 label_cell_types=self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
+                 eval_cell_types=self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                 matrix=self.dataset.matrix,
+                 targetmap=self.dataset.targetmap,
+                 cellmap=self.dataset.cellmap,
+                 radii = self.radii,
+                 mode = Dataset.RUNTIME,
+                 similarity_matrix = matrix,
+                 similarity_targets = ['DNase'],
+                 indices = indices,
+                 return_feature_names=False)
+
+        to_stack = load_data_no_label_mask(data=self.dataset.get_data(Dataset.ALL),
+                 label_cell_types=self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
+                 eval_cell_types=self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
+                 matrix=self.dataset.matrix,
+                 targetmap=self.dataset.targetmap,
+                 cellmap=self.dataset.cellmap,
+                 radii = self.radii,
+                 mode = Dataset.RUNTIME,
+                 similarity_matrix = matrix,
+                 similarity_targets = ['DNase'],
+                 indices = indices,
+                 return_feature_names=True)
+
+        gen_to_list = list(gen())
+        to_stack = list(to_stack())
+        gen_to_list = np.array(gen_to_list)
+
+        # reshape to n_regions [from regions] x nassays [acc dim 1] x n_samples
+        radii = self.radii
+
+        s = time.time()
+
+        stacked = np.stack([to_stack] * accessibility_peak_matrix.shape[0], axis=0)
+        names = stacked[:, :, 1]
+        to_stack = stacked[:, :, 0]
+        to_stack = np.expand_dims(to_stack, axis=-1)
+
+        same_size = accessibility_peak_matrix.shape[1] == len(conversionObject.joined.idx_base)
+
+        if not same_size:
+            added_indices = []
+            old_idx, counter, old_i = 0, 0, 0
+            indices_to_merge = []
+            for ctr, (i, i_base) in enumerate(zip(conversionObject.joined.idx, conversionObject.joined.idx_base)):
+                if i_base == -1:
+                    continue
+                if i != old_i:
+                    indices_to_merge.append((old_idx, counter))
+                    old_idx = counter
+                added_indices.append(accessibility_peak_matrix[:, i])
+                counter += 1
+                old_i = i
+            indices_to_merge.append((old_idx, len(conversionObject.joined.idx)))
+            
+            a = np.stack(added_indices)
+        else:
+            a = np.transpose(accessibility_peak_matrix, axes=[1, 0])
+        
+        a = a[:, None, :]
+
+        s = time.time()
+        
+        out = compute_casv(gen_to_list, a, radii)
+
+        casv_len = out.shape[1]
+        num_cells = out.shape[3]
+        num_regions = out.shape[0]
+        num_celltypes = out.shape[2]
+        num_targets = len(self.dataset.targets) if 'DNase' in self.dataset.targets else len(self.dataset.targets) + 1
+        total_targets = num_targets
+
+        s = time.time()
+
+        def first_substring(strings, substring, other, other2):
+#             return next(i for i, string in enumerate(strings) if substring in string)
+            for i, s in enumerate(strings):
+                if substring in s:
+                      return i
+            return None
+
+        for region in tqdm(range(num_regions)):
+            for cell in range(num_cells):
+
+                selected_gen = to_stack[cell, region, :]
+                naming_scheme = names[cell, region][0]
+                selected_casv = out[region, :, :, cell]
+
+                len_feats_per_celltype = int(selected_gen[0].shape[0] / num_celltypes) # 24 / 2 = 12
+
+                old_sg = selected_gen
+                
+
+                for celltype in range(num_celltypes):
+                    idx = (num_targets + 4) * celltype
+                    if idx >= len(selected_gen[0]):
+                        break
+                    num_targets = first_substring(naming_scheme[idx:idx+len_feats_per_celltype+total_targets], '_agree', naming_scheme[idx-10:idx+len_feats_per_celltype+10], (idx, len_feats_per_celltype))
+                    casv_cell = selected_casv[:, celltype]
+                    selected_gen[0][idx + num_targets : idx + num_targets + 4] = casv_cell
+        
+
+        results = []
+        for c in tqdm(range(num_cells)):
+            for r in range(num_regions):
+                results.append(self._predict(to_stack[c, r, :][0][None, :]))
+
+        results = np.stack(results)
+        results = results.reshape((to_stack.shape[0], to_stack.shape[1], results.shape[2])) # 4 x 5
+
+        del to_stack
+        del out
+        gc.collect()
+
+        if not same_size:
+            final = []
+            final = np.empty((accessibility_peak_matrix.shape[0], accessibility_peak_matrix.shape[1], results.shape[2]))
+            final.fill(np.nan)
+            for i, tup in enumerate(indices_to_merge):
+                final[:, i, :] = np.mean(results[:, tup[0]:tup[1], :], axis=1)
+            return final
+        return results

@@ -218,8 +218,8 @@ def compute_casv(m1, m2, radii, indices= None):
     assert m1.shape[0] == m2.shape[0]
     # verify number of assays match
     assert m2.shape[1] == m1.shape[-1]/ncells
-    # print('HERE')
-    
+    print('IN CASV: DONE WITH CHECKS')
+    print('INDICES LEN:', len(indices))
 #     set_trace()
 
     def f(i):
