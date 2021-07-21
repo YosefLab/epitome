@@ -765,14 +765,12 @@ class EpitomeModel(PeakModel):
         :rtype: numpy matrix
         """
 
-        s = time.time()
-
         conversionObject = RegionConversion(self.dataset.regions, regions)
 
         results = []
         # print(accessibility_peak_matrix.shape)
         matrix, indices = conversionObject.get_binary_vector(vector = accessibility_peak_matrix[0,:])
-        gen = load_data_runtime(data=self.dataset.get_data(Dataset.ALL),
+        gen = load_data(data=self.dataset.get_data(Dataset.ALL),
                  label_cell_types=self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
                  eval_cell_types=self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
                  matrix=self.dataset.matrix,
@@ -783,9 +781,11 @@ class EpitomeModel(PeakModel):
                  similarity_matrix = matrix,
                  similarity_targets = ['DNase'],
                  indices = indices,
+                 continuous=True,
+                 keep_lbl_mask=False,
                  return_feature_names=False)
 
-        to_stack = load_data_no_label_mask(data=self.dataset.get_data(Dataset.ALL),
+        to_stack = load_data(data=self.dataset.get_data(Dataset.ALL),
                  label_cell_types=self.test_celltypes,   # used for labels. Should be all for train/eval and subset for test
                  eval_cell_types=self.eval_cell_types,   # used for rotating features. Should be all - test for train/eval
                  matrix=self.dataset.matrix,
@@ -796,6 +796,7 @@ class EpitomeModel(PeakModel):
                  similarity_matrix = matrix,
                  similarity_targets = ['DNase'],
                  indices = indices,
+                 continuous=True,
                  return_feature_names=True)
 
         gen_to_list = list(gen())
@@ -804,8 +805,6 @@ class EpitomeModel(PeakModel):
 
         # reshape to n_regions [from regions] x nassays [acc dim 1] x n_samples
         radii = self.radii
-
-        s = time.time()
 
         stacked = np.stack([to_stack] * accessibility_peak_matrix.shape[0], axis=0)
         names = stacked[:, :, 1]
@@ -834,8 +833,6 @@ class EpitomeModel(PeakModel):
             a = np.transpose(accessibility_peak_matrix, axes=[1, 0])
         
         a = a[:, None, :]
-
-        s = time.time()
         
         out = compute_casv(gen_to_list, a, radii)
 
@@ -845,8 +842,6 @@ class EpitomeModel(PeakModel):
         num_celltypes = out.shape[2]
         num_targets = len(self.dataset.targets) if 'DNase' in self.dataset.targets else len(self.dataset.targets) + 1
         total_targets = num_targets
-
-        s = time.time()
 
         def first_substring(strings, substring, other, other2):
 #             return next(i for i, string in enumerate(strings) if substring in string)
