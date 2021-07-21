@@ -872,8 +872,8 @@ class EpitomeModel(PeakModel):
 
         results = []
         for c in tqdm(range(num_cells)):
-            # for r in range(num_regions):
-            results.append(self._predict(to_stack[c, :, :][0][None, :]))
+            for r in range(num_regions):
+                results.append(self._predict(to_stack[c, :, :][0][None, :]))
 
         results = np.stack(results)
         results = results.reshape((to_stack.shape[0], to_stack.shape[1], results.shape[2])) # 4 x 5
