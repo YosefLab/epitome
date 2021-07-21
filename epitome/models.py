@@ -750,7 +750,7 @@ class EpitomeModel(PeakModel):
 
         return model
     
-    def score_matrix(self, accessibility_peak_matrix, regions):
+    def score_matrix_fast(self, accessibility_peak_matrix, regions):
         """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
         rows are regions from regions_peak_file. rows in accessilibility_peak_matrix should matching
 
@@ -872,8 +872,8 @@ class EpitomeModel(PeakModel):
 
         results = []
         for c in tqdm(range(num_cells)):
-            for r in range(num_regions):
-                results.append(self._predict(to_stack[c, :, :][0][None, :]))
+            # for r in range(num_regions):
+            results.append(self._predict(to_stack[c, :, :][0][None, :]))
 
         results = np.stack(results)
         results = results.reshape((to_stack.shape[0], to_stack.shape[1], results.shape[2])) # 4 x 5
