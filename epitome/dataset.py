@@ -159,7 +159,6 @@ class EpitomeDataset:
         self.test_chrs = [i.decode() for i in dataset['columns']['index']['test_chrs'][:]]
 
         dataset_assembly = dataset['meta']['assembly'][:][0].decode()
-        print("DEBUG: dataset_assembly ", dataset_assembly)
         if assembly is not None:
             assert assembly == dataset_assembly, "Different assemblies"
         else:
@@ -316,8 +315,6 @@ class EpitomeDataset:
             download_and_unzip(url_path, epitome_data_dir)
             # Make sure all required files exist
             assert EpitomeDataset.contains_required_files(epitome_data_dir)
-
-        print("DEBUG: epitome_data_dir ", epitome_data_dir)
         return epitome_data_dir
 
     def list_targets(self):

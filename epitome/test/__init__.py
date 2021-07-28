@@ -12,11 +12,9 @@ class EpitomeTestCase(unittest.TestCase):
 		# class definitions
 		self.S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/test.zip'
 		dir_path = os.path.dirname(os.path.realpath(__file__))
-		self.epitome_test_path = os.path.abspath(os.path.join(dir_path, "data","test"))
-		self.epitome_test_path2 = os.path.abspath(os.path.join(dir_path, "data"))
-		#
-		# # download test data to parent dir of EPITOME_DATA_PATH if it was not yet downloaded
-		# download_and_unzip(self.S3_DATA_PATH, self.epitome_test_path)
+		self.epitome_assembly = "test"
+		self.epitome_data_dir = os.path.abspath(os.path.join(dir_path, "data"))
+		self.epitome_test_dir = os.path.abspath(os.path.join(self.epitome_data_dir, self.epitome_assembly))
 		super(EpitomeTestCase, self).__init__(*args, **kwargs)
 
 	def getFeatureData(self,
@@ -26,12 +24,11 @@ class EpitomeTestCase(unittest.TestCase):
 					min_cells_per_target = 3,
 					min_targets_per_cell = 1):
 
-		# returns matrix, cellmap, assaymap
 		return EpitomeDataset.get_assays(
 				targets = targets,
 				cells = cells,
-				data_dir = self.epitome_test_path2,
-				assembly = "test",
+				data_dir = self.epitome_data_dir,
+				assembly = self.epitome_assembly,
 				similarity_targets = similarity_targets,
 				min_cells_per_target = min_cells_per_target,
 				min_targets_per_cell = min_targets_per_cell)
@@ -41,7 +38,9 @@ class EpitomeTestCase(unittest.TestCase):
 		eligible_targets = ['DNase','CTCF']
 
 		dataset = EpitomeDataset(targets = eligible_targets,
-			cells = eligible_cells, data_dir=self.epitome_test_path2, assembly="test")
+								 cells = eligible_cells,
+								 data_dir=self.epitome_data_dir,
+								 assembly=self.epitome_assembly)
 
 		return EpitomeModel(dataset,
 			test_celltypes = ['K562'])

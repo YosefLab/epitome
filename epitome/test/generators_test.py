@@ -112,7 +112,8 @@ class GeneratorsTest(EpitomeTestCase):
 			cells = eligible_cells,
 			min_cells_per_target = 1,
 			min_targets_per_cell = 1,
-			data_dir=self.epitome_test_path)
+			data_dir=self.epitome_data_dir,
+			assembly=self.epitome_assembly)
 
 
 		label_cell_types = ['HepG2']
@@ -152,7 +153,8 @@ class GeneratorsTest(EpitomeTestCase):
 
 		dataset = EpitomeDataset(targets = eligible_targets,
 			cells = eligible_cells,
-			data_dir=self.epitome_test_path)
+			data_dir=self.epitome_data_dir,
+			assembly=self.epitome_assembly)
 
 		label_cell_types = ['K562']
 		eligible_cells.remove(label_cell_types[0])
@@ -178,7 +180,8 @@ class GeneratorsTest(EpitomeTestCase):
 		eligible_targets = ['DNase','CTCF','RAD21']
 		dataset = EpitomeDataset(targets = eligible_targets,
 					cells = eligible_cells,
-					data_dir=self.epitome_test_path)
+					data_dir=self.epitome_data_dir,
+					assembly=self.epitome_assembly)
 
 		label_cell_types = ['K562']
 		eligible_cells.remove(label_cell_types[0])
@@ -211,7 +214,8 @@ class GeneratorsTest(EpitomeTestCase):
 		eligible_targets = ['DNase','CTCF','RAD21','LARP7']
 		dataset = EpitomeDataset(targets = eligible_targets,
 							cells = eligible_cells,
-							data_dir=self.epitome_test_path)
+							data_dir=self.epitome_data_dir,
+							assembly=self.epitome_assembly)
 		test_celltypes = ['K562']
 		eligible_cells.remove(test_celltypes[0])
 		radii = [1,10]
@@ -245,7 +249,8 @@ class GeneratorsTest(EpitomeTestCase):
 		eligible_targets = ['DNase','CTCF','RAD21','LARP7']
 		dataset = EpitomeDataset(targets = eligible_targets,
 							cells = eligible_cells,
-							data_dir=self.epitome_test_path)
+							data_dir=self.epitome_data_dir,
+							assembly=self.epitome_assembly)
 		test_celltypes = ['K562']
 		eligible_cells.remove(test_celltypes[0])
 		radii = [1,10]

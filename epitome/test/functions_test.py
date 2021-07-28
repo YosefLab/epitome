@@ -12,8 +12,8 @@ class FunctionsTest(EpitomeTestCase):
     def test_download_and_unzip(self):
         # Fails on wrong non-existing URL
         with pytest.raises(urllib.error.HTTPError):
-            download_and_unzip("https://epitome-data.s3-us-west-1.amazonaws.com/fake_assembly.zip", self.epitome_test_path)
+            download_and_unzip("https://epitome-data.s3-us-west-1.amazonaws.com/fake_assembly.zip", self.epitome_test_dir)
 
         # Passes on fake directory without nesting
-        test_dir = os.path.join(os.path.dirname(self.epitome_test_path), "fake_dir2")
+        test_dir = os.path.join(os.path.dirname(self.epitome_test_dir), "fake_dir2")
         download_and_unzip(self.S3_DATA_PATH, test_dir)

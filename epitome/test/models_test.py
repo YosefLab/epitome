@@ -62,7 +62,9 @@ class ModelsTest(EpitomeTestCase):
 		eligible_targets = ['DNase','CTCF']
 
 		dataset = EpitomeDataset(targets = eligible_targets,
-			cells = eligible_cells, data_dir=self.epitome_test_path)
+								 cells = eligible_cells,
+								 data_dir=self.epitome_data_dir,
+								 assembly=self.epitome_assembly)
 
 		# set all data to ones so it converges quickly
 		dataset_shape = dataset.get_data(Dataset.ALL).shape
@@ -98,7 +100,9 @@ class ModelsTest(EpitomeTestCase):
 		# should add DNase to eligible assays
 
 		eligible_targets = ['CTCF', 'RAD21', 'CEBPB']
-		dataset = EpitomeDataset(targets = eligible_targets, data_dir=self.epitome_test_path)
+		dataset = EpitomeDataset(targets = eligible_targets,
+								 data_dir=self.epitome_data_dir,
+								 assembly=self.epitome_assembly)
 
 		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
@@ -107,7 +111,10 @@ class ModelsTest(EpitomeTestCase):
 		# should train a model without using DNAse
 		eligible_targets = ['CTCF', 'RAD21', 'CEBPB']
 
-		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['H3K27ac'], data_dir=self.epitome_test_path)
+		dataset = EpitomeDataset(targets = eligible_targets,
+								 similarity_targets = ['H3K27ac'],
+								 data_dir=self.epitome_data_dir,
+								 assembly=self.epitome_assembly)
 
 		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
@@ -116,7 +123,10 @@ class ModelsTest(EpitomeTestCase):
 		# should train a model without using DNAse
 		eligible_targets = ['CTCF', 'RAD21', 'CEBPB']
 
-		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['DNase', 'H3K27ac'], data_dir=self.epitome_test_path)
+		dataset = EpitomeDataset(targets = eligible_targets,
+								 similarity_targets = ['DNase', 'H3K27ac'],
+								 data_dir=self.epitome_data_dir,
+								 assembly=self.epitome_assembly)
 
 		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 5)
@@ -125,7 +135,10 @@ class ModelsTest(EpitomeTestCase):
 		# should train a model without using DNAse
 		eligible_targets = ['CTCF', 'RAD21', 'CEBPB']
 
-		dataset = EpitomeDataset(targets = eligible_targets, similarity_targets = ['H3K27ac'], data_dir=self.epitome_test_path)
+		dataset = EpitomeDataset(targets = eligible_targets,
+								 similarity_targets = ['H3K27ac'],
+								 data_dir=self.epitome_data_dir,
+								 assembly=self.epitome_assembly)
 
 		model = EpitomeModel(dataset)
 		assert(len(model.dataset.targetmap) == 4)
@@ -231,7 +244,10 @@ class ModelsTest(EpitomeTestCase):
 		# For example, TCFL2 in Panc1 has position 0 when loaded. It
 		# was previously being masked in the generator, even though the data was present.
 
-		ds = EpitomeDataset(targets = ['TCF7L2'], cells=['Panc1', 'MCF-7','K562'], data_dir=self.epitome_test_path)
+		ds = EpitomeDataset(targets = ['TCF7L2'],
+							cells=['Panc1', 'MCF-7','K562'],
+							data_dir=self.epitome_data_dir,
+							assembly=self.epitome_assembly)
 
 		# make sure you are getting position 0
 		# this is where the bug was
