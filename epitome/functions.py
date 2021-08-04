@@ -27,6 +27,8 @@ import os
 from collections import Counter
 from itertools import groupby
 from scipy.io import loadmat
+
+import epitome
 from .constants import *
 import scipy.sparse
 import pyranges as pr
@@ -213,11 +215,12 @@ def compute_casv(m1, m2, radii, indices= None):
       # in this case, there is no CASV to compute, so we just return
       return np.zeros((len(indices),0, ncells,m2.shape[-1]))
 
+    print(m1.shape, m2.shape)
     assert m1.shape[0] == m2.shape[0]
     # verify number of assays match
     assert m2.shape[1] == m1.shape[-1]/ncells
-    print('IN CASV: DONE WITH CHECKS')
-    print('INDICES LEN:', len(indices))
+    # print('HERE')
+    
 #     set_trace()
 
     def f(i):
@@ -264,8 +267,13 @@ def compute_casv(m1, m2, radii, indices= None):
 
     # for every region of interest
     # TODO: maybe something more efficient?
+
+    # set_trace()
+    tmp = []
+    for i in indices:
+        tmp.append(f(i))
     
-    return np.stack([f(i) for i in indices])
+    return np.stack(tmp)
 
 def get_radius_indices(radii, r, i, max_index):
     '''
