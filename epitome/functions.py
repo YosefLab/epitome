@@ -215,7 +215,7 @@ def compute_casv(m1, m2, radii, indices= None):
       # in this case, there is no CASV to compute, so we just return
       return np.zeros((len(indices),0, ncells,m2.shape[-1]))
 
-    print(m1.shape, m2.shape)
+    # print(m1.shape, m2.shape)
     assert m1.shape[0] == m2.shape[0]
     # verify number of assays match
     assert m2.shape[1] == m1.shape[-1]/ncells
@@ -253,7 +253,7 @@ def compute_casv(m1, m2, radii, indices= None):
 #             agree_arrays = np.split(agree, split_indices, axis = 0)
 
             # average over the radius (0th axis)
-            tmp1 = list(map(lambda x: np.average(x, axis = 0), pos_arrays)) # this line is problematic
+            tmp1 = list(map(lambda x: np.average(x, axis = 0) if x.shape[0] > 0 else np.zeros((x.shape[1:])), pos_arrays))
             # final concatenation combines agree, nassays, and radii on the 0th axis
             # this axis is ordered by (1) pos/agree, then (2) radii, then (2) n assays.
             # See ordering example when there are 2 radii (r1, r2):
