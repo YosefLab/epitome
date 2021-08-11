@@ -297,7 +297,8 @@ class EpitomeDataset:
         :param str data_dir: Directory that should contain the data.h5 file.
         :param str assembly: Genome assembly that should be saved.
         :return: directory containing data.h5 file
-        :rtype: str
+                genome assembly of the data
+        :rtype: tuple
         '''
         if (data_dir is not None) and (assembly is not None):
             epitome_data_dir = os.path.join(data_dir, assembly)
@@ -309,7 +310,7 @@ class EpitomeDataset:
             print("Warning: genome assembly was not set in EpitomeDataset. Defaulting assembly to %s." % DEFAULT_EPITOME_ASSEMBLY)
             epitome_data_dir = os.path.join(DEFAULT_EPITOME_DATA_PATH, DEFAULT_EPITOME_ASSEMBLY)
             assembly = DEFAULT_EPITOME_ASSEMBLY
-        return epitome_data_dir
+        return epitome_data_dir, assembly
 
     @staticmethod
     def list_genome_assemblies():
@@ -328,7 +329,7 @@ class EpitomeDataset:
         :return: directory containing data.h5 file
         :rtype: str
         '''
-        epitome_data_dir = EpitomeDataset.get_data_dir(data_dir, assembly)
+        epitome_data_dir, assembly = EpitomeDataset.get_data_dir(data_dir, assembly)
 
         if not EpitomeDataset.contains_required_files(epitome_data_dir):
             # Grab data directory and download it from S3 if it doesn't have the required files
@@ -541,7 +542,7 @@ class EpitomeDataset:
         :param list test_chrs: list of test chromsomes, str
 
         '''
-        epitome_data_dir = EpitomeDataset.get_data_dir(out_path, assembly)
+        epitome_data_dir, __ = EpitomeDataset.get_data_dir(out_path, assembly)
         if os.path.exists(os.path.join(epitome_data_dir, EPITOME_H5_FILE)):
             raise Exception("%s already exists at %s" % (EPITOME_H5_FILE, epitome_data_dir))
 
