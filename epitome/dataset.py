@@ -697,7 +697,7 @@ class EpitomeDataset:
                         row_df,
                         regions_df,
                         binSize,
-                        self.assembly,
+                        'test',
                         'random_source',
                         valid_chrs = self.valid_chrs,
                         test_chrs = self.test_chrs)
