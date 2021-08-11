@@ -433,6 +433,10 @@ class PeakModel():
         # they are not even, because some cells have missing data.
         cell_lens = [i.shape[-1] for i in self.train_iter.element_spec[:-2]]
 
+        print("cell lens", cell_lens)
+        print(self.train_iter.element_spec)
+        print("inputs", inputs)
+
         # split matrix inputs into tuple of cell line specific features
         split_inputs = tf.split(tf.dtypes.cast(inputs, tf.float32), cell_lens, axis=1)
 
@@ -802,7 +806,12 @@ class EpitomeModel(PeakModel):
 
         gen_to_list = list(gen())
         to_stack = list(to_stack())
-        gen_to_list = np.array(gen_to_list)
+        # print(type(gen_to_list[0][0]))
+        # print(gen_to_list[1])
+        gen_to_list = list(map(lambda x: x[0], gen_to_list))
+        print(gen_to_list)
+        gen_to_list = np.array(gen_to_list, dtype=np.float)
+        print(gen_to_list.shape)
 
         # reshape to n_regions [from regions] x nassays [acc dim 1] x n_samples
         radii = self.radii
@@ -834,6 +843,10 @@ class EpitomeModel(PeakModel):
             a = np.transpose(accessibility_peak_matrix, axes=[1, 0])
         
         a = a[:, None, :]
+        # accessibility_peak_matrix = accessibility_peak_matrix[:, None, :]
+
+        # print(gen_to_list.shape)
+        # print(accessibility_peak_matrix.shape)
         
         out = compute_casv(gen_to_list, a, radii)
 
@@ -877,8 +890,20 @@ class EpitomeModel(PeakModel):
         
 
         results = []
+        print('--------------')
+        print(type(to_stack))
+        print(num_cells)
+        print(num_regions)
+        to_stack = to_stack.squeeze()
+        print(to_stack[0])
+        print('--')
+        print(to_stack[0][0])
+        print(to_stack[0, 0, :][0][None, :])
+        
+        temp = tf.convert_to_tensor(to_stack[0, 0, :][0][None, :])
         for c in tqdm.tqdm(range(num_cells)):
             for r in range(num_regions):
+                print(c, r)
                 results.append(self._predict(to_stack[c, r, :][0][None, :]))
 
         results = np.stack(results)
