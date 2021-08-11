@@ -46,6 +46,8 @@ import shutil
 # to load in positions file
 import multiprocessing
 
+################## LOADING DATA ######################
+
 def download_and_unzip(url, dst):
     '''
     Downloads a url to local destination, unzips it and deletes zip.
@@ -56,11 +58,11 @@ def download_and_unzip(url, dst):
     if not os.path.exists(dst):
         os.makedirs(dst)
 
+    input_dst = dst
     dst = os.path.join(dst, os.path.basename(url))
 
     final_dst = dst.split('.zip')[0]
 
-    # download data if it does not exist
     if not os.path.exists(final_dst):
 
         file_size = int(urllib.request.urlopen(url).info().get('Content-Length', -1))
@@ -85,12 +87,15 @@ def download_and_unzip(url, dst):
     if url.endswith('.zip'):
 
         # Extract zip data if it does not exist
-        if not os.path.exists(final_dst):
+        if (not os.path.exists(final_dst)) or (len(os.listdir(final_dst)) == 0):
             with ZipFile(dst, 'r') as zipObj:
                zipObj.extractall(os.path.dirname(dst))
-
             # delete old zip to free space
             os.remove(dst)
+            # delete nested directory
+            for f in os.listdir(final_dst):
+                os.rename(os.path.join(final_dst, f), os.path.join(input_dst, f))
+            os.rmdir(final_dst)
 
 ################### Parsing data from bed file ########################
 def bed2Pyranges(bed_file):

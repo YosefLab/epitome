@@ -71,14 +71,17 @@ You can generate your own Epitome dataset from ENCODE using the following comman
                           http://hgdownload.cse.ucsc.edu/admin/exe/
 
 
-To use your own dataset in an Epitome model, make sure to set the environment environment variable
-``EPITOME_DATA_PATH`` that points to your custom dataset. This will tell Epitome where to load
-data from.
+To use your own dataset in an Epitome model, make sure to specify the ``data_dir``
+and/or ``assembly`` variables when creating the ``EpitomeDataset`` class. This
+will tell Epitome where to load data from. If neither variables are specified,
+the default assembly will be downloaded from the Epitome AWS S3 cluster into the
+default data directory on your machine. See `Load your processed dataset <./dataset.html>`__ for more details.
 
-.. code:: bash
+.. code:: python
 
-  import os
-  os.environ["EPITOME_DATA_PATH"] = 'path/to/my/epitome/dataset'
+  from epitome.dataset import *
+
+  dataset = EpitomeDataset(data_dir="path/to/configured/data", assembly="hg19")
   ...
 
 

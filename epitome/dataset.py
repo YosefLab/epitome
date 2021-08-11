@@ -21,16 +21,21 @@ import warnings
 from sklearn.metrics import jaccard_score
 
 # local imports
-from epitome import *
 from .constants import Dataset
 from .functions import download_and_unzip
 from .viz import plot_assay_heatmap
 
 ################### File accession constants #######################
-S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/hg19.zip'
+S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com'
 
-# os env that should be set by user to explicitly set the data path
-EPITOME_DATA_PATH_ENV="EPITOME_DATA_PATH"
+# List of available assembiles in S3_DATA_PATH
+EPITOME_GENOME_ASSEMBLIES = ['hg19', 'hg38', 'test']
+# default genome assembly
+DEFAULT_EPITOME_ASSEMBLY = "hg19"
+# default path to where all epitome related information is stored
+EPITOME_USER_PATH = os.path.join(os.path.expanduser('~'), '.epitome')
+# default path to where epitome data is installed. Subdirectory of EPITOME_USER_PATH
+DEFAULT_EPITOME_DATA_PATH = os.path.join(EPITOME_USER_PATH, 'data')
 
 # data files required by epitome
 # data.h5 contains data, row information (celltypes and targets) and
@@ -71,7 +76,8 @@ class EpitomeDataset:
                  cells = None,
                  min_cells_per_target = 3,
                  min_targets_per_cell = 2,
-                 similarity_targets = ['DNase']):
+                 similarity_targets = ['DNase'],
+                 assembly=None):
         '''
         Initializes an EpitomeDataset.
 
@@ -87,9 +93,10 @@ class EpitomeDataset:
           (ie. DNase, H3K27ac, etc.)
         '''
 
-
+        if assembly is not None:
+            self.assembly = assembly
         # get directory where h5 file is stored
-        self.data_dir = EpitomeDataset.get_data_dir(data_dir)
+        self.data_dir = EpitomeDataset.download_data_dir(data_dir, assembly)
         self.h5_path = os.path.join(self.data_dir, EPITOME_H5_FILE)
 
         # save all parameters for any future use
@@ -154,9 +161,12 @@ class EpitomeDataset:
         self.valid_chrs = [i.decode() for i in dataset['columns']['index']['valid_chrs'][:]]
         self.test_chrs = [i.decode() for i in dataset['columns']['index']['test_chrs'][:]]
 
-        self.assembly = dataset['meta']['assembly'][:][0].decode()
+        dataset_assembly = dataset['meta']['assembly'][:][0].decode()
+        if assembly is not None:
+            assert assembly == dataset_assembly, "Different assemblies"
+        else:
+            self.assembly = dataset_assembly
         self.source = dataset['meta']['source'][:][0].decode()
-
 
         dataset.close()
 
@@ -237,7 +247,7 @@ class EpitomeDataset:
 
 
     @staticmethod
-    def get_y_indices_for_cell(matrix, cellmap,  cell):
+    def get_y_indices_for_cell(matrix, cellmap, cell):
         '''
         Gets indices for a cell.
         TODO: this function is called in genertors.py.
@@ -267,25 +277,65 @@ class EpitomeDataset:
         return np.copy(matrix[:,targetmap[target]])
 
     @staticmethod
-    def get_data_dir(data_dir=None):
+    def contains_required_files(data_dir):
+        # make sure all required files exist
+        required_paths = [os.path.join(data_dir, x) for x in REQUIRED_FILES]
+        return np.all([os.path.exists(x) for x in required_paths])
+
+    @staticmethod
+    def get_data_dir(data_dir=None, assembly=None):
+        '''
+        If both data_dir and assembly are set, it will return the data_dir with the specified
+        assembly. If only the assembly is set, it will return the default data_dir with the specified
+        assembly. If only the data_dir is set, it will just return the data_path. If neither data_dir
+        nor assembly are set, it will return the default data_dir with the default assembly.
+
+        :param str data_dir: Directory that should contain the data.h5 file.
+        :param str assembly: Genome assembly that should be saved.
+        :return: directory containing data.h5 file
+                genome assembly of the data
+        :rtype: tuple
+        '''
+        if (data_dir is not None) and (assembly is not None):
+            epitome_data_dir = os.path.join(data_dir, assembly)
+        elif (assembly is not None):
+            epitome_data_dir = os.path.join(DEFAULT_EPITOME_DATA_PATH, assembly)
+        elif (data_dir is not None):
+            epitome_data_dir = data_dir
+        else:
+            print("Warning: genome assembly was not set in EpitomeDataset. Defaulting assembly to %s." % DEFAULT_EPITOME_ASSEMBLY)
+            epitome_data_dir = os.path.join(DEFAULT_EPITOME_DATA_PATH, DEFAULT_EPITOME_ASSEMBLY)
+            assembly = DEFAULT_EPITOME_ASSEMBLY
+        return epitome_data_dir, assembly
+
+    @staticmethod
+    def list_genome_assemblies():
+        return ", ".join(EPITOME_GENOME_ASSEMBLIES)
+
+    @staticmethod
+    def download_data_dir(data_dir=None, assembly=None):
         '''
         Loads data processed from data/download_encode.py. This will check that all required files
-        exist.
+        exist. If both data_dir and assembly are set, it will return the data_dir with the specified
+        assembly. If only the assembly is set, it will return the default data_dir with the specified
+        assembly. If only the data_dir is set, it will just return the data_path. If neither data_dir
+        nor assembly are set, it will return the default data_dir with the default assembly.
 
         :param str data_dir: Directory containing data.h5 file saved in data/download_encode.py script.
         :return: directory containing data.h5 file
         :rtype: str
         '''
+        epitome_data_dir, assembly = EpitomeDataset.get_data_dir(data_dir, assembly)
 
-        if not data_dir:
-            data_dir = GET_DATA_PATH()
-            download_and_unzip(S3_DATA_PATH, os.path.dirname(data_dir))
-
-        # make sure all required files exist
-        required_paths = [os.path.join(data_dir, x) for x in  REQUIRED_FILES]
-        assert(np.all([os.path.exists(x) for x in required_paths]))
-
-        return data_dir
+        if not EpitomeDataset.contains_required_files(epitome_data_dir):
+            # Grab data directory and download it from S3 if it doesn't have the required files
+            assert assembly is not None, "Specify assembly to download."
+            assert assembly in EPITOME_GENOME_ASSEMBLIES, "assembly %s data is not in the S3 cluster. Must be either in %s" % (assembly, EpitomeDataset.list_genome_assemblies())
+            url_path = os.path.join(S3_DATA_PATH, assembly + ".zip")
+            download_and_unzip(url_path, epitome_data_dir)
+            # Make sure all required files exist
+            assert EpitomeDataset.contains_required_files(epitome_data_dir)
+        return epitome_data_dir
 
     def list_targets(self):
         '''
@@ -297,11 +347,11 @@ class EpitomeDataset:
         '''
         return list(self.targetmap)
 
-
     @staticmethod
     def get_assays(targets = None,
                      cells = None,
                      data_dir = None,
+                     assembly = None,
                      min_cells_per_target = 3,
                      min_targets_per_cell = 2,
                      similarity_targets = ['DNase']):
@@ -320,8 +370,7 @@ class EpitomeDataset:
         :rtype: tuple
         '''
 
-        if not data_dir:
-            data_dir = GET_DATA_PATH()
+        data_dir = EpitomeDataset.download_data_dir(data_dir, assembly)
 
         data = h5py.File(os.path.join(data_dir, EPITOME_H5_FILE), 'r')
 
@@ -489,9 +538,9 @@ class EpitomeDataset:
         :param list test_chrs: list of test chromsomes, str
 
         '''
-
-        if os.path.exists(os.path.join(out_path, EPITOME_H5_FILE)):
-            raise Exception("%s already exists at %s" % (EPITOME_H5_FILE, out_path))
+        epitome_data_dir, __ = EpitomeDataset.get_data_dir(out_path, assembly)
+        if os.path.exists(os.path.join(epitome_data_dir, EPITOME_H5_FILE)):
+            raise Exception("%s already exists at %s" % (EPITOME_H5_FILE, epitome_data_dir))
 
         # assertions
         assert all_data.dtype == np.dtype('int8'), "all_data type should be int8"
@@ -504,12 +553,12 @@ class EpitomeDataset:
         assert np.all([type(i)==str for i in valid_chrs]), "valid_chrs elements must be type string"
         assert np.all([type(i)==str for i in test_chrs]), "test_chrs elements must be type string"
 
-        if not os.path.exists(out_path):
-            os.makedirs(out_path)
+        if not os.path.exists(epitome_data_dir):
+            os.makedirs(epitome_data_dir)
 
         try:
             # toy dataset with everything in it
-            new_data = h5py.File(os.path.join(out_path, EPITOME_H5_FILE), 'w')
+            new_data = h5py.File(os.path.join(epitome_data_dir, EPITOME_H5_FILE), 'w')
 
             # 0. set data
             data = new_data.create_dataset("data", all_data.shape, dtype=all_data.dtype, compression="gzip", compression_opts=9)
@@ -592,7 +641,6 @@ class EpitomeDataset:
             source_ds = meta.create_dataset('source', (1,), dtype="|S%i" % len(source),
                                        compression="gzip", compression_opts=9)
             source_ds[:]=source.encode()
-
 
             # 4. Make sure we have all the correct keys
             keys = sorted(set(EpitomeDataset.all_keys(new_data)))

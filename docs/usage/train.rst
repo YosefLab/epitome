@@ -68,7 +68,7 @@ loss stops improving, the model will stop training early:
 If you are concerned about the model above overtraining because the model continues
 to improve by miniscule amounts, you can specify the min-delta which is minimum
 change in the train-validation loss required to qualify as an improvement. In the
-model below, a minimum improvement of at least 0.1 is required for the model to
+model below, a minimum improvement of at least 0.01 is required for the model to
 qualify as improving.
 
 If you are concerned about the model above under-fitting (stopping training too
@@ -86,7 +86,7 @@ be found in the `Github repo <https://github.com/YosefLab/epitome>`__.
 
 	best_model_batches, total_trained_batches, train_valid_losses = model.train(5000,
 		patience = 3,
-		min_delta = 0.1)
+		min_delta = 0.01)
 
 Test the Model
 ----------------

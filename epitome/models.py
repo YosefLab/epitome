@@ -242,7 +242,7 @@ class PeakModel():
 
         return tf.math.reduce_sum(loss, axis=0)
 
-    def train(self, max_train_batches, patience=1, min_delta=0):
+    def train(self, max_train_batches, patience=3, min_delta=0.01):
         '''
         Trains an Epitome model. If the patience and min_delta are not specified, the model will train on max_train_batches.
         Else, the model will either train on max_train_batches or stop training early if the train_valid_loss is converging

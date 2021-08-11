@@ -144,7 +144,6 @@ def load_data(data,
 
         else:
             indices = range(0, data.shape[-1]) # not training mode, set to all points
-
     if (mode == Dataset.RUNTIME):
         label_cell_types = ["PLACEHOLDER_CELL"]
         if similarity_matrix is None:

@@ -1,7 +1,7 @@
 from epitome.test import EpitomeTestCase
 from epitome.test import *
 from epitome.functions import *
-from epitome.dataset import EpitomeDataset, REQUIRED_KEYS, EPITOME_H5_FILE
+from epitome.dataset import EpitomeDataset, REQUIRED_KEYS, EPITOME_H5_FILE, DEFAULT_EPITOME_DATA_PATH
 from epitome.constants import Dataset
 
 import os
@@ -14,17 +14,15 @@ class DatasetTest(EpitomeTestCase):
 
     def __init__(self, *args, **kwargs):
         super(DatasetTest, self).__init__(*args, **kwargs)
-        self.dataset = EpitomeDataset()
+        self.dataset = EpitomeDataset(data_dir=self.epitome_data_dir,
+				      assembly=self.epitome_assembly)
 
     def test_user_data_path(self):
         # user data path should be able to be explicitly set
-        datapath = GET_DATA_PATH()
-        self.assertTrue(datapath == os.environ["EPITOME_DATA_PATH"])
+        self.assertTrue(self.dataset.data_dir == self.epitome_test_dir)
 
     def test_save(self):
-
         out_path = self.tmpFile()
-        print(out_path)
 
         # generate 100 records for each chromosome
         PER_CHR_RECORDS=10
@@ -64,7 +62,7 @@ class DatasetTest(EpitomeTestCase):
 
 
         # load back in dataset and make sure it checks out
-        dataset = EpitomeDataset(data_dir = out_path)
+        dataset = EpitomeDataset(data_dir = out_path, assembly = assembly)
 
         assert dataset.assembly == assembly
         assert dataset.source == source
@@ -80,7 +78,11 @@ class DatasetTest(EpitomeTestCase):
 
         matrix, cellmap, targetmap = EpitomeDataset.get_assays(
 				targets = eligible_targets,
-				cells = eligible_cells, min_cells_per_target = 3, min_targets_per_cell = 1)
+				cells = eligible_cells,
+                min_cells_per_target = 3,
+                min_targets_per_cell = 1,
+                data_dir = self.epitome_data_dir,
+                assembly = self.epitome_assembly)
 
         self.assertTrue(matrix[cellmap['IMR-90']][targetmap['H4K8ac']]==0) # data for first row
 
@@ -88,9 +90,12 @@ class DatasetTest(EpitomeTestCase):
     def test_get_assays_single_target(self):
         TF = ['DNase', 'JUND']
 
-        matrix, cellmap, targetmap = EpitomeDataset.get_assays(targets = TF,
+        __, __, targetmap = EpitomeDataset.get_assays(
+                targets = TF,
                 min_cells_per_target = 2,
-                min_targets_per_cell = 2)
+                min_targets_per_cell = 2,
+                data_dir = self.epitome_data_dir,
+                assembly = self.epitome_assembly)
 
         targets = list(targetmap)
         # Make sure only JUND and DNase are in list of targets
@@ -102,10 +107,13 @@ class DatasetTest(EpitomeTestCase):
     def test_get_targets_without_DNase(self):
         TF = 'JUND'
 
-        matrix, cellmap, targetmap = EpitomeDataset.get_assays(targets = TF,
+        __, __, targetmap = EpitomeDataset.get_assays(
+                targets = TF,
                 similarity_targets = ['H3K27ac'],
                 min_cells_per_target = 2,
-                min_targets_per_cell = 1)
+                min_targets_per_cell = 1,
+                data_dir = self.epitome_data_dir,
+                assembly = self.epitome_assembly)
 
         targets = list(targetmap)
         # Make sure only JUND and is in list of targets
@@ -114,17 +122,20 @@ class DatasetTest(EpitomeTestCase):
         self.assertTrue('H3K27ac' in targets)
 
     def test_list_targets(self):
-        targets =self.dataset.list_targets()
+        targets = self.dataset.list_targets()
         self.assertTrue(len(targets) == len(self.dataset.targetmap))
 
 
     def test_get_assays_without_DNase(self):
         TF = 'JUND'
 
-        matrix, cellmap, targetmap = EpitomeDataset.get_assays(targets = TF,
+        __, __, targetmap = EpitomeDataset.get_assays(
+                targets = TF,
                 similarity_targets = ['H3K27ac'],
                 min_cells_per_target = 2,
-                min_targets_per_cell = 1)
+                min_targets_per_cell = 1,
+                data_dir = self.epitome_data_dir,
+                assembly = self.epitome_assembly)
 
         targets = list(targetmap)
         # Make sure only JUND and is in list of assays
@@ -136,13 +147,17 @@ class DatasetTest(EpitomeTestCase):
         # https://github.com/YosefLab/epitome/issues/22
         with warnings.catch_warnings(record=True) as warning_list:
             warnings.simplefilter('always')
-            matrix, cellmap, targetmap = EpitomeDataset.get_assays(targets = ['DNase','SPI1', 'PAX5'],min_cells_per_target=2, min_targets_per_cell=2)
+            __, __, __ = EpitomeDataset.get_assays(
+                    targets = ['DNase','SPI1', 'PAX5'],
+                    min_cells_per_target=2,
+                    min_targets_per_cell=2,
+                    data_dir = self.epitome_data_dir,
+                    assembly = self.epitome_assembly)
             self.assertTrue(len(warning_list) == 1) # one for SPI1 and PAX5
             self.assertTrue(all(item.category == UserWarning for item in warning_list))
 
 
     def test_get_data(self):
-
         train_data = self.dataset.get_data(Dataset.TRAIN)
         self.assertTrue(train_data.shape[0] == np.where(self.dataset.matrix!= -1)[0].shape[0])
         self.assertTrue(train_data.shape[1] == 1800)
@@ -185,7 +200,9 @@ class DatasetTest(EpitomeTestCase):
 
     def test_reserve_validation_indices(self):
         # new dataset because we are modifying it
-        dataset = EpitomeDataset()
+        dataset = EpitomeDataset(
+                data_dir=self.epitome_data_dir,
+                assembly=self.epitome_assembly)
         self.assertTrue(dataset.get_data(Dataset.TRAIN).shape == (746, 1800))
         self.assertTrue(dataset.get_data(Dataset.TRAIN_VALID).shape == (746,0))
 
@@ -205,3 +222,44 @@ class DatasetTest(EpitomeTestCase):
         joined_indices = np.concatenate([dataset.indices[Dataset.TRAIN_VALID], dataset.indices[Dataset.TRAIN]])
         joined_indices.sort()
         self.assertTrue(len(np.setdiff1d(joined_indices, old_indices)) == 0 and len(np.setdiff1d(old_indices, joined_indices)) == 0)
+
+    def test_download_data_dir(self):
+        # Test unspecified model to have default data dir path
+        assert self.dataset.data_dir == self.epitome_test_dir
+
+        # Create new dataset with new undownloaded data path
+        epitome_test_data_dir = os.path.dirname(self.epitome_test_dir)
+        assert EpitomeDataset.download_data_dir(
+                    data_dir=epitome_test_data_dir,
+                    assembly="hg38") == os.path.join(epitome_test_data_dir, "hg38")
+
+        # Should download the default data assembly
+        default_data_dir = os.path.join(DEFAULT_EPITOME_DATA_PATH, "hg19")
+        assert EpitomeDataset.download_data_dir() == default_data_dir
+
+        # Should error because assembly isn't contained in S3 cluster
+        with pytest.raises(AssertionError):
+            EpitomeDataset.download_data_dir(assembly="fake_assembly")
+
+        # Should error because data_dir doesn't have required files & assembly isn't specified
+        data_dir = os.path.join(epitome_test_data_dir, "fake_dir")
+        with pytest.raises(AssertionError):
+            EpitomeDataset.download_data_dir(data_dir=data_dir)
+
+        # Pass because data_dir doesn't have required files & assembly isn't specified
+        data_dir = os.path.join(epitome_test_data_dir, "fake_dir")
+        assert EpitomeDataset.download_data_dir(
+                    data_dir=data_dir,
+                    assembly=self.epitome_assembly) == os.path.join(data_dir, self.epitome_assembly)
+
+        # Still fails because data_dir isn't the absolute data path downloaded above.
+        data_dir = os.path.join(epitome_test_data_dir, "fake_dir")
+        with pytest.raises(AssertionError):
+            EpitomeDataset.download_data_dir(data_dir=data_dir)
+
+        # Pass because data_dir now has the required files
+        data_dir = os.path.join(os.path.join(epitome_test_data_dir, "fake_dir"), self.epitome_assembly)
+        assert EpitomeDataset.download_data_dir(data_dir=data_dir) == data_dir
+
+def test_list_genome_assemblies():
+    assert EpitomeDataset.list_genome_assemblies() == "hg19, hg38, test"
