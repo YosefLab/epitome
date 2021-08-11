@@ -38,7 +38,7 @@ number of ChIP-seq targets required to include a celltype. By default,
 
 	dataset = EpitomeDataset(targets=targets,
 		min_cells_per_target = 4, # requires that each ChIP-seq target has data from at least 4 cell types
-		min_targets_per_cell = 3, # requires that each cell type has data for all three ChIP-seq targets)
+		min_targets_per_cell = 3) # requires that each cell type has data for all three ChIP-seq targets
 
 
 Note that by default, EpitomeDataset sets DNase-seq (DNase) to be used to compute

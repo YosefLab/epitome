@@ -22,7 +22,6 @@ class DatasetTest(EpitomeTestCase):
 
     def test_save(self):
         out_path = self.tmpFile()
-        print(out_path)
 
         # generate 100 records for each chromosome
         PER_CHR_RECORDS=10
@@ -62,7 +61,7 @@ class DatasetTest(EpitomeTestCase):
 
 
         # load back in dataset and make sure it checks out
-        dataset = EpitomeDataset(data_dir = out_path, assembly=assembly)
+        dataset = EpitomeDataset(data_dir = out_path, assembly = assembly)
 
         assert dataset.assembly == assembly
         assert dataset.source == source
@@ -221,39 +220,39 @@ class DatasetTest(EpitomeTestCase):
         joined_indices.sort()
         self.assertTrue(len(np.setdiff1d(joined_indices, old_indices)) == 0 and len(np.setdiff1d(old_indices, joined_indices)) == 0)
 
-    def test_get_data_dir(self):
+    def test_download_data_dir(self):
         # Test unspecified model to have default data dir path
         assert self.dataset.data_dir == self.epitome_test_dir
 
         # Create new dataset with new undownloaded data path
         epitome_test_data_dir = os.path.dirname(self.epitome_test_dir)
-        assert EpitomeDataset.get_data_dir(data_dir=epitome_test_data_dir, assembly="hg38") == os.path.join(epitome_test_data_dir, "hg38")
+        assert EpitomeDataset.download_data_dir(data_dir=epitome_test_data_dir, assembly="hg38") == os.path.join(epitome_test_data_dir, "hg38")
 
         # Should error because undownloaded data path doesn't have a specified assembly
         default_data_dir = os.path.join(DEFAULT_EPITOME_DATA_PATH, "hg19")
-        assert EpitomeDataset.get_data_dir() == default_data_dir
+        assert EpitomeDataset.download_data_dir() == default_data_dir
 
         # Should error because assembly isn't contained in S3 cluster
         with pytest.raises(AssertionError):
-            EpitomeDataset.get_data_dir(assembly="fake_assembly")
+            EpitomeDataset.download_data_dir(assembly="fake_assembly")
 
         # Should error because data_dir doesn't have required files & assembly isn't specified
         data_dir = os.path.join(epitome_test_data_dir, "fake_dir")
         with pytest.raises(AssertionError):
-            EpitomeDataset.get_data_dir(data_dir=data_dir)
+            EpitomeDataset.download_data_dir(data_dir=data_dir)
 
         # Pass because data_dir doesn't have required files & assembly isn't specified
         data_dir = os.path.join(epitome_test_data_dir, "fake_dir")
-        assert EpitomeDataset.get_data_dir(data_dir=data_dir, assembly=self.epitome_assembly) == os.path.join(data_dir, self.epitome_assembly)
+        assert EpitomeDataset.download_data_dir(data_dir=data_dir, assembly=self.epitome_assembly) == os.path.join(data_dir, self.epitome_assembly)
 
         # Still fails because data_dir isn't the absolute data path downloaded above.
         data_dir = os.path.join(epitome_test_data_dir, "fake_dir")
         with pytest.raises(AssertionError):
-            EpitomeDataset.get_data_dir(data_dir=data_dir)
+            EpitomeDataset.download_data_dir(data_dir=data_dir)
 
         # Pass because data_dir now has the required files
         data_dir = os.path.join(os.path.join(epitome_test_data_dir, "fake_dir"), self.epitome_assembly)
-        assert EpitomeDataset.get_data_dir(data_dir=data_dir) == data_dir
+        assert EpitomeDataset.download_data_dir(data_dir=data_dir) == data_dir
 
 def test_list_genome_assemblies():
     assert EpitomeDataset.list_genome_assemblies() == "hg19, hg38, test"
