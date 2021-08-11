@@ -10,7 +10,6 @@ class EpitomeTestCase(unittest.TestCase):
 
 	def __init__(self, *args, **kwargs):
 		# class definitions
-		self.S3_DATA_PATH = 'https://epitome-data.s3-us-west-1.amazonaws.com/test.zip'
 		dir_path = os.path.dirname(os.path.realpath(__file__))
 		self.epitome_assembly = "test"
 		self.epitome_data_dir = os.path.abspath(os.path.join(dir_path, "data"))

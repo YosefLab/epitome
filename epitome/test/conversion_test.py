@@ -127,7 +127,8 @@ class ConveresionTest(EpitomeTestCase):
                 targets = targets,
         		cells=['PC-9','Panc1','IMR-90','H1'],
                 min_cells_per_target =2,
-                data_dir = self.epitome_data_dir, assembly=self.epitome_assembly)
+                data_dir = self.epitome_data_dir,
+                assembly=self.epitome_assembly)
 
         # set predictions to 1s so means could be greater than 1 if done wrong
         preds = np.ones((1, 10, 1))

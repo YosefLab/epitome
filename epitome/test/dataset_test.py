@@ -199,7 +199,9 @@ class DatasetTest(EpitomeTestCase):
 
     def test_reserve_validation_indices(self):
         # new dataset because we are modifying it
-        dataset = EpitomeDataset(data_dir=self.epitome_data_dir, assembly=self.epitome_assembly)
+        dataset = EpitomeDataset(
+                data_dir=self.epitome_data_dir,
+                assembly=self.epitome_assembly)
         self.assertTrue(dataset.get_data(Dataset.TRAIN).shape == (746, 1800))
         self.assertTrue(dataset.get_data(Dataset.TRAIN_VALID).shape == (746,0))
 
@@ -226,9 +228,11 @@ class DatasetTest(EpitomeTestCase):
 
         # Create new dataset with new undownloaded data path
         epitome_test_data_dir = os.path.dirname(self.epitome_test_dir)
-        assert EpitomeDataset.download_data_dir(data_dir=epitome_test_data_dir, assembly="hg38") == os.path.join(epitome_test_data_dir, "hg38")
+        assert EpitomeDataset.download_data_dir(
+                    data_dir=epitome_test_data_dir,
+                    assembly="hg38") == os.path.join(epitome_test_data_dir, "hg38")
 
-        # Should error because undownloaded data path doesn't have a specified assembly
+        # Should download the default data assembly
         default_data_dir = os.path.join(DEFAULT_EPITOME_DATA_PATH, "hg19")
         assert EpitomeDataset.download_data_dir() == default_data_dir
 
@@ -243,7 +247,9 @@ class DatasetTest(EpitomeTestCase):
 
         # Pass because data_dir doesn't have required files & assembly isn't specified
         data_dir = os.path.join(epitome_test_data_dir, "fake_dir")
-        assert EpitomeDataset.download_data_dir(data_dir=data_dir, assembly=self.epitome_assembly) == os.path.join(data_dir, self.epitome_assembly)
+        assert EpitomeDataset.download_data_dir(
+                    data_dir=data_dir,
+                    assembly=self.epitome_assembly) == os.path.join(data_dir, self.epitome_assembly)
 
         # Still fails because data_dir isn't the absolute data path downloaded above.
         data_dir = os.path.join(epitome_test_data_dir, "fake_dir")
