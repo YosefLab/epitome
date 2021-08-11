@@ -81,6 +81,7 @@ class ModelsTest(EpitomeTestCase):
 		assert m > 0.4 and m < 0.6
 
 		n_steps = 300
+		# set min_delta high and patience = 1 so it converges fast
 		_, num_steps, _ = model.train(n_steps,min_delta=sys.maxsize,patience=1)
 		assert num_steps < n_steps
 
