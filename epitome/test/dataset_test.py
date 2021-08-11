@@ -14,7 +14,8 @@ class DatasetTest(EpitomeTestCase):
 
     def __init__(self, *args, **kwargs):
         super(DatasetTest, self).__init__(*args, **kwargs)
-        self.dataset = EpitomeDataset(data_dir=self.epitome_data_dir, assembly=self.epitome_assembly)
+        self.dataset = EpitomeDataset(data_dir=self.epitome_data_dir, 
+				      assembly=self.epitome_assembly)
 
     def test_user_data_path(self):
         # user data path should be able to be explicitly set
