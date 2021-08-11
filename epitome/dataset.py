@@ -96,10 +96,7 @@ class EpitomeDataset:
         if assembly is not None:
             self.assembly = assembly
         # get directory where h5 file is stored
-        print("input data_dir: ", data_dir)
-        print("input assembly: ", assembly)
         self.data_dir = EpitomeDataset.download_data_dir(data_dir, assembly)
-        print("data_dir: ", self.data_dir)
         self.h5_path = os.path.join(self.data_dir, EPITOME_H5_FILE)
 
         # save all parameters for any future use
@@ -170,7 +167,6 @@ class EpitomeDataset:
         else:
             self.assembly = dataset_assembly
         self.source = dataset['meta']['source'][:][0].decode()
-        print("init source: ", str(self.source))
 
         dataset.close()
 
@@ -645,8 +641,6 @@ class EpitomeDataset:
             source_ds = meta.create_dataset('source', (1,), dtype="|S%i" % len(source),
                                        compression="gzip", compression_opts=9)
             source_ds[:]=source.encode()
-            print("source_ds: ", str(source_ds[:]))
-
 
             # 4. Make sure we have all the correct keys
             keys = sorted(set(EpitomeDataset.all_keys(new_data)))
