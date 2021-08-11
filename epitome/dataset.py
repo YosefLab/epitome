@@ -294,7 +294,8 @@ class EpitomeDataset:
         :param str data_dir: Directory that should contain the data.h5 file.
         :param str assembly: Genome assembly that should be saved.
         :return: directory containing data.h5 file
-        :rtype: str
+        :return: assembly
+        :rtype: tuple
         '''
         if (data_dir is not None) and (assembly is not None):
             epitome_data_dir = os.path.join(data_dir, assembly)
