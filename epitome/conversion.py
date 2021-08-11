@@ -97,10 +97,7 @@ class RegionConversion:
         assert vector.shape[0] == len(self.compare), "Error: value_vector must be the same shape as self.compare"
 
         base_vector = np.zeros((len(self.base)))
-        print(base_vector.shape)
-
         tmp = self._get_overlap()
-        print(tmp)
 
         base_indices = tmp.idx_base.values
         convert_indices = tmp.idx.values
