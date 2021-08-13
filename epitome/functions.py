@@ -15,38 +15,22 @@ Helper functions
 
 # imports
 from epitome import *
-import h5py
-from scipy.io import savemat
 import csv
 import mimetypes
 
 import pandas as pd
-import collections
 import numpy as np
 import os
-from collections import Counter
-from itertools import groupby
-from scipy.io import loadmat
 
-import epitome
 from .constants import *
-import scipy.sparse
 import pyranges as pr
-from sklearn.metrics import jaccard_score
 
-import warnings
-from operator import itemgetter
 import urllib
-import sys
 import requests
 import urllib
 import tqdm
 from zipfile import ZipFile
 import gzip
-import shutil
-
-# to load in positions file
-import multiprocessing
 
 def download_and_unzip(url, dst):
     '''

@@ -15,6 +15,7 @@ Models
 from epitome import *
 import tensorflow as tf
 import pandas as pd
+import h5py
 
 from .functions import *
 from .constants import Dataset
@@ -809,12 +810,7 @@ class EpitomeModel(PeakModel):
         # print(type(gen_to_list[0][0]))
         # print(gen_to_list[1])
         gen_to_list = list(map(lambda x: x[0], gen_to_list))
-        print(gen_to_list)
         gen_to_list = np.array(gen_to_list, dtype=np.float)
-        print('sdsdfghjkgfghjkjhgf')
-        print(gen_to_list)
-        print(gen_to_list.shape)
-        print(gen_to_list[0].shape)
 
         # reshape to n_regions [from regions] x nassays [acc dim 1] x n_samples
         radii = self.radii
@@ -830,7 +826,7 @@ class EpitomeModel(PeakModel):
             added_indices = []
             old_idx, counter, old_i = 0, 0, 0
             indices_to_merge = []
-            for ctr, (i, i_base) in enumerate(zip(conversionObject.joined.idx, conversionObject.joined.idx_base)):
+            for (i, i_base) in zip(conversionObject.joined.idx, conversionObject.joined.idx_base):
                 if i_base == -1:
                     continue
                 if i != old_i:
@@ -893,17 +889,9 @@ class EpitomeModel(PeakModel):
         
 
         results = []
-        print('--------------')
-        print(type(to_stack))
-        print(num_cells)
-        print(num_regions)
+
         to_stack = to_stack.squeeze()
-        print(to_stack[0])
-        print('--')
-        print(to_stack[0][0])
-        print(to_stack[0, 0, :][0][None, :])
-        
-        temp = tf.convert_to_tensor(to_stack[0, 0, :][0][None, :])
+
         for c in tqdm.tqdm(range(num_cells)):
             for r in range(num_regions):
                 print(c, r)
