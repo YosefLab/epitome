@@ -42,8 +42,13 @@ class EpitomeTestCase(unittest.TestCase):
 			cells = eligible_cells)
 
 
-		return EpitomeModel(dataset,
-			test_celltypes = ['K562'])
+		z = EpitomeModel(dataset,
+			test_celltypes = ['K562'], single_cell = True)
+		
+		print(z.train_iter)
+		
+		print(9999999999999)
+		return None
 
 
 	def tmpFile(self):

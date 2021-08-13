@@ -54,7 +54,7 @@ def load_data(data,
     :param similarity_matrix: matrix with shape (len(similarity_targets), genome_size) containing binary 0/1s of peaks for similarity_targets
     to be compared in the CASV.
     :param indices: indices in genome to generate records for.
-    :param boolean continous: determines whether similarity_matrix has continuous values. If continous, we do not calculate agreement in the decreasing_train_valid_iters
+    :param boolean continuous: determines whether similarity_matrix has continuous values. If continuous, we do not calculate agreement in the decreasing_train_valid_iters
       TODO: remove this eventually, if you can show agreement does not help performance
     :param return_feature_names: boolean whether to return string names of features
     :param kwargs: kargs
@@ -218,8 +218,9 @@ def load_data(data,
                       agree_arrays = np.split(agree, split_indices, axis = -1)
                       similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays + agree_arrays)),axis=1)
                     else:
-                      # don't use agreement features when there are continous values
+                      # don't use agreement features when there are continuous values
                       similarities = np.stack(list(map(lambda x: np.average(x, axis = -1), pos_arrays)),axis=1)
+                      print('SINGLE CELL CONFIRMED')
                 else:
                     # no radius, so no similarities. just an empty placeholder
                     similarities = np.zeros((len(eval_cell_types),0,0))
