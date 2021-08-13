@@ -12,7 +12,8 @@ Models
 """
 
 
-from epitome import *
+from epitome.functions import compute_casv
+from epitome.generators import load_data
 import tensorflow as tf
 import pandas as pd
 import h5py
@@ -34,8 +35,6 @@ import gc
 # for saving model
 import pickle
 from operator import itemgetter
-
-from epitome import functions
 
 #######################################################################
 #################### Variational Peak Model ###########################
@@ -610,7 +609,7 @@ class PeakModel():
 
         print("columns for matrices are chr, start, end, %s" % ", ".join(self.dataset.predict_targets))
 
-    def score_matrix(self, accessilibility_peak_matrix, regions):
+    def score_matrix(self, accessibility_peak_matrix, regions):
         """ Runs predictions on a matrix of accessibility peaks, where columns are samples and
         rows are regions from regions_peak_file. rows in accessilibility_peak_matrix should matching
         :param numpy.matrix accessilibility_peak_matrix:  of (samples by genomic regions)
@@ -627,9 +626,9 @@ class PeakModel():
         results = []
 
         # TODO 9/10/2020: should do something more efficiently than a for loop
-        for sample_i in tqdm.tqdm(range(accessilibility_peak_matrix.shape[0])):
+        for sample_i in tqdm.tqdm(range(accessibility_peak_matrix.shape[0])):
 
-            peaks_i, idx = conversionObject.get_binary_vector(vector = accessilibility_peak_matrix[sample_i,:])
+            peaks_i, idx = conversionObject.get_binary_vector(vector = accessibility_peak_matrix[sample_i,:])
 
             preds = self.eval_vector(peaks_i, idx)
 
@@ -849,7 +848,6 @@ class EpitomeModel(PeakModel):
         
         out = compute_casv(gen_to_list, a, radii)
 
-        casv_len = out.shape[1]
         num_cells = out.shape[3]
         num_regions = out.shape[0]
         num_celltypes = out.shape[2]
@@ -870,10 +868,7 @@ class EpitomeModel(PeakModel):
                 naming_scheme = names[cell, region][0]
                 selected_casv = out[region, :, :, cell]
 
-                len_feats_per_celltype = int(selected_gen[0].shape[0] / num_celltypes) # 24 / 2 = 12
-
-                old_sg = selected_gen
-                
+                len_feats_per_celltype = int(selected_gen[0].shape[0] / num_celltypes) # 24 / 2 = 12                
 
                 for celltype in range(num_celltypes):
                     if num_targets is not None:

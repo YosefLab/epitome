@@ -203,13 +203,8 @@ def compute_casv(m1, m2, radii, indices= None):
     assert m1.shape[0] == m2.shape[0]
     # verify number of assays match
     assert m2.shape[1] == m1.shape[-1]/ncells
-    # print('HERE')
-    
-#     set_trace()
 
     def f(i):
-        
-#         set_trace()
         # get indices for each radius in radii
         radius_ranges = list(map(lambda x: get_radius_indices(radii, x, i, m1.shape[0]), range(len(radii))))
 
