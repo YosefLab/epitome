@@ -16,7 +16,7 @@ class ModelsTest(EpitomeTestCase):
 		super(ModelsTest, self).__init__(*args, **kwargs)
 		self.model = self.makeSmallModel()
 		self.validation_size = 10
-	
+
 	def test_score_peak_file(self):
 		test_similarity_peak_file = tempfile.NamedTemporaryFile(delete=False)
 		test_regions_peak_file = tempfile.NamedTemporaryFile(delete=False)

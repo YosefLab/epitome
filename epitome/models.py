@@ -425,7 +425,7 @@ class PeakModel():
         :return: predictions
         :rtype: np.ndarray
         """
-        
+
         # predict
         return self.predict_step_generator(inputs)
 
