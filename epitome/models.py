@@ -78,7 +78,7 @@ class PeakModel():
 
         # set the dataset
         self.dataset = dataset
-        # whether or not this model can train using continous datas
+        # whether or not this model can train using continuous datas
         self.single_cell = single_cell
 
         assert (set(test_celltypes) < set(list(self.dataset.cellmap))), \
@@ -110,7 +110,7 @@ class PeakModel():
                                                     dataset.matrix,
                                                     dataset.targetmap,
                                                     dataset.cellmap,
-                                                    continous = self.single_cell,
+                                                    continuous = self.single_cell,
                                                     similarity_targets= dataset.similarity_targets,
                                                     radii = radii, mode = Dataset.TRAIN),
                                                     batch_size, shuffle_size, prefetch_size)
@@ -121,7 +121,7 @@ class PeakModel():
                                                 dataset.matrix,
                                                 dataset.targetmap,
                                                 dataset.cellmap,
-                                                continous = self.single_cell,
+                                                continuous = self.single_cell,
                                                 similarity_targets = dataset.similarity_targets,
                                                 radii = radii, mode = Dataset.TRAIN),
                                                 batch_size, shuffle_size, prefetch_size)
@@ -132,7 +132,7 @@ class PeakModel():
                                                 dataset.matrix,
                                                 dataset.targetmap,
                                                 dataset.cellmap,
-                                                continous = self.single_cell,
+                                                continuous = self.single_cell,
                                                 similarity_targets = dataset.similarity_targets,
                                                 radii = radii, mode = Dataset.VALID),
                                                 batch_size, 1, prefetch_size)
@@ -145,7 +145,7 @@ class PeakModel():
                                                    dataset.matrix,
                                                    dataset.targetmap,
                                                    dataset.cellmap,
-                                                   continous = self.single_cell,
+                                                   continuous = self.single_cell,
                                                    similarity_targets = dataset.similarity_targets,
                                                    radii = radii, mode = Dataset.TEST),
                                                    batch_size, 1, prefetch_size)
@@ -398,7 +398,7 @@ class PeakModel():
                  self.dataset.matrix,
                  self.dataset.targetmap,
                  self.dataset.cellmap,
-                 continous = self.single_cell,
+                 continuous = self.single_cell,
                  radii = self.radii,
                  mode = Dataset.RUNTIME,
                  similarity_matrix = matrix,
