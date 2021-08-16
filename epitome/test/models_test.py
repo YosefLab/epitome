@@ -277,3 +277,11 @@ class ModelsTest(EpitomeTestCase):
 		# second two items have data, so should NOT be na
 		assert np.all(np.isnan(results[:2,:]))
 		assert np.all(~np.isnan(results[-2:,:]))
+
+	def test_predict_step_matrix(self):
+
+		print(self.model.train_iter.element_spec[0].shape[-1])
+
+		numpy_matrix = np.zeros((2,self.model.train_iter.element_spec[0].shape[-1]))
+
+		self.model._predict(numpy_matrix)
