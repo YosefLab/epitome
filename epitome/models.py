@@ -429,19 +429,8 @@ class PeakModel():
         :rtype: np.ndarray
         """
 
-        # get the shapes for the cell type specific features.
-        # they are not even, because some cells have missing data.
-        cell_lens = [i.shape[-1] for i in self.train_iter.element_spec[:-2]]
-
-        print("cell lens", cell_lens)
-        print(self.train_iter.element_spec)
-        print("inputs", inputs)
-
-        # split matrix inputs into tuple of cell line specific features
-        split_inputs = tf.split(tf.dtypes.cast(inputs, tf.float32), cell_lens, axis=1)
-
         # predict
-        return self.predict_step_generator(split_inputs)
+        return self.predict_step_generator(inputs)
 
     def _predict(self, numpy_matrix):
         '''
