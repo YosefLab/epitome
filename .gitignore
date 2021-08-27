@@ -15,3 +15,6 @@ _static/
 # Python egg metadata, regenerated from source files by setuptools.
 /*.egg-info
 /*.egg
+
+epitome/test/data/
+target/pytest-reports/
