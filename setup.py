@@ -41,8 +41,7 @@ if 'tensorflow' not in installed:
     warnings.warn(message)
 
     # append tensorflow or tensorflow-gpu to reqs
-    # need nightly build to work with tensorflow probability
-    TENSORFLOW_VERSION="2.3.0"
+    TENSORFLOW_VERSION="2.6.0"
 
     try:
         subprocess.check_output(["nvidia-smi", "-L"])
@@ -53,7 +52,7 @@ if 'tensorflow' not in installed:
     reqs.append(tf_req)
 
 # Cython must be installed before pyranges
-err = subprocess.call(["pip","install","cython"])
+err = subprocess.call(["pip", "install", "cython"])
 if err != 0:
     raise Exception("Installing cython failed with error %i" % err)
 
@@ -77,7 +76,8 @@ setup(
         # Python versions supported
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8'
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9'
     ],
     license="Apache License, Version 2.0",
     keywords='ENCODE ChIP-seq_peaks prediction histone transcription_factor',

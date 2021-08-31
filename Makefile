@@ -66,7 +66,7 @@ check_build_reqs:
                 || ( printf "$(redpip)Build requirements are missing. Run 'make prepare' to install them.$(normal)" ; false )
 
 test: check_build_reqs
-	$(python) -m pytest -vv --junitxml target/pytest-reports/tests.xml $(tests)
+	$(python) -m pytest -o junit_family=xunit2 -vv --junitxml target/pytest-reports/tests.xml $(tests)
 
 check_clean_working_copy:
 	@printf "$(green)Checking if your working copy is clean ...$(normal)"
