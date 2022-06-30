@@ -19,12 +19,12 @@ Epitome documentation is hosted at [readthedocs](https://epitome.readthedocs.io/
 
 ## Requirements
 * [conda](https://docs.conda.io/en/latest/miniconda.html)
-* python >= 3.6
+* python >= 3.7
 
 ## Setup and Installation
 1. Create and activate a conda environment:
 ```
-conda create --name EpitomeEnv python=3.6 pip
+conda create --name EpitomeEnv python=3.7 pip
 source activate EpitomeEnv
 ```
 2. Install Epitome:
