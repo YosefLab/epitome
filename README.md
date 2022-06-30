@@ -14,7 +14,7 @@ Epitome leverages chromatin accessibility (either DNase-seq or ATAC-seq) to pred
 
 # Citation
 
-![Morrow et al., NAR, Volume 49, Issue 19, 8 November 2021, Page e110](https://doi.org/10.1093/nar/gkab676)
+[Morrow et al., NAR, Volume 49, Issue 19, 8 November 2021, Page e110](https://doi.org/10.1093/nar/gkab676)
 
 # Documentation
 
