@@ -41,7 +41,7 @@ if 'tensorflow' not in installed:
     warnings.warn(message)
 
     # append tensorflow or tensorflow-gpu to reqs
-    TENSORFLOW_VERSION="2.6.0"
+    TENSORFLOW_VERSION="2.9.1"
 
     try:
         subprocess.check_output(["nvidia-smi", "-L"])
