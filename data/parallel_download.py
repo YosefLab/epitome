@@ -150,7 +150,7 @@ else:
         if i % 100 == 0:
             logger.info("Writing %i, feature %s,%s..." % (i, cell,target))
 
-h5_file.close()
+    h5_file.close()
 
 # save row_df to be loaded into maain
 row_df.to_csv(os.path.join(download_path, "row_df.csv"))
